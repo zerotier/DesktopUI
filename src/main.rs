@@ -37,9 +37,9 @@ fn main() {
             .unwrap();
     } else {
         let main_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
-        let main_window2 = main_window.clone();
 
-        let t = Tray::init("icon.png", vec![MenuItem::Text{
+        let main_window2 = main_window.clone();
+        let t = Tray::init("icon.png", vec![TrayMenuItem::Text{
             text: "foo".into(),
             checked: false,
             disabled: false,

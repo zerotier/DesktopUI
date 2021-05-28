@@ -41,7 +41,7 @@ impl Drop for CTrayMenuContainer {
 }
 
 #[allow(dead_code)]
-pub enum MenuItem {
+pub enum TrayMenuItem {
     Text {
         text: String,
         checked: bool,
@@ -51,11 +51,11 @@ pub enum MenuItem {
     Separator,
     Submenu {
         text: String,
-        items: Vec<MenuItem>,
+        items: Vec<TrayMenuItem>,
     },
 }
 
-/// System tray interface class.
+/// Cross-platform system tray menu (Rust glue to C code).
 /// WARNING: Only one instance of Tray can currently be created per process.
 #[allow(unused)]
 pub struct Tray {
@@ -85,52 +85,35 @@ unsafe extern "C" fn tray_handler_callback(item: *const CTrayMenu) {
 
 const C_DASH: [c_char; 2] = [ 45, 0 ]; // "-"
 
-fn tray_create_c_structs(menu: Vec<MenuItem>) -> Vec<CTrayMenuContainer> {
-    let mut v: Vec<CTrayMenuContainer> = Vec::new();
-    menu.into_iter().for_each(|mi: MenuItem| {
-        match mi {
-            MenuItem::Text { text, checked, disabled, handler } => {
-                let c_text = Box::pin(CString::new(text.as_str()).unwrap());
-                let c_text_ptr: *const c_char = c_text.as_ptr();
-                v.push(CTrayMenuContainer {
-                    c_text: Some(c_text),
-                    items: Vec::new(),
-                    c_items: None,
-                    c_tray_menu: CTrayMenu {
-                        text: c_text_ptr,
-                        disabled: disabled as c_int,
-                        checked: checked as c_int,
-                        cb: tray_handler_callback,
-                        context: handler.map_or(null_mut(), |h| Box::into_raw(Box::new(h)).cast()), // freed in CTrayMenuContainer drop()
-                        submenu: null(),
-                    }
-                });
-            },
-            MenuItem::Separator => {
-                v.push(CTrayMenuContainer {
-                    c_text: None,
-                    items: Vec::new(),
-                    c_items: None,
-                    c_tray_menu: CTrayMenu {
-                        text: C_DASH.as_ptr(),
-                        disabled: 0,
-                        checked: 0,
-                        cb: tray_handler_callback,
-                        context: null_mut(),
-                        submenu: null(),
-                    }
-                });
-            },
-            MenuItem::Submenu { text, items } => {
-                if !items.is_empty() {
+impl Tray {
+    fn tray_create_c_structs(menu: Vec<TrayMenuItem>) -> Vec<CTrayMenuContainer> {
+        let mut v: Vec<CTrayMenuContainer> = Vec::new();
+        menu.into_iter().for_each(|mi: TrayMenuItem| {
+            match mi {
+                TrayMenuItem::Text { text, checked, disabled, handler } => {
                     let c_text = Box::pin(CString::new(text.as_str()).unwrap());
                     let c_text_ptr: *const c_char = c_text.as_ptr();
                     v.push(CTrayMenuContainer {
                         c_text: Some(c_text),
-                        items: tray_create_c_structs(items),
+                        items: Vec::new(),
                         c_items: None,
                         c_tray_menu: CTrayMenu {
                             text: c_text_ptr,
+                            disabled: disabled as c_int,
+                            checked: checked as c_int,
+                            cb: tray_handler_callback,
+                            context: handler.map_or(null_mut(), |h| Box::into_raw(Box::new(h)).cast()), // freed in CTrayMenuContainer drop()
+                            submenu: null(),
+                        }
+                    });
+                },
+                TrayMenuItem::Separator => {
+                    v.push(CTrayMenuContainer {
+                        c_text: None,
+                        items: Vec::new(),
+                        c_items: None,
+                        c_tray_menu: CTrayMenu {
+                            text: C_DASH.as_ptr(),
                             disabled: 0,
                             checked: 0,
                             cb: tray_handler_callback,
@@ -138,32 +121,49 @@ fn tray_create_c_structs(menu: Vec<MenuItem>) -> Vec<CTrayMenuContainer> {
                             submenu: null(),
                         }
                     });
+                },
+                TrayMenuItem::Submenu { text, items } => {
+                    if !items.is_empty() {
+                        let c_text = Box::pin(CString::new(text.as_str()).unwrap());
+                        let c_text_ptr: *const c_char = c_text.as_ptr();
+                        v.push(CTrayMenuContainer {
+                            c_text: Some(c_text),
+                            items: Self::tray_create_c_structs(items),
+                            c_items: None,
+                            c_tray_menu: CTrayMenu {
+                                text: c_text_ptr,
+                                disabled: 0,
+                                checked: 0,
+                                cb: tray_handler_callback,
+                                context: null_mut(),
+                                submenu: null(),
+                            }
+                        });
 
-                    let c = v.last_mut().unwrap();
-                    let mut c_items: Vec<CTrayMenu> = Vec::new();
-                    for i in c.items.iter() {
-                        c_items.push(i.c_tray_menu.clone());
+                        let c = v.last_mut().unwrap();
+                        let mut c_items: Vec<CTrayMenu> = Vec::new();
+                        for i in c.items.iter() {
+                            c_items.push(i.c_tray_menu.clone());
+                        }
+                        c_items.push(CTrayMenu {
+                            text: null(),
+                            disabled: 0,
+                            checked: 0,
+                            cb: tray_handler_callback,
+                            context: null_mut(),
+                            submenu: null(),
+                        });
+                        c.c_items.replace(Pin::new(c_items.into_boxed_slice()));
+                        c.c_tray_menu.submenu = c.c_items.as_ref().unwrap().as_ptr();
                     }
-                    c_items.push(CTrayMenu {
-                        text: null(),
-                        disabled: 0,
-                        checked: 0,
-                        cb: tray_handler_callback,
-                        context: null_mut(),
-                        submenu: null(),
-                    });
-                    c.c_items.replace(Pin::new(c_items.into_boxed_slice()));
-                    c.c_tray_menu.submenu = c.c_items.as_ref().unwrap().as_ptr();
-                }
-            },
-        }
-    });
-    v
-}
+                },
+            }
+        });
+        v
+    }
 
-impl Tray {
-    fn make_menu(menu: Vec<MenuItem>) -> (Vec<CTrayMenuContainer>, Pin<Box<[CTrayMenu]>>) {
-        let menu = tray_create_c_structs(menu);
+    fn make_menu(menu: Vec<TrayMenuItem>) -> (Vec<CTrayMenuContainer>, Pin<Box<[CTrayMenu]>>) {
+        let menu = Self::tray_create_c_structs(menu);
         let mut c_menu_items: Vec<CTrayMenu> = Vec::new();
         for i in menu.iter() {
             c_menu_items.push(i.c_tray_menu.clone());
@@ -179,7 +179,7 @@ impl Tray {
         (menu, Pin::from(c_menu_items.into_boxed_slice()))
     }
 
-    pub fn init(icon_path: &str, menu: Vec<MenuItem>) -> Tray {
+    pub fn init(icon_path: &str, menu: Vec<TrayMenuItem>) -> Tray {
         let c_icon_path = Pin::new(CString::new(icon_path).unwrap());
         let (menu, c_menu_items) = Self::make_menu(menu);
         let c_tray = CTray {
@@ -198,7 +198,7 @@ impl Tray {
         }
     }
 
-    pub fn update(&self, icon_path: Option<&str>, menu: Vec<MenuItem>) {
+    pub fn update(&self, icon_path: Option<&str>, menu: Vec<TrayMenuItem>) {
         let mut ip = self.icon_path.lock().unwrap();
         if icon_path.is_some() {
             *ip = Pin::new(CString::new(icon_path.unwrap()).unwrap());
