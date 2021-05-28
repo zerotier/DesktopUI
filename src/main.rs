@@ -56,11 +56,11 @@ fn main() {
         }]);
 
         loop {
-            if !t.poll() {
-                break;
-            } else {
+            if t.poll() {
                 let mut mw = main_window.lock().unwrap();
                 check_main_menu_exit(&mut mw);
+            } else {
+                break;
             }
         }
 
