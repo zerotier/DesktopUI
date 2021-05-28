@@ -3,3 +3,5 @@
 *.a
 *.dSym
 *.dylib
+/ui/node_modules
+/ui/.cache

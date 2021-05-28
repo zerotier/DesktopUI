@@ -1,5 +1,6 @@
+// (c)2021 ZeroTier, Inc.
+
 mod tray;
-mod window;
 
 use tray::*;
 use std::process::{Child, Command};

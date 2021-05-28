@@ -1,3 +1,5 @@
+// (c)2021 ZeroTier, Inc.
+
 use std::os::raw::{c_char, c_int, c_void};
 use std::pin::Pin;
 use std::sync::Mutex;
