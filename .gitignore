@@ -6,3 +6,4 @@
 /ui/node_modules
 /ui/.cache
 /ui/dist
+/ui/.yarn
