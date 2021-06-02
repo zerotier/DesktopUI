@@ -7,4 +7,4 @@
 /ui/.cache
 /ui/.yarn
 /ui/.parcel-cache
-/ui/index.html
+/ui/dist

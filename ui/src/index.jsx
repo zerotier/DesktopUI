@@ -1,12 +1,20 @@
 import React, { createElement } from 'react';
 import ReactDOM from 'react-dom';
 
-function App() {
-  return (
-    <div>
-      lalalala this r0x0rz
-    </div>
-  );
-}
+import { EuiPanel, EuiPageTemplate, EuiText, EuiResizableContainer } from '@elastic/eui';
 
-ReactDOM.render(<App />, document.getElementById("_app_root"));
+ReactDOM.render((
+  <EuiResizableContainer style={{ height: "100vh", maxHeight: "100vh", minHeight: "100vh"}}>{(EuiResizablePanel, EuiResizableButton) => (<>
+    <EuiResizablePanel initialSize={50} minSize="30%" grow={true}>
+      <EuiText>
+        panel 1
+      </EuiText>
+    </EuiResizablePanel>
+    <EuiResizableButton />
+    <EuiResizablePanel initialSize={50} minSize="30%" grow={true}>
+      <EuiText>
+        panel 2
+      </EuiText>
+    </EuiResizablePanel>
+  </>)}</EuiResizableContainer>
+), document.getElementById("_app_root"));
