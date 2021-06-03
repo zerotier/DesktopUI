@@ -1,15 +1,15 @@
 ifeq ($(OS),Windows_NT)
-	TRAY_CFLAGS := -DTRAY_WINAPI=1
+	TRAY_CFLAGS := -O -DTRAY_WINAPI=1 -std=c99
 #	TRAY_LDFLAGS :=
 else ifeq ($(shell uname -s),Linux)
-	TRAY_CFLAGS := -DTRAY_APPINDICATOR=1 $(shell pkg-config --cflags appindicator3-0.1)
+	TRAY_CFLAGS := -O -DTRAY_APPINDICATOR=1 $(shell pkg-config --cflags appindicator3-0.1) -std=c99
 #	TRAY_LDFLAGS := $(shell pkg-config --libs appindicator3-0.1)
 else ifeq ($(shell uname -s),Darwin)
-	TRAY_CFLAGS := -DTRAY_APPKIT=1 -DOBJC_OLD_DISPATCH_PROTOTYPES=1
+	TRAY_CFLAGS := -Os -DTRAY_APPKIT=1 -DOBJC_OLD_DISPATCH_PROTOTYPES=1 -std=c99
 #	TRAY_LDFLAGS := -framework Cocoa
 endif
 
-CFLAGS := -O2 -Wall $(TRAY_CFLAGS) -Wall -Wextra -std=c99 -pedantic
+CFLAGS := $(TRAY_CFLAGS)
 #LDFLAGS := $(TRAY_LDFLAGS)
 
 all: zt_lib

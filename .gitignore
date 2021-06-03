@@ -9,4 +9,5 @@
 /ui/.parcel-cache
 /ui/dist
 /mac-app-template/ZeroTier.app/Contents/MacOS/ZeroTier
+/mac-app-template/ZeroTier.app/Contents/Resources/ui.html
 /web-view/target

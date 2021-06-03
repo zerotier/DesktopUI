@@ -22,5 +22,4 @@ edge = ["webview-sys/edge"]
 [workspace]
 members = [
     "webview-sys",
-    "webview-examples",
 ]

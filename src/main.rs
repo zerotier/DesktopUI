@@ -21,6 +21,12 @@ fn check_main_menu_exit(mw: &mut MutexGuard<Option<Child>>) {
     }
 }
 
+#[cfg(target_os = "macos")]
+fn get_web_ui_blob() -> String {
+    std::fs::read_to_string(std::env::current_exe().unwrap().parent().unwrap().parent().unwrap().join("Resources").join("ui.html")).unwrap()
+    //include_str!("../ui/dist/index.html").into()
+}
+
 fn main() {
     let exe = std::env::current_exe();
     if exe.is_err() {
@@ -32,34 +38,32 @@ fn main() {
 
     if std::env::args().len() == 2 {
         let ui_mode = std::env::args().last().unwrap();
-        if ui_mode == "MainWindow" {
-            let _ = web_view::builder()
-                .title("ZeroTier")
-                .content(web_view::Content::Html(include_str!("../ui/dist/index.html")))
-                .size(800, 600)
-                .resizable(true)
-                .visible(false)
-                .frameless(false)
-                .debug(false)
-                .user_data(())
-                .invoke_handler(|wv, _arg| {
-                    let cmd: serde_json::Result<CommandFromWebView> = serde_json::from_str(_arg);
-                    if cmd.is_err() {
-                        return Ok(());
-                    }
-                    let cmd = cmd.unwrap();
-                    match cmd.cmd.as_str() {
-                        "ready" => {
-                            wv.set_visible(true);
-                            let _ = wv.eval(format!("zt_ui_render({});", serde_json::to_string(&ui_mode).unwrap()).as_str());
-                        },
-                        _ => {}
-                    }
-                    Ok(())
-                })
-                .run()
-                .unwrap();
-        }
+        let _ = web_view::builder()
+            .title("ZeroTier")
+            .content(web_view::Content::Html(get_web_ui_blob()))
+            .size(800, 600)
+            .resizable(true)
+            .visible(false)
+            .frameless(false)
+            .debug(false)
+            .user_data(())
+            .invoke_handler(|wv, _arg| {
+                let cmd: serde_json::Result<CommandFromWebView> = serde_json::from_str(_arg);
+                if cmd.is_err() {
+                    return Ok(());
+                }
+                let cmd = cmd.unwrap();
+                match cmd.cmd.as_str() {
+                    "ready" => {
+                        wv.set_visible(true);
+                        let _ = wv.eval(format!("zt_ui_render({});", serde_json::to_string(&ui_mode).unwrap()).as_str());
+                    },
+                    _ => {}
+                }
+                Ok(())
+            })
+            .run()
+            .unwrap();
     } else {
         let main_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
 
@@ -95,6 +99,12 @@ fn main() {
                 })),
             },
             TrayMenuItem::Separator,
+            TrayMenuItem::Text {
+                text: "About".into(),
+                checked: false,
+                disabled: false,
+                handler: None,
+            },
             TrayMenuItem::Text {
                 text: "Quit ZeroTier UI".into(),
                 checked: false,
