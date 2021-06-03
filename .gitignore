@@ -8,3 +8,5 @@
 /ui/.yarn
 /ui/.parcel-cache
 /ui/dist
+/mac-app-template/ZeroTier.app/Contents/MacOS/ZeroTier
+/web-view/target

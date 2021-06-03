@@ -1,0 +1,26 @@
+[package]
+name = "web-view"
+version = "0.7.3"
+authors = ["Boscop", "zxey <r.hozak@seznam.cz>", "Sam Green <sam.green81@gmail.com>"]
+readme = "README.md"
+license = "MIT"
+repository = "https://github.com/Boscop/web-view"
+description = "Rust bindings for webview, a tiny cross-platform library to render web-based GUIs for desktop applications"
+keywords = ["web", "gui", "desktop", "electron", "webkit"]
+categories = ["gui", "web-programming", "api-bindings", "rendering", "visualization"]
+exclude = ["webview-sys/**", "webview-examples/**", ".github/**", "Cargo.lock"]
+
+[dependencies]
+urlencoding = "1.1"
+webview-sys = { path = "webview-sys", version = "0.6.2" }
+boxfnonce = "0.1"
+tinyfiledialogs = "3.3"
+
+[features]
+edge = ["webview-sys/edge"]
+
+[workspace]
+members = [
+    "webview-sys",
+    "webview-examples",
+]

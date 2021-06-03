@@ -5,7 +5,6 @@ authors = ["Adam Ierymenko <adam.ierymenko@zerotier.com>"]
 edition = "2018"
 
 [dependencies]
-ureq = { version = "*", features = [] }
-web-view = { version = "0.7", features = ["edge"] }
-serde = "*"
+web-view = { path = "web-view" }
+serde = { version = "*", features = ["derive"] }
 serde_json = "*"
