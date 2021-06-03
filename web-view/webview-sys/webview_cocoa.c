@@ -86,6 +86,7 @@ WEBVIEW_API webview_t webview_new(
 #define WKNavigationResponsePolicyAllow 1
 #define WKUserScriptInjectionTimeAtDocumentStart 0
 #define NSApplicationActivationPolicyRegular 0
+#define NSApplicationActivationPolicyAccessory 1
 #define NSApplicationDefinedEvent 15
 #define NSWindowStyleMaskBorderless 0
 
@@ -473,7 +474,7 @@ WEBVIEW_API int webview_init(webview_t w) {
   objc_msgSend(objc_msgSend((id)objc_getClass("NSApplication"),
                             sel_registerName("sharedApplication")),
                sel_registerName("setActivationPolicy:"),
-               NSApplicationActivationPolicyRegular);
+               NSApplicationActivationPolicyAccessory);
 
   objc_msgSend(objc_msgSend((id)objc_getClass("NSApplication"),
                             sel_registerName("sharedApplication")),
