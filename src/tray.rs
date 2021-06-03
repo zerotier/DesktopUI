@@ -220,6 +220,7 @@ impl Tray {
         *self.c_current.lock().unwrap() = c_menu_items;
     }
 
+    #[inline(always)]
     pub fn poll(&self) -> bool {
         unsafe {
             tray_loop(1) == 0

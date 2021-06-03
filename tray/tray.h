@@ -177,9 +177,11 @@ int tray_init(struct tray *tray) {
 
 int tray_loop(int blocking) {
     id until = (blocking ? 
-      objc_msgSend((id)objc_getClass("NSDate"), sel_registerName("distantFuture")) : 
+      objc_msgSend((id)objc_getClass("NSDate"), sel_registerName("now")) :
       objc_msgSend((id)objc_getClass("NSDate"), sel_registerName("distantPast")));
-  
+    if (blocking) {
+    	until = objc_msgSend(until, sel_registerName("dateByAddingTimeInterval:"), 2.0);
+    }
     id event = objc_msgSend(app, sel_registerName("nextEventMatchingMask:untilDate:inMode:dequeue:"), 
                 ULONG_MAX, 
                 until, 

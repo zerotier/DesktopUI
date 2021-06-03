@@ -30,34 +30,36 @@ fn main() {
     let exe = exe.ok().unwrap();
     let args = std::env::args();
 
-    let window_type = std::env::var("ZT_WINDOW_TYPE").map_or_else(|_| "".into(), |s| s);
-    if !window_type.is_empty() {
-        let _ = web_view::builder()
-            .title("ZeroTier")
-            .content(web_view::Content::Html(include_str!("../ui/dist/index.html")))
-            .size(800, 600)
-            .resizable(true)
-            .visible(false)
-            .frameless(false)
-            .debug(false)
-            .user_data(())
-            .invoke_handler(|wv, _arg| {
-                let cmd: serde_json::Result<CommandFromWebView> = serde_json::from_str(_arg);
-                if cmd.is_err() {
-                    return Ok(());
-                }
-                let cmd = cmd.unwrap();
-                match cmd.cmd.as_str() {
-                    "ready" => {
-                        wv.set_visible(true);
-                        let _ = wv.eval(format!("zt_ui_render({});", serde_json::to_string(&window_type).unwrap()).as_str());
-                    },
-                    _ => {}
-                }
-                Ok(())
-            })
-            .run()
-            .unwrap();
+    if std::env::args().len() == 2 {
+        let ui_mode = std::env::args().last().unwrap();
+        if ui_mode == "MainWindow" {
+            let _ = web_view::builder()
+                .title("ZeroTier")
+                .content(web_view::Content::Html(include_str!("../ui/dist/index.html")))
+                .size(800, 600)
+                .resizable(true)
+                .visible(false)
+                .frameless(false)
+                .debug(false)
+                .user_data(())
+                .invoke_handler(|wv, _arg| {
+                    let cmd: serde_json::Result<CommandFromWebView> = serde_json::from_str(_arg);
+                    if cmd.is_err() {
+                        return Ok(());
+                    }
+                    let cmd = cmd.unwrap();
+                    match cmd.cmd.as_str() {
+                        "ready" => {
+                            wv.set_visible(true);
+                            let _ = wv.eval(format!("zt_ui_render({});", serde_json::to_string(&ui_mode).unwrap()).as_str());
+                        },
+                        _ => {}
+                    }
+                    Ok(())
+                })
+                .run()
+                .unwrap();
+        }
     } else {
         let main_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
 
@@ -78,14 +80,14 @@ fn main() {
                 handler: None,
             },
             TrayMenuItem::Text {
-                text: "Preferences...".into(),
+                text: "Open Console...".into(),
                 checked: false,
                 disabled: false,
                 handler: Some(Box::new(move || {
                     let mut mw = main_window2.lock().unwrap();
                     check_main_menu_exit(&mut mw);
                     if mw.is_none() {
-                        let ch = Command::new(exe.clone()).env("ZT_WINDOW_TYPE", "mainwindow").spawn();
+                        let ch = Command::new(exe.clone()).arg("MainWindow").spawn();
                         if ch.is_ok() {
                             let _ = mw.replace(ch.unwrap());
                         }
@@ -106,7 +108,10 @@ fn main() {
                 })),
             }]);
 
+        //let mut i = 0;
         loop {
+            //println!("loop {}", i);
+            //i += 1;
             if t.poll() {
                 let mut mw = main_window.lock().unwrap();
                 check_main_menu_exit(&mut mw);

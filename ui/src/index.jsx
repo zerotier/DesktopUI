@@ -4,7 +4,7 @@ import ReactDOM from 'react-dom';
 import { EuiPanel, EuiPageTemplate, EuiText, EuiResizableContainer } from '@elastic/eui';
 
 window.zt_ui_render = function(window_type) {
-    if (window_type == "mainwindow") {
+    if (window_type == "MainWindow") {
         ReactDOM.render((
             <EuiResizableContainer style={{ height: "100vh", maxHeight: "100vh", minHeight: "100vh"}}>{(EuiResizablePanel, EuiResizableButton) => (<>
                 <EuiResizablePanel initialSize={50} minSize="30%" grow={true}>
@@ -20,7 +20,7 @@ window.zt_ui_render = function(window_type) {
                 </EuiResizablePanel>
             </>)}</EuiResizableContainer>
         ), document.getElementById("_app_root"));
-    } else if (window_type == "join_network") {
+    } else if (window_type == "JoinNetwork") {
         ReactDOM.render((
             <div>window_type = {window_type}</div>
         ), document.getElementById("_app_root"));
@@ -32,4 +32,4 @@ window.zt_ui_render = function(window_type) {
 };
 
 // Tell Rust code JS has initialized and React app is now running.
-setTimeout(function() { external.invoke('{ "cmd": "ready" }'); }, 10);
+setTimeout(function() { external.invoke('{ "cmd": "ready" }'); }, 1);
