@@ -13,6 +13,29 @@ pub struct CommandFromWebView {
     pub cmd: String
 }
 
+#[cfg(target_os = "macos")]
+fn is_dark_mode() -> bool {
+    let out = Command::new("/usr/bin/defaults").arg("read").arg("-g").arg("AppleInterfaceStyle").output();
+    out.map_or(false, |mode| {
+        String::from_utf8(mode.stdout.to_ascii_lowercase()).map_or(false, |mode| mode.contains("dark"))
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn tray_icon_name() -> &'static str {
+    if is_dark_mode() { "mac-dark.png" } else { "mac-light.png" }
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn is_dark_mode() -> bool {
+    false
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn tray_icon_name() -> &'static str {
+    if is_dark_mode() { "generic-dark.png" } else { "generic-light.png" }
+}
+
 fn check_window_subprocess_exit(w: &mut MutexGuard<Option<Child>>) {
     if w.is_some() {
         let res = w.as_mut().unwrap().try_wait();
@@ -23,6 +46,7 @@ fn check_window_subprocess_exit(w: &mut MutexGuard<Option<Child>>) {
 }
 
 fn kill_window_subprocess(mut w: MutexGuard<Option<Child>>) {
+    check_window_subprocess_exit(&mut w);
     if w.is_some() {
         let _ = w.as_mut().unwrap().kill();
     }
@@ -43,11 +67,12 @@ const CSS_PLACEHOLDER: &'static str = ".XXXthis_is_replaced_by_css_in_the_rust_c
 #[cfg(target_os = "macos")]
 #[inline(always)]
 fn get_web_ui_blob() -> String {
+    let css = if is_dark_mode() { "dark.css" } else { "light.css" };
     let resources_path = std::env::current_exe().unwrap().parent().unwrap().parent().unwrap().join("Resources");
     std::fs::read_to_string(resources_path.join("ui.html")).map_or_else(|_| {
         "<html><body>Error: unable to load ui.html from application bundle Resources.<script>window.zt_ui_render = function(window_type) {}; setTimeout(function() { external.invoke('{ \"cmd\": \"ready\" }'); }, 1);</script></body></html>".into()
     }, |ui| {
-        ui.replace(CSS_PLACEHOLDER, std::fs::read_to_string(resources_path.join("dark.css")).unwrap_or(String::new()).as_str())
+        ui.replace(CSS_PLACEHOLDER, std::fs::read_to_string(resources_path.join(css)).unwrap_or(String::new()).as_str())
     })
 }
 
@@ -94,6 +119,8 @@ fn main() {
     } else {
         // Without an argument, launch the tray app / UI supervisor.
 
+        let mut icon_name = tray_icon_name();
+
         let main_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
         let join_network_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
         let about_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
@@ -104,7 +131,7 @@ fn main() {
         let join_network_window3 = join_network_window.clone();
         let about_window2 = about_window.clone();
         let about_window3 = about_window.clone();
-        let t = Tray::init("mac-dark.png", vec![
+        let t = Tray::init(icon_name, vec![
             TrayMenuItem::Text {
                 text: "Node ID: ".into(),
                 checked: false,
