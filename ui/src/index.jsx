@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 
 import { EuiPanel, EuiPageTemplate, EuiText, EuiResizableContainer } from '@elastic/eui';
 
+// This is called from the Rust side to render the correct UI.
 window.zt_ui_render = function(window_type) {
     if (window_type == "MainWindow") {
         ReactDOM.render((
@@ -21,6 +22,10 @@ window.zt_ui_render = function(window_type) {
             </>)}</EuiResizableContainer>
         ), document.getElementById("_app_root"));
     } else if (window_type == "JoinNetwork") {
+        ReactDOM.render((
+            <div>window_type = {window_type}</div>
+        ), document.getElementById("_app_root"));
+    } else if (window_type == "About") {
         ReactDOM.render((
             <div>window_type = {window_type}</div>
         ), document.getElementById("_app_root"));
