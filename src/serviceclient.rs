@@ -63,19 +63,19 @@ impl ServiceClient {
     pub fn refresh(&self) {
         // Yuck, but okay for now...
         let timeout = Duration::from_secs(SERVICE_TIMEOUT_SECONDS);
-        let res = ureq::get(format!("{}status", self.base_url).into()).timeout(timeout).set("X-ZT1-Auth", self.auth_token.into()).call();
+        let res = ureq::get(format!("{}status", self.base_url).as_str()).timeout(timeout).set("X-ZT1-Auth", self.auth_token.as_str()).call();
         if res.is_ok() {
             let res = res.unwrap();
             if res.status() == 200 {
                 let status = res.into_string();
                 if status.is_ok() {
-                    let res = ureq::get(format!("{}network", self.base_url).into()).timeout(timeout).set("X-ZT1-Auth", self.auth_token.into()).call();
+                    let res = ureq::get(format!("{}network", self.base_url).as_str()).timeout(timeout).set("X-ZT1-Auth", self.auth_token.as_str()).call();
                     if res.is_ok() {
                         let res = res.unwrap();
                         if res.status() == 200 {
                             let networks = res.into_string();
                             if networks.is_ok() {
-                                let res = ureq::get(format!("{}peer", self.base_url).into()).timeout(timeout).set("X-ZT1-Auth", self.auth_token.into()).call();
+                                let res = ureq::get(format!("{}peer", self.base_url).as_str()).timeout(timeout).set("X-ZT1-Auth", self.auth_token.as_str()).call();
                                 if res.is_ok() {
                                     let res = res.unwrap();
                                     if res.status() == 200 {

@@ -38,20 +38,21 @@ fn open_window_subprocess(mut w: MutexGuard<Option<Child>>, ui_mode: &str) {
     }
 }
 
-const CSS_PLACEHOLDER: &'static str = "/* XXXthis_is_replaced_by_css_in_the_rust_codeXXX */";
+const CSS_PLACEHOLDER: &'static str = ".XXXthis_is_replaced_by_css_in_the_rust_codeXXX{border:0}";
 
 #[cfg(target_os = "macos")]
 #[inline(always)]
 fn get_web_ui_blob() -> String {
     let resources_path = std::env::current_exe().unwrap().parent().unwrap().parent().unwrap().join("Resources");
-    let ui = std::fs::read_to_string(resources_path.join("ui.html")).map_or_else(|_| {
+    std::fs::read_to_string(resources_path.join("ui.html")).map_or_else(|_| {
         "<html><body>Error: unable to load ui.html from application bundle Resources.<script>window.zt_ui_render = function(window_type) {}; setTimeout(function() { external.invoke('{ \"cmd\": \"ready\" }'); }, 1);</script></body></html>".into()
     }, |ui| {
-        ui.replace(CSS_PLACEHOLDER, std::fs::read_to_string(resources_path.join("dark.css")).unwrap_or(String::new()).into())
-    });
+        ui.replace(CSS_PLACEHOLDER, std::fs::read_to_string(resources_path.join("dark.css")).unwrap_or(String::new()).as_str())
+    })
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]
+#[inline(always)]
 fn get_web_ui_blob() -> String {
     include_str!("../ui/dist/index.html").replace(CSS_PLACEHOLDER, include_str!("../ui/node_modules/@elastic/eui/dist/eui_theme_amsterdam_dark.css"))
 }

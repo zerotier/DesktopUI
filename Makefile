@@ -1,5 +1,6 @@
 mac:
-	cd tray ; make clean ; make
+	cd tray ; make clean
+	cd tray ; make zt_lib
 	cd ui ; yarn build
 	cargo build --release
 	cp -f ui/dist/index.html mac-app-template/ZeroTier.app/Contents/Resources/ui.html
