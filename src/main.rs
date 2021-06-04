@@ -7,6 +7,9 @@ use serde::{Deserialize, Serialize};
 use tray::*;
 use std::process::{Child, Command};
 use std::sync::{Mutex, Arc, MutexGuard};
+use std::time::{SystemTime, Duration};
+
+const CSS_PLACEHOLDER: &'static str = ".XXXthis_is_replaced_by_css_in_the_rust_codeXXX{border:0}";
 
 #[derive(Serialize, Deserialize)]
 pub struct CommandFromWebView {
@@ -36,6 +39,28 @@ fn tray_icon_name() -> &'static str {
     if is_dark_mode() { "generic-dark.png" } else { "generic-light.png" }
 }
 
+#[cfg(target_os = "macos")]
+extern "C" {
+    pub fn c_set_this_thread_to_background_priority();
+    pub fn c_set_this_thread_to_foreground_priority();
+}
+
+#[cfg(target_os = "macos")]
+fn set_thread_to_background_priority() {
+    unsafe { c_set_this_thread_to_background_priority(); }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn set_thread_to_background_priority() {}
+
+#[cfg(target_os = "macos")]
+fn set_thread_to_foreground_priority() {
+    unsafe { c_set_this_thread_to_foreground_priority(); }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn set_thread_to_foreground_priority() {}
+
 fn check_window_subprocess_exit(w: &mut MutexGuard<Option<Child>>) {
     if w.is_some() {
         let res = w.as_mut().unwrap().try_wait();
@@ -52,17 +77,15 @@ fn kill_window_subprocess(mut w: MutexGuard<Option<Child>>) {
     }
 }
 
-fn open_window_subprocess(mut w: MutexGuard<Option<Child>>, ui_mode: &str) {
+fn open_window_subprocess(mut w: MutexGuard<Option<Child>>, ui_mode: &str, width: i32, height: i32) {
     check_window_subprocess_exit(&mut w);
     if w.is_none() {
-        let ch = Command::new(std::env::current_exe().unwrap()).arg(ui_mode).spawn();
+        let ch = Command::new(std::env::current_exe().unwrap()).arg(ui_mode).arg(width.to_string()).arg(height.to_string()).spawn();
         if ch.is_ok() {
             let _ = w.replace(ch.unwrap());
         }
     }
 }
-
-const CSS_PLACEHOLDER: &'static str = ".XXXthis_is_replaced_by_css_in_the_rust_codeXXX{border:0}";
 
 #[cfg(target_os = "macos")]
 #[inline(always)]
@@ -83,16 +106,19 @@ fn get_web_ui_blob() -> String {
 }
 
 fn main() {
-    if std::env::args().len() == 2 {
+    if std::env::args().len() > 1 {
         // If there's an argument, enter window mode and pop up a UI. The
         // argument is passed through and is used to determine which UI to
         // display.
 
-        let ui_mode = std::env::args().last().unwrap();
+        set_thread_to_foreground_priority();
+        let ui_mode = std::env::args().nth(1).unwrap_or("null".into());
         let _ = web_view::builder()
             .title("ZeroTier")
             .content(web_view::Content::Html(get_web_ui_blob()))
-            .size(800, 600)
+            .size(
+                i32::from_str_radix(std::env::args().nth(2).unwrap_or("".into()).as_str(), 10).unwrap_or(800),
+                i32::from_str_radix(std::env::args().nth(3).unwrap_or("".into()).as_str(), 10).unwrap_or(600))
             .resizable(true)
             .visible(false)
             .frameless(false)
@@ -118,77 +144,102 @@ fn main() {
 
     } else {
         // Without an argument, launch the tray app / UI supervisor.
+        set_thread_to_background_priority();
 
         let mut icon_name = tray_icon_name();
+        let mut last_refreshed_tray = SystemTime::UNIX_EPOCH;
+        let mut tray: Option<Tray> = None;
 
         let main_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
         let join_network_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
         let about_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
 
-        let main_window2 = main_window.clone();
-        let main_window3 = main_window.clone();
-        let join_network_window2 = join_network_window.clone();
-        let join_network_window3 = join_network_window.clone();
-        let about_window2 = about_window.clone();
-        let about_window3 = about_window.clone();
-        let t = Tray::init(icon_name, vec![
-            TrayMenuItem::Text {
-                text: "Node ID: ".into(),
-                checked: false,
-                disabled: false,
-                handler: None,
-            },
-            TrayMenuItem::Separator,
-            TrayMenuItem::Text {
-                text: "Join Network... ".into(),
-                checked: false,
-                disabled: false,
-                handler: Some(Box::new(move || {
-                    open_window_subprocess(join_network_window2.lock().unwrap(), "JoinNetwork");
-                })),
-            },
-            TrayMenuItem::Text {
-                text: "Control Panel... ".into(),
-                checked: false,
-                disabled: false,
-                handler: Some(Box::new(move || {
-                    open_window_subprocess(main_window2.lock().unwrap(), "MainWindow");
-                })),
-            },
-            TrayMenuItem::Separator,
-            TrayMenuItem::Text {
-                text: "About ".into(),
-                checked: false,
-                disabled: false,
-                handler: Some(Box::new(move || {
-                    open_window_subprocess(about_window2.lock().unwrap(), "About");
-                })),
-            },
-            TrayMenuItem::Text {
-                text: "Quit ZeroTier UI ".into(),
-                checked: false,
-                disabled: false,
-                handler: Some(Box::new(move || {
-                    kill_window_subprocess(main_window3.lock().unwrap());
-                    kill_window_subprocess(join_network_window3.lock().unwrap());
-                    kill_window_subprocess(about_window3.lock().unwrap());
-                    std::process::exit(0);
-                })),
-            }]);
-
         loop {
-            if t.poll() {
-                let mut mw = main_window.lock().unwrap();
-                check_window_subprocess_exit(&mut mw);
-            } else {
+            let now = SystemTime::now();
+            if now.duration_since(last_refreshed_tray).map_or(true, |since| since > Duration::from_secs(10)) {
+                last_refreshed_tray = now;
+
+                let (main_window2, main_window3) = (main_window.clone(), main_window.clone());
+                let (join_network_window2, join_network_window3) = (join_network_window.clone(), join_network_window.clone());
+                let (about_window2, about_window3) = (about_window.clone(), about_window.clone());
+                let menu = vec![
+                    TrayMenuItem::Text {
+                        text: "Node ID: ".into(),
+                        checked: false,
+                        disabled: false,
+                        handler: None,
+                    },
+                    TrayMenuItem::Separator,
+                    TrayMenuItem::Text {
+                        text: "Join Network... ".into(),
+                        checked: false,
+                        disabled: false,
+                        handler: Some(Box::new(move || {
+                            open_window_subprocess(join_network_window2.lock().unwrap(), "JoinNetwork", 400, 100);
+                        })),
+                    },
+                    TrayMenuItem::Text {
+                        text: "Control Panel... ".into(),
+                        checked: false,
+                        disabled: false,
+                        handler: Some(Box::new(move || {
+                            open_window_subprocess(main_window2.lock().unwrap(), "MainWindow", 1000, 400);
+                        })),
+                    },
+                    TrayMenuItem::Separator,
+                    TrayMenuItem::Text {
+                        text: "About ".into(),
+                        checked: false,
+                        disabled: false,
+                        handler: Some(Box::new(move || {
+                            open_window_subprocess(about_window2.lock().unwrap(), "About", 800, 600);
+                        })),
+                    },
+                    TrayMenuItem::Text {
+                        text: "Quit ZeroTier UI ".into(),
+                        checked: false,
+                        disabled: false,
+                        handler: Some(Box::new(move || {
+                            kill_window_subprocess(main_window3.lock().unwrap());
+                            kill_window_subprocess(join_network_window3.lock().unwrap());
+                            kill_window_subprocess(about_window3.lock().unwrap());
+                            std::process::exit(0);
+                        })),
+                    }];
+
+                if tray.is_none() {
+                    tray.replace(Tray::init(icon_name, menu));
+                } else {
+                    let new_icon = tray_icon_name();
+                    if new_icon != icon_name {
+                        icon_name = new_icon;
+                        tray.as_ref().unwrap().update(Some(icon_name), menu);
+                    } else {
+                        tray.as_ref().unwrap().update(None, menu);
+                    }
+                    {
+                        let mut w = main_window.lock().unwrap();
+                        check_window_subprocess_exit(&mut w);
+                    }
+                    {
+                        let mut w = join_network_window.lock().unwrap();
+                        check_window_subprocess_exit(&mut w);
+                    }
+                    {
+                        let mut w = about_window.lock().unwrap();
+                        check_window_subprocess_exit(&mut w);
+                    }
+                }
+            }
+
+            if !tray.as_ref().map_or(false, |tr| tr.poll()) {
                 break;
             }
         }
 
-        let _ = main_window.lock().unwrap().take().map(|mut mw| {
-            let _ = mw.kill();
-            let _ = mw.wait();
-        });
-
+        kill_window_subprocess(main_window.lock().unwrap());
+        kill_window_subprocess(join_network_window.lock().unwrap());
+        kill_window_subprocess(about_window.lock().unwrap());
+        std::process::exit(0);
     }
 }
