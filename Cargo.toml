@@ -8,4 +8,4 @@ edition = "2018"
 web-view = { path = "web-view" }
 serde = { version = "*", features = ["derive"] }
 serde_json = "*"
-ureq = "*"
+ureq = { version = "*", features = [] }

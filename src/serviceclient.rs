@@ -1,23 +1,20 @@
-use std::sync::Mutex;
 use std::time::{SystemTime, Duration};
-use serde_json::Value;
+use std::collections::LinkedList;
+use serde_json::{Map, Value};
+use std::cell::Cell;
 
-const SERVICE_TIMEOUT_SECONDS: u64 = 5;
-
-pub struct ServiceClientInner {
-    last_successful_refresh_time: SystemTime,
-    pub current_status: String,
-    pub current_networks: String,
-    pub current_peers: String,
-}
+const SERVICE_TIMEOUT_MS: u64 = 1500;
 
 /// Client that queries and caches JSON state from the service.
 /// Currently it doesn't do much parsing since the JSON is just shoved
 /// through to the JavaScript UI for most of what's done with it.
 pub struct ServiceClient {
     auth_token: String,
+    port: u16,
     base_url: String,
-    inner: Mutex<ServiceClientInner>,
+    last_successful_refresh_time: SystemTime,
+    state: Map<String, Value>,
+    post_queue: LinkedList<(String, String)>,
 }
 
 #[cfg(target_os = "macos")]
@@ -43,91 +40,163 @@ pub fn get_auth_token_and_port() -> Option<(String, u16)> {
 }
 
 impl ServiceClient {
-    pub fn new(auth_token: String, port: u16) -> ServiceClient {
+    pub fn new() -> ServiceClient {
         ServiceClient{
-            auth_token,
-            base_url: format!("http://127.0.0.1:{}/", port),
-            inner: Mutex::new(ServiceClientInner{
-                last_successful_refresh_time: SystemTime::UNIX_EPOCH,
-                current_status: String::new(),
-                current_networks: String::new(),
-                current_peers: String::new()
+            auth_token: String::new(),
+            port: 0,
+            base_url: String::new(),
+            last_successful_refresh_time: SystemTime::UNIX_EPOCH,
+            state: Map::new(),
+            post_queue: LinkedList::new(),
+        }
+    }
+
+    pub fn is_initialized(&self) -> bool {
+        self.port != 0 && !self.auth_token.is_empty()
+    }
+
+    pub fn is_online(&self) -> bool {
+        self.is_initialized() && SystemTime::now().duration_since(self.last_successful_refresh_time).map_or(false, |d| d < Duration::from_millis(SERVICE_TIMEOUT_MS))
+    }
+
+    pub fn with<R, F: FnOnce(&Value) -> R>(&self, path: &str, f: F) -> R {
+        let mut m = Some(&self.state);
+        let v = Cell::new(&Value::Null);
+        path.split('/').for_each(|s| {
+            m.map_or_else(|| {
+                v.replace(&Value::Null); // null if looking past tree of maps
+            }, |mv| {
+                mv.get(s).map_or_else(|| {
+                    v.replace(&Value::Null); // null if key not found
+                }, |nv| {
+                    m = nv.as_object(); // sets to None if not a map
+                    if m.is_none() {
+                        v.replace(nv); // if not a map, it's a value
+                    }
+                });
+            });
+        });
+        f(v.into_inner())
+    }
+
+    pub fn get(&self, path: &str) -> Value {
+        self.with(path, |v| v.clone())
+    }
+
+    pub fn get_str(&self, path: &str) -> String {
+        self.get(path).as_str().map_or_else(|| String::new(), |s| s.into())
+    }
+
+    pub fn networks(&self) -> Vec<(String, String)> {
+        let mut nw: Vec<(String, String)> = Vec::new();
+        self.with("/network", |nws| {
+            let _ = nws.as_array().map(|a| a.iter().for_each(|network| {
+                let _ = network.as_object().map(|network| {
+                    let id = network.get("id");
+                    let name = network.get("name");
+                    if id.is_some() && name.is_some() {
+                        let id = id.unwrap();
+                        let name = name.unwrap();
+                        if id.is_string() && name.is_string() {
+                            nw.push((id.as_str().unwrap().into(), name.as_str().unwrap().into()))
+                        }
+                    }
+                });
+            }));
+        });
+        nw
+    }
+
+    fn http_get(&self, path: &str) -> (u16, String) {
+        if self.auth_token.is_empty() || self.base_url.is_empty() {
+            (0, String::new())
+        } else {
+            ureq::get(format!("{}{}", self.base_url, path).as_str()).timeout(Duration::from_millis(SERVICE_TIMEOUT_MS)).set("X-ZT1-Auth", self.auth_token.as_str()).call().map_or_else(|_| {
+                (0, String::new())
+            }, |res| {
+                let status = res.status();
+                let body = res.into_string();
+                body.map_or_else(|_| {
+                    (0, String::new())
+                }, |res| {
+                    (status, res)
+                })
             })
         }
     }
 
-    pub fn is_online(&self) -> bool {
-        SystemTime::now().duration_since(self.inner.lock().unwrap().last_successful_refresh_time).map_or(false, |d| d.as_secs() > SERVICE_TIMEOUT_SECONDS)
+    fn http_post(&self, path: &str, payload: &str) -> (u16, String) {
+        if self.auth_token.is_empty() || self.base_url.is_empty() {
+            (0, String::new())
+        } else {
+            ureq::post(format!("{}{}", self.base_url, path).as_str()).timeout(Duration::from_millis(SERVICE_TIMEOUT_MS)).set("X-ZT1-Auth", self.auth_token.as_str()).send_string(payload).map_or_else(|_| {
+                (0, String::new())
+            }, |res| {
+                let status = res.status();
+                let body = res.into_string();
+                body.map_or_else(|_| {
+                    (0, String::new())
+                }, |res| {
+                    (status, res)
+                })
+            })
+        }
     }
 
-    pub fn refresh(&self) {
-        // Yuck, but okay for now...
-        let timeout = Duration::from_secs(SERVICE_TIMEOUT_SECONDS);
-        let res = ureq::get(format!("{}status", self.base_url).as_str()).timeout(timeout).set("X-ZT1-Auth", self.auth_token.as_str()).call();
-        if res.is_ok() {
-            let res = res.unwrap();
-            if res.status() == 200 {
-                let status = res.into_string();
-                if status.is_ok() {
-                    let res = ureq::get(format!("{}network", self.base_url).as_str()).timeout(timeout).set("X-ZT1-Auth", self.auth_token.as_str()).call();
-                    if res.is_ok() {
-                        let res = res.unwrap();
-                        if res.status() == 200 {
-                            let networks = res.into_string();
-                            if networks.is_ok() {
-                                let res = ureq::get(format!("{}peer", self.base_url).as_str()).timeout(timeout).set("X-ZT1-Auth", self.auth_token.as_str()).call();
-                                if res.is_ok() {
-                                    let res = res.unwrap();
-                                    if res.status() == 200 {
-                                        let peers = res.into_string();
-                                        if peers.is_ok() {
-                                            let mut inner = self.inner.lock().unwrap();
-                                            inner.last_successful_refresh_time = SystemTime::now();
-                                            inner.current_status = status.unwrap();
-                                            inner.current_networks = networks.unwrap();
-                                            inner.current_peers = peers.unwrap();
-                                        }
-                                    }
-                                }
-                            }
-                        }
+    pub fn enqueue_post(&mut self, path: String, payload: String) {
+        self.post_queue.push_back((path, payload));
+    }
+
+    /// Check auth token and port for running service and update if changed.
+    pub fn sync_client_config(&mut self) {
+        get_auth_token_and_port().map(|token_port| {
+            if self.auth_token != token_port.0 || self.port != token_port.1 {
+                self.auth_token = token_port.0.clone();
+                self.port = token_port.1;
+                self.base_url = format!("http://127.0.0.1:{}/", self.port);
+            }
+        });
+    }
+
+    /// Send enqueued posts, if there are any.
+    pub fn do_posts(&mut self) {
+        if !self.is_initialized() {
+            self.sync_client_config();
+        }
+        if self.is_initialized() {
+            loop {
+                let pq = self.post_queue.pop_front();
+                if pq.is_some() {
+                    let pq = pq.unwrap();
+                    if self.http_post(pq.0.as_str(), pq.1.as_str()).0 != 200 {
+                        self.post_queue.push_front(pq);
+                        break;
                     }
+                } else {
+                    break;
                 }
             }
         }
     }
 
-    pub fn networks(&self) -> Vec<(u64, String)> {
-        let mut l = Vec::new();
-        let networks: Value = serde_json::from_str(self.inner.lock().unwrap().current_networks.as_str()).unwrap_or(Value::Null);
-        let networks_array = networks.as_array();
-        if networks_array.is_some() {
-            let networks_array = networks_array.unwrap();
-            for nw in networks_array.iter() {
-                let network = nw.as_object();
-                if network.is_some() {
-                    let network = network.unwrap();
-                    let network_id = u64::from_str_radix(network.get("id").unwrap_or(&Value::Null).as_str().unwrap_or(""), 16).unwrap_or(0);
-                    let network_name = network.get("name").unwrap_or(&Value::Null).as_str().unwrap_or("");
-                    if network_id != 0 {
-                        l.push((network_id, network_name.into()));
-                    }
+    /// Submit queued posts and get current service state.
+    pub fn sync(&mut self) {
+        if !self.is_initialized() {
+            self.sync_client_config();
+        }
+        if self.is_initialized() {
+            let mut ok = true;
+            for endpoint in ["status", "network", "peer"].iter() {
+                let data = self.http_get(*endpoint);
+                if data.0 == 200 {
+                    self.state.insert((*endpoint).into(), serde_json::from_str::<Value>(data.1.as_str()).unwrap_or(Value::Null));
+                } else {
+                    ok = false;
                 }
             }
-        }
-        l.sort_by(|a, b| (*a).0.cmp(&(*b).0));
-        l
-    }
-
-    pub fn address(&self) -> u64 {
-        let status: Value = serde_json::from_str(self.inner.lock().unwrap().current_status.as_str()).unwrap_or(Value::Null);
-        let status_obj = status.as_object();
-        if status_obj.is_some() {
-            let address = status_obj.unwrap().get("address");
-            if address.is_some() {
-                return u64::from_str_radix(address.unwrap().as_str().unwrap_or(""), 16).unwrap_or(0);
+            if ok {
+                self.last_successful_refresh_time = SystemTime::now();
             }
         }
-        0
     }
 }
