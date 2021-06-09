@@ -1,5 +1,5 @@
 use std::time::Duration;
-use std::collections::LinkedList;
+use std::collections::{LinkedList, HashMap};
 use serde_json::{Map, Value};
 use std::cell::Cell;
 
@@ -14,6 +14,7 @@ pub struct ServiceClient {
     port: u16,
     base_url: String,
     state: Map<String, Value>,
+    state_crc64: HashMap<String, u64>,
     post_queue: LinkedList<(String, String)>,
     online: bool,
     dirty: bool,
@@ -49,9 +50,10 @@ impl ServiceClient {
             port: 0,
             base_url: String::new(),
             state: Map::new(),
+            state_crc64: HashMap::new(),
             post_queue: LinkedList::new(),
             online: false,
-            dirty: false
+            dirty: false,
         }
     }
 
@@ -65,14 +67,14 @@ impl ServiceClient {
         self.is_initialized() && self.online
     }
 
-    pub fn with<R, F: FnOnce(&Value) -> R>(&self, path: &str, f: F) -> R {
+    pub fn with<T: AsRef<str>, R, F: FnOnce(&Value) -> R>(&self, path: &[T], f: F) -> R {
         let mut m = Some(&self.state);
         let v = Cell::new(&Value::Null);
-        path.split('/').for_each(|s| {
+        for s in path.iter() {
             m.map_or_else(|| {
                 v.replace(&Value::Null); // null if looking past tree of maps
             }, |mv| {
-                mv.get(s).map_or_else(|| {
+                mv.get((*s).as_ref()).map_or_else(|| {
                     v.replace(&Value::Null); // null if key not found
                 }, |nv| {
                     m = nv.as_object(); // sets to None if not a map
@@ -81,20 +83,21 @@ impl ServiceClient {
                     }
                 });
             });
-        });
+        }
         f(v.into_inner())
     }
 
     #[inline(always)]
-    pub fn get(&self, path: &str) -> Value {
+    pub fn get<T: AsRef<str>>(&self, path: &[T]) -> Value {
         self.with(path, |v| v.clone())
     }
 
     #[inline(always)]
-    pub fn get_str(&self, path: &str) -> String {
+    pub fn get_str<T: AsRef<str>>(&self, path: &[T]) -> String {
         self.get(path).as_str().map_or_else(|| String::new(), |s| s.into())
     }
 
+    /// Return true and reset dirty flag if posts have been made or changes have been received in sync().
     #[inline(always)]
     pub fn check_reset_dirty(&mut self) -> bool {
         let d = self.dirty;
@@ -102,9 +105,55 @@ impl ServiceClient {
         d
     }
 
+    /// Returns status, network IDs, and peer addresses if check_reset_dirty() returns true.
+    /// Value::Null is returned otherwise.
+    pub fn poll(&mut self) -> Value {
+        if self.check_reset_dirty() {
+            let mut poll_result: Map<String, Value> = Map::new();
+
+            let mut nw: Vec<Value> = Vec::new();
+            self.with(&["network"], |nws| {
+                let _ = nws.as_array().map(|a| a.iter().for_each(|network| {
+                    let _ = network.as_object().map(|network| {
+                        network.get("id").map(|id| {
+                            if id.is_string() {
+                                nw.push(id.clone());
+                            }
+                        });
+                    });
+                }));
+            });
+            poll_result.insert("network_ids".into(), Value::Array(nw));
+
+            let mut pp: Vec<Value> = Vec::new();
+            self.with(&["peer"], |nws| {
+                let _ = nws.as_array().map(|a| a.iter().for_each(|peer| {
+                    let _ = peer.as_object().map(|peer| {
+                        peer.get("address").map(|id| {
+                            if id.is_array() {
+                                pp.push(id.clone());
+                            }
+                        });
+                    });
+                }));
+            });
+            poll_result.insert("peer_addresses".into(), Value::Array(pp));
+
+            let _ = self.state.get("status").map(|status| {
+                if status.is_object() {
+                    poll_result.insert("status".into(), status.clone());
+                }
+            });
+
+            Value::Object(poll_result)
+        } else {
+            Value::Null.clone()
+        }
+    }
+
     pub fn networks(&self) -> Vec<(String, Map<String, Value>)> {
         let mut nw: Vec<(String, Map<String, Value>)> = Vec::new();
-        self.with("/network", |nws| {
+        self.with(&["network"], |nws| {
             let _ = nws.as_array().map(|a| a.iter().for_each(|network| {
                 let _ = network.as_object().map(|network| {
                     network.get("id").map(|id| {
@@ -121,12 +170,12 @@ impl ServiceClient {
 
     pub fn peers(&self) -> Vec<(String, Map<String, Value>)> {
         let mut pp: Vec<(String, Map<String, Value>)> = Vec::new();
-        self.with("/peer", |nws| {
+        self.with(&["peer"], |nws| {
             let _ = nws.as_array().map(|a| a.iter().for_each(|peer| {
                 let _ = peer.as_object().map(|peer| {
                     peer.get("address").map(|id| {
                         id.as_str().map(|id| {
-                            pp.push((id.into(), peer.clone()))
+                            pp.push((id.into(), peer.clone()));
                         });
                     });
                 });
@@ -229,7 +278,12 @@ impl ServiceClient {
             for endpoint in self.refresh_base_urls.iter() {
                 let data = self.http_get(*endpoint);
                 if data.0 == 200 {
-                    self.state.insert((*endpoint).into(), serde_json::from_str::<Value>(data.1.as_str()).unwrap_or(Value::Null));
+                    let mut c64 = crc64fast::Digest::new();
+                    c64.write(data.1.as_bytes());
+                    if self.state_crc64.insert((*endpoint).into(), c64.sum64()).is_some() {
+                        self.state.insert((*endpoint).into(), serde_json::from_str::<Value>(data.1.as_str()).unwrap_or(Value::Null));
+                        self.dirty = true;
+                    }
                 } else {
                     ok = false;
                 }

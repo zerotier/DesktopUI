@@ -1,34 +1,20 @@
-import React, { createElement } from 'react';
+import React from 'react';
 import ReactDOM from 'react-dom';
 
 //import { EuiPanel, EuiPageTemplate, EuiText, EuiResizableContainer } from '@elastic/eui';
 
 import Main from './main'
 
-// Called from Rust code to return data requested with 'get'.
-window.zt_get_callbacks = {};
-window.zt_get_callback = (callback_name, data) => {
-    let cb = window.zt_get_callbacks[callback_name];
-    delete window.zt_get_callbacks[callback_name];
-    if (typeof cb === 'function') {
-        try {
-            cb(data);
-        } catch (e) {}
-    }
-};
-
-// Called by React controls to obtain or refresh their state.
-// NOTE: for testing this could be replaced with a mock version that calls
-// the callback with test data.
-window.zt_get = (path, callback) => {
-    let callback_name = Math.random().toString() + Math.random().toString();
-    window.zt_get_callbacks[callback_name] = callback;
+// Send a log to stdout from the UI process.
+window.extLog = (data) => {
     external.invoke(JSON.stringify({
-        cmd: "get",
-        name: path, // path relative to local service API base e.g. http://127.0.0.1:9993/<path>
-        data: callback_name // random name of entry in window.zt_get_callbacks[]
+        cmd: "log",
+        data: JSON.stringify(data)
     }));
 };
+
+// NOTE: window.zt_ui_update is set by primary React controls like Main. It's
+// called from Rust code during polling if things have changed.
 
 // Called from Rust code in response to 'ready' command indicating that UI should render.
 window.zt_ui_render = (ui_mode) => {
@@ -44,3 +30,4 @@ window.zt_ui_render = (ui_mode) => {
 };
 
 setTimeout(function() { external.invoke('{ "cmd": "ready" }'); }, 5);
+setInterval(function() { external.invoke('{ "cmd": "poll" }'); }, 250);

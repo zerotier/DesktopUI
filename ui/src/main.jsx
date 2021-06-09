@@ -1,14 +1,20 @@
-import React, { createElement } from 'react';
+import React from 'react';
 
 export default class Main extends React.Component {
     constructor(props) {
         super(props);
-        this.state = { ss: {} };
+        this.state = { zt: {} };
+
+        window.zt_ui_update = this.onZtUpdate.bind(this);
+    }
+
+    onZtUpdate(update) {
+    	this.setState({ zt: update });
     }
 
 	render() {
 		return (
-			<div>state: {this.state.ss}</div>
+			<div>zt: {JSON.stringify(this.state.zt)}</div>
 		);
 	}
-};
+}

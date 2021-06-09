@@ -222,7 +222,7 @@ fn window(args: &Vec<String>) {
         .resizable(true)
         .visible(false)
         .frameless(false)
-        .debug(false)
+        .debug(true)
         .user_data(())
         .invoke_handler(move |wv, arg| {
             //println!("{}", arg);
@@ -232,13 +232,16 @@ fn window(args: &Vec<String>) {
                         wv.set_visible(true);
                         let _ = wv.eval(format!("zt_ui_render('{}');", args[2]).as_str());
                     },
-                    "get" => {
-                        ui_client.lock().unwrap().with(cmd.name.as_str(), |v| {
-                            let _ = wv.eval(format!("zt_get_callback('{}', {})", cmd.data, serde_json::to_string(v).unwrap().as_str()).as_str());
-                        });
-                    },
                     "post" => {
-                        ui_client.lock().unwrap().enqueue_post(cmd.name, cmd.data);
+                       let _ =  ui_client.lock().map(|mut c| c.enqueue_post(cmd.name, cmd.data));
+                    },
+                    "poll" => {
+                        let _ = ui_client.lock().map(|mut ui_client| {
+                            let poll_result = ui_client.poll();
+                            if poll_result.is_object() {
+                                let _ = wv.eval(format!("zt_ui_update({});", serde_json::to_string(&poll_result).unwrap()).as_str());
+                            }
+                        });
                     },
                     "log" => {
                         println!("UI> {}", cmd.data);
@@ -270,6 +273,7 @@ fn tray() {
     let mut icon_name = tray_icon_name();
     let mut last_refreshed_tray = SystemTime::UNIX_EPOCH;
     let mut tray: Option<Tray> = None;
+
     let client = start_client(vec!["status", "network"], 1000, TRAY_APP_REFRESH_PERIOD_MS / 2000);
 
     let main_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
@@ -287,7 +291,7 @@ fn tray() {
 
             let mut menu: Vec<TrayMenuItem> = Vec::new();
             if client.lock().unwrap().is_online() {
-                let address = client.lock().unwrap().get_str("status/address");
+                let address = client.lock().unwrap().get_str(&["status", "address"]);
                 let address_copy = address.clone();
                 menu.push(TrayMenuItem::Text {
                     text: format!("Node ID:  {} ", address),
