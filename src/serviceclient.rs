@@ -1,9 +1,9 @@
-use std::time::{SystemTime, Duration};
+use std::time::Duration;
 use std::collections::LinkedList;
 use serde_json::{Map, Value};
 use std::cell::Cell;
 
-const SERVICE_TIMEOUT_MS: u64 = 1500;
+const QUERY_TIMEOUT_MS: u64 = 2000;
 
 /// Client that queries and caches JSON state from the service.
 /// Currently it doesn't do much parsing since the JSON is just shoved
@@ -13,9 +13,10 @@ pub struct ServiceClient {
     auth_token: String,
     port: u16,
     base_url: String,
-    last_successful_refresh_time: SystemTime,
     state: Map<String, Value>,
     post_queue: LinkedList<(String, String)>,
+    online: bool,
+    dirty: bool,
 }
 
 #[cfg(target_os = "macos")]
@@ -47,18 +48,21 @@ impl ServiceClient {
             auth_token: String::new(),
             port: 0,
             base_url: String::new(),
-            last_successful_refresh_time: SystemTime::UNIX_EPOCH,
             state: Map::new(),
             post_queue: LinkedList::new(),
+            online: false,
+            dirty: false
         }
     }
 
+    #[inline(always)]
     pub fn is_initialized(&self) -> bool {
         self.port != 0 && !self.auth_token.is_empty()
     }
 
+    #[inline(always)]
     pub fn is_online(&self) -> bool {
-        self.is_initialized() && SystemTime::now().duration_since(self.last_successful_refresh_time).map_or(false, |d| d < Duration::from_millis(SERVICE_TIMEOUT_MS))
+        self.is_initialized() && self.online
     }
 
     pub fn with<R, F: FnOnce(&Value) -> R>(&self, path: &str, f: F) -> R {
@@ -81,12 +85,21 @@ impl ServiceClient {
         f(v.into_inner())
     }
 
+    #[inline(always)]
     pub fn get(&self, path: &str) -> Value {
         self.with(path, |v| v.clone())
     }
 
+    #[inline(always)]
     pub fn get_str(&self, path: &str) -> String {
         self.get(path).as_str().map_or_else(|| String::new(), |s| s.into())
+    }
+
+    #[inline(always)]
+    pub fn check_reset_dirty(&mut self) -> bool {
+        let d = self.dirty;
+        self.dirty = false;
+        d
     }
 
     pub fn networks(&self) -> Vec<(String, Map<String, Value>)> {
@@ -106,11 +119,28 @@ impl ServiceClient {
         nw
     }
 
+    pub fn peers(&self) -> Vec<(String, Map<String, Value>)> {
+        let mut pp: Vec<(String, Map<String, Value>)> = Vec::new();
+        self.with("/peer", |nws| {
+            let _ = nws.as_array().map(|a| a.iter().for_each(|peer| {
+                let _ = peer.as_object().map(|peer| {
+                    peer.get("address").map(|id| {
+                        id.as_str().map(|id| {
+                            pp.push((id.into(), peer.clone()))
+                        });
+                    });
+                });
+            }));
+        });
+        pp.sort_by(|a, b| (*a).0.cmp(&((*b).0)) );
+        pp
+    }
+
     fn http_get(&self, path: &str) -> (u16, String) {
         if self.auth_token.is_empty() || self.base_url.is_empty() {
             (0, String::new())
         } else {
-            ureq::get(format!("{}{}", self.base_url, path).as_str()).timeout(Duration::from_millis(SERVICE_TIMEOUT_MS)).set("X-ZT1-Auth", self.auth_token.as_str()).call().map_or_else(|_| {
+            ureq::get(format!("{}{}", self.base_url, path).as_str()).timeout(Duration::from_millis(QUERY_TIMEOUT_MS)).set("X-ZT1-Auth", self.auth_token.as_str()).call().map_or_else(|_| {
                 (0, String::new())
             }, |res| {
                 let status = res.status();
@@ -128,7 +158,7 @@ impl ServiceClient {
         if self.auth_token.is_empty() || self.base_url.is_empty() {
             (0, String::new())
         } else {
-            ureq::post(format!("{}{}", self.base_url, path).as_str()).timeout(Duration::from_millis(SERVICE_TIMEOUT_MS)).set("X-ZT1-Auth", self.auth_token.as_str()).send_string(payload).map_or_else(|_| {
+            ureq::post(format!("{}{}", self.base_url, path).as_str()).timeout(Duration::from_millis(QUERY_TIMEOUT_MS)).set("X-ZT1-Auth", self.auth_token.as_str()).send_string(payload).map_or_else(|_| {
                 (0, String::new())
             }, |res| {
                 let status = res.status();
@@ -142,7 +172,9 @@ impl ServiceClient {
         }
     }
 
+    #[inline(always)]
     pub fn enqueue_post(&mut self, path: String, payload: String) {
+        //println!("post: {} {}", path, payload);
         self.post_queue.push_back((path, payload));
     }
 
@@ -158,16 +190,19 @@ impl ServiceClient {
     }
 
     /// Send enqueued posts, if there are any.
-    pub fn do_posts(&mut self) {
-        if !self.is_initialized() {
+    pub fn do_posts(&mut self) -> bool {
+        if !self.is_initialized() || !self.is_online() {
             self.sync_client_config();
         }
         if self.is_initialized() {
+            let mut posted = false;
             loop {
                 let pq = self.post_queue.pop_front();
                 if pq.is_some() {
                     let pq = pq.unwrap();
-                    if self.http_post(pq.0.as_str(), pq.1.as_str()).0 != 200 {
+                    if self.http_post(pq.0.as_str(), pq.1.as_str()).0 == 200 {
+                        posted = true;
+                    } else {
                         self.post_queue.push_front(pq);
                         break;
                     }
@@ -175,12 +210,18 @@ impl ServiceClient {
                     break;
                 }
             }
+            if posted {
+                self.dirty = true;
+            }
+            posted
+        } else {
+            false
         }
     }
 
     /// Submit queued posts and get current service state.
     pub fn sync(&mut self) {
-        if !self.is_initialized() {
+        if !self.is_initialized() || !self.is_online() {
             self.sync_client_config();
         }
         if self.is_initialized() {
@@ -193,9 +234,7 @@ impl ServiceClient {
                     ok = false;
                 }
             }
-            if ok {
-                self.last_successful_refresh_time = SystemTime::now();
-            }
+            self.online = ok;
         }
     }
 }

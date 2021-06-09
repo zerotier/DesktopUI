@@ -35,7 +35,7 @@ impl Drop for CTrayMenuContainer {
     fn drop(&mut self) {
         if !self.c_tray_menu.context.is_null() {
             unsafe {
-                let b: Box<Box<dyn FnMut() + Send>> = Box::from_raw(self.c_tray_menu.context.cast());
+                let b: Box<Box<dyn FnMut()>> = Box::from_raw(self.c_tray_menu.context.cast());
                 drop(b);
             }
         }
@@ -48,7 +48,7 @@ pub enum TrayMenuItem {
         text: String,
         checked: bool,
         disabled: bool,
-        handler: Option<Box<dyn FnMut() + Send>>,
+        handler: Option<Box<dyn FnMut()>>,
     },
     Separator,
     Submenu {
@@ -78,7 +78,7 @@ extern "C" {
 
 unsafe extern "C" fn tray_handler_callback(item: *const CTrayMenu) {
     if !item.is_null() {
-        let f: *mut Box<dyn FnMut() + Send> = (*item).context.cast();
+        let f: *mut Box<dyn FnMut()> = (*item).context.cast();
         if !f.is_null() {
             (*f)();
         }
