@@ -159,6 +159,7 @@ impl ServiceClient {
     }
 
     fn http_post(&self, path: &str, payload: &str) -> (u16, String) {
+        println!("POST {} {}", path, payload);
         if self.auth_token.is_empty() || self.base_url.is_empty() {
             (0, String::new())
         } else {
@@ -178,7 +179,6 @@ impl ServiceClient {
 
     #[inline(always)]
     pub fn enqueue_post(&mut self, path: String, payload: String) {
-        //println!("post: {} {}", path, payload);
         self.post_queue.push_back((path, payload));
     }
 

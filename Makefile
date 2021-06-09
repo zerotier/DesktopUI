@@ -15,7 +15,7 @@ mac-ui-test: FORCE
 	cp -f ui/dist/index.html mac-app-template/ZeroTier.app/Contents/Resources/ui.html
 	cp -f ui/node_modules/@elastic/eui/dist/eui_theme_amsterdam_dark.css mac-app-template/ZeroTier.app/Contents/Resources/dark.css
 	cp -f ui/node_modules/@elastic/eui/dist/eui_theme_amsterdam_light.css mac-app-template/ZeroTier.app/Contents/Resources/light.css
-	mac-app-template/ZeroTier.app/Contents/MacOS/ZeroTier window Main
+	mac-app-template/ZeroTier.app/Contents/MacOS/ZeroTier window Main 1280 420
 
 clean: FORCE
 	rm -rf target web-view/target ui/dist mac-app-template/ZeroTier.app/Contents/MacOS/ZeroTier mac-app-template/ZeroTier.app/Contents/Resources/ui.html tray/*.o tray/*.a

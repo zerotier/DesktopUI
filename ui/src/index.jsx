@@ -13,6 +13,15 @@ window.extLog = (data) => {
     }));
 };
 
+// Post something back to the service (via the Rust code).
+window.ztPost = (path, data) => {
+    external.invoke(JSON.stringify({
+        cmd: "post",
+        name: path,
+        data: JSON.stringify(data)
+    }));
+};
+
 // NOTE: window.zt_ui_update is set by primary React controls like Main. It's
 // called from Rust code during polling if things have changed.
 
