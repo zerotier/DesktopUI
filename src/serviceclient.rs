@@ -9,6 +9,7 @@ const SERVICE_TIMEOUT_MS: u64 = 1500;
 /// Currently it doesn't do much parsing since the JSON is just shoved
 /// through to the JavaScript UI for most of what's done with it.
 pub struct ServiceClient {
+    refresh_base_urls: Vec<&'static str>,
     auth_token: String,
     port: u16,
     base_url: String,
@@ -40,8 +41,9 @@ pub fn get_auth_token_and_port() -> Option<(String, u16)> {
 }
 
 impl ServiceClient {
-    pub fn new() -> ServiceClient {
+    pub fn new(refresh_base_urls: Vec<&'static str>) -> ServiceClient {
         ServiceClient{
+            refresh_base_urls,
             auth_token: String::new(),
             port: 0,
             base_url: String::new(),
@@ -87,23 +89,20 @@ impl ServiceClient {
         self.get(path).as_str().map_or_else(|| String::new(), |s| s.into())
     }
 
-    pub fn networks(&self) -> Vec<(String, String)> {
-        let mut nw: Vec<(String, String)> = Vec::new();
+    pub fn networks(&self) -> Vec<(String, Map<String, Value>)> {
+        let mut nw: Vec<(String, Map<String, Value>)> = Vec::new();
         self.with("/network", |nws| {
             let _ = nws.as_array().map(|a| a.iter().for_each(|network| {
                 let _ = network.as_object().map(|network| {
-                    let id = network.get("id");
-                    let name = network.get("name");
-                    if id.is_some() && name.is_some() {
-                        let id = id.unwrap();
-                        let name = name.unwrap();
-                        if id.is_string() && name.is_string() {
-                            nw.push((id.as_str().unwrap().into(), name.as_str().unwrap().into()))
-                        }
-                    }
+                    network.get("id").map(|id| {
+                        id.as_str().map(|id| {
+                            nw.push((id.into(), network.clone()))
+                        });
+                    });
                 });
             }));
         });
+        nw.sort_by(|a, b| (*a).0.cmp(&((*b).0)) );
         nw
     }
 
@@ -186,7 +185,7 @@ impl ServiceClient {
         }
         if self.is_initialized() {
             let mut ok = true;
-            for endpoint in ["status", "network", "peer"].iter() {
+            for endpoint in self.refresh_base_urls.iter() {
                 let data = self.http_get(*endpoint);
                 if data.0 == 200 {
                     self.state.insert((*endpoint).into(), serde_json::from_str::<Value>(data.1.as_str()).unwrap_or(Value::Null));
