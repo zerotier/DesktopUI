@@ -3,22 +3,22 @@
 mod tray;
 mod serviceclient;
 
-use serde::{Deserialize, Serialize};
-use tray::*;
 use std::process::{Child, Command, Stdio};
 use std::sync::{Mutex, Arc, MutexGuard};
-use std::time::{SystemTime, Duration};
-
-use crate::serviceclient::ServiceClient;
-use serde_json::Value;
+use std::time::Duration;
 use std::io::Write;
 use std::cmp::Ordering;
+use std::sync::atomic::AtomicBool;
+
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use crate::tray::*;
+use crate::serviceclient::ServiceClient;
 
 /// The string in the HTML blob to replace with the right CSS for this platform and light/dark mode.
+/// It's a bit weird so web app bundlers don't optimize it out.
 const CSS_PLACEHOLDER: &'static str = ".XXXthis_is_replaced_by_css_in_the_rust_codeXXX{border:0}";
-
-/// The interval in milliseconds to refresh the tray app when in the background.
-const TRAY_APP_REFRESH_PERIOD_MS: u64 = 10000;
 
 #[derive(Serialize, Deserialize)]
 pub struct CommandFromWebView {
@@ -166,9 +166,13 @@ fn get_web_ui_blob() -> String {
     include_str!("../ui/dist/index.html").replace(CSS_PLACEHOLDER, css)
 }
 
-fn start_client(refresh_base_urls: Vec<&'static str>, tick_period_ms: u64, refresh_period_ticks: u64) -> Arc<Mutex<ServiceClient>> {
-    let client = Arc::new(Mutex::new(ServiceClient::new(refresh_base_urls)));
-    let _ = client.lock().map(|mut c| c.sync());
+/// This is called once per process to start the client I/O loop.
+fn start_client(refresh_base_paths: Vec<&'static str>, tick_period_ms: u64, refresh_period_ticks: u64) -> (Arc<Mutex<ServiceClient>>, Arc<AtomicBool>) {
+    let (mut client, dirty_flag) = ServiceClient::new(refresh_base_paths);
+    client.sync();
+
+    let client = Arc::new(Mutex::new(client));
+
     let thread_client = client.clone();
     let _ = std::thread::spawn(move || {
         set_thread_to_background_priority();
@@ -184,7 +188,8 @@ fn start_client(refresh_base_urls: Vec<&'static str>, tick_period_ms: u64, refre
             std::thread::sleep(Duration::from_millis(tick_period_ms));
         }
     });
-    client
+
+    (client, dirty_flag)
 }
 
 fn window(args: &Vec<String>) {
@@ -208,7 +213,7 @@ fn window(args: &Vec<String>) {
      * data to be posted at the next refresh.
      */
 
-    let client = start_client(vec!["status", "network", "peer"], 100, 5);
+    let (client, dirty_flag) = start_client(vec!["status", "network", "peer"], 100, 5);
     set_thread_to_foreground_priority();
 
     let ui_client = client.clone();
@@ -225,7 +230,6 @@ fn window(args: &Vec<String>) {
         .debug(true)
         .user_data(())
         .invoke_handler(move |wv, arg| {
-            //println!("{}", arg);
             let _ = serde_json::from_str::<CommandFromWebView>(arg).map(|cmd| {
                 match cmd.cmd.as_str() {
                     "ready" => {
@@ -236,15 +240,14 @@ fn window(args: &Vec<String>) {
                        let _ =  ui_client.lock().map(|mut c| c.enqueue_post(cmd.name, cmd.data));
                     },
                     "poll" => {
-                        let _ = ui_client.lock().map(|mut ui_client| {
-                            let poll_result = ui_client.poll();
-                            if poll_result.is_object() {
-                                let _ = wv.eval(format!("zt_ui_update({});", serde_json::to_string(&poll_result).unwrap()).as_str());
-                            }
-                        });
+                        if dirty_flag.swap(false, std::sync::atomic::Ordering::Relaxed) {
+                            let _ = ui_client.lock().map(|ui_client| {
+                                let _ = wv.eval(format!("zt_ui_update({});", ui_client.get_all_json()).as_str());
+                            });
+                        }
                     },
                     "log" => {
-                        println!("UI> {}", cmd.data);
+                        println!("> {}", cmd.data);
                     },
                     "quit" => {
                         wv.exit();
@@ -271,20 +274,16 @@ fn tray() {
     set_thread_to_background_priority();
 
     let mut icon_name = tray_icon_name();
-    let mut last_refreshed_tray = SystemTime::UNIX_EPOCH;
     let mut tray: Option<Tray> = None;
 
-    let client = start_client(vec!["status", "network"], 1000, TRAY_APP_REFRESH_PERIOD_MS / 2000);
+    let (client, dirty_flag) = start_client(vec!["status", "network"], 500, 20);
 
     let main_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
     let join_network_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
     let about_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
 
     loop {
-        let now = SystemTime::now();
-        if now.duration_since(last_refreshed_tray).map_or(true, |since| since > Duration::from_millis(TRAY_APP_REFRESH_PERIOD_MS)) || client.lock().map_or(false, |mut c| c.check_reset_dirty()) {
-            last_refreshed_tray = now;
-
+        if dirty_flag.swap(false, std::sync::atomic::Ordering::Relaxed) {
             let (main_window2, main_window3) = (main_window.clone(), main_window.clone());
             let (join_network_window2, join_network_window3) = (join_network_window.clone(), join_network_window.clone());
             let (about_window2, about_window3) = (about_window.clone(), about_window.clone());
@@ -292,12 +291,12 @@ fn tray() {
             let mut menu: Vec<TrayMenuItem> = Vec::new();
             if client.lock().unwrap().is_online() {
                 let address = client.lock().unwrap().get_str(&["status", "address"]);
-                let address_copy = address.clone();
+                let address2 = address.clone();
                 menu.push(TrayMenuItem::Text {
                     text: format!("Node ID:  {} ", address),
                     checked: false,
                     disabled: false,
-                    handler: Some(Box::new(move || copy_to_clipboard(address_copy.as_str()) )),
+                    handler: Some(Box::new(move || copy_to_clipboard(address2.as_str()) )),
                 });
 
                 menu.push(TrayMenuItem::Separator);
@@ -347,28 +346,28 @@ fn tray() {
                             text: format!("Allow Managed Addresses"),
                             checked: allow_managed_addresses,
                             disabled: false,
-                            handler: Some(Box::new(move || client2.lock().unwrap().enqueue_post(format!("/network/{}", nwid), format!("{{ \"allowManaged\": {} }}", !allow_managed_addresses)))),
+                            handler: Some(Box::new(move || client2.lock().unwrap().enqueue_post(format!("network/{}", nwid), format!("{{ \"allowManaged\": {} }}", !allow_managed_addresses)))),
                         });
                         let (nwid, client2) = ((*network).0.clone(), client.clone());
                         network_menu.push(TrayMenuItem::Text {
                             text: format!("Allow Assignment of Global IPs"),
                             checked: allow_global_ips,
                             disabled: false,
-                            handler: Some(Box::new(move || client2.lock().unwrap().enqueue_post(format!("/network/{}", nwid), format!("{{ \"allowGlobal\": {} }}", !allow_global_ips)))),
+                            handler: Some(Box::new(move || client2.lock().unwrap().enqueue_post(format!("network/{}", nwid), format!("{{ \"allowGlobal\": {} }}", !allow_global_ips)))),
                         });
                         let (nwid, client2) = ((*network).0.clone(), client.clone());
                         network_menu.push(TrayMenuItem::Text {
                             text: format!("Allow Default Router Override"),
                             checked: allow_default,
                             disabled: false,
-                            handler: Some(Box::new(move || client2.lock().unwrap().enqueue_post(format!("/network/{}", nwid), format!("{{ \"allowDefault\": {} }}", !allow_default)))),
+                            handler: Some(Box::new(move || client2.lock().unwrap().enqueue_post(format!("network/{}", nwid), format!("{{ \"allowDefault\": {} }}", !allow_default)))),
                         });
                         let (nwid, client2) = ((*network).0.clone(), client.clone());
                         network_menu.push(TrayMenuItem::Text {
                             text: format!("Allow DNS Configuration"),
                             checked: allow_dns,
                             disabled: false,
-                            handler: Some(Box::new(move || client2.lock().unwrap().enqueue_post(format!("/network/{}", nwid), format!("{{ \"allowDNS\": {} }}", !allow_dns)))),
+                            handler: Some(Box::new(move || client2.lock().unwrap().enqueue_post(format!("network/{}", nwid), format!("{{ \"allowDNS\": {} }}", !allow_dns)))),
                         });
                         network_menu.push(TrayMenuItem::Separator);
                         nw_obj.get("mac").map(|a| a.as_str().map(|a| {

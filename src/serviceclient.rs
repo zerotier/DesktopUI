@@ -2,6 +2,8 @@ use std::time::Duration;
 use std::collections::{LinkedList, HashMap};
 use serde_json::{Map, Value};
 use std::cell::Cell;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 const QUERY_TIMEOUT_MS: u64 = 2000;
 
@@ -9,15 +11,15 @@ const QUERY_TIMEOUT_MS: u64 = 2000;
 /// Currently it doesn't do much parsing since the JSON is just shoved
 /// through to the JavaScript UI for most of what's done with it.
 pub struct ServiceClient {
-    refresh_base_urls: Vec<&'static str>,
+    refresh_base_paths: Vec<&'static str>,
     auth_token: String,
     port: u16,
     base_url: String,
     state: Map<String, Value>,
     state_crc64: HashMap<String, u64>,
     post_queue: LinkedList<(String, String)>,
+    dirty: Arc<AtomicBool>,
     online: bool,
-    dirty: bool,
 }
 
 #[cfg(target_os = "macos")]
@@ -43,18 +45,20 @@ pub fn get_auth_token_and_port() -> Option<(String, u16)> {
 }
 
 impl ServiceClient {
-    pub fn new(refresh_base_urls: Vec<&'static str>) -> ServiceClient {
-        ServiceClient{
-            refresh_base_urls,
+    /// Create a new service client and return the client and a flag that can be atomically checked to indicate changes.
+    pub fn new(refresh_base_paths: Vec<&'static str>) -> (ServiceClient, Arc<AtomicBool>) {
+        let dirty_flag = Arc::new(AtomicBool::new(true));
+        (ServiceClient {
+            refresh_base_paths,
             auth_token: String::new(),
             port: 0,
             base_url: String::new(),
             state: Map::new(),
             state_crc64: HashMap::new(),
             post_queue: LinkedList::new(),
+            dirty: dirty_flag.clone(),
             online: false,
-            dirty: false,
-        }
+        }, dirty_flag)
     }
 
     #[inline(always)]
@@ -97,58 +101,9 @@ impl ServiceClient {
         self.get(path).as_str().map_or_else(|| String::new(), |s| s.into())
     }
 
-    /// Return true and reset dirty flag if posts have been made or changes have been received in sync().
     #[inline(always)]
-    pub fn check_reset_dirty(&mut self) -> bool {
-        let d = self.dirty;
-        self.dirty = false;
-        d
-    }
-
-    /// Returns status, network IDs, and peer addresses if check_reset_dirty() returns true.
-    /// Value::Null is returned otherwise.
-    pub fn poll(&mut self) -> Value {
-        if self.check_reset_dirty() {
-            let mut poll_result: Map<String, Value> = Map::new();
-
-            let mut nw: Vec<Value> = Vec::new();
-            self.with(&["network"], |nws| {
-                let _ = nws.as_array().map(|a| a.iter().for_each(|network| {
-                    let _ = network.as_object().map(|network| {
-                        network.get("id").map(|id| {
-                            if id.is_string() {
-                                nw.push(id.clone());
-                            }
-                        });
-                    });
-                }));
-            });
-            poll_result.insert("network_ids".into(), Value::Array(nw));
-
-            let mut pp: Vec<Value> = Vec::new();
-            self.with(&["peer"], |nws| {
-                let _ = nws.as_array().map(|a| a.iter().for_each(|peer| {
-                    let _ = peer.as_object().map(|peer| {
-                        peer.get("address").map(|id| {
-                            if id.is_array() {
-                                pp.push(id.clone());
-                            }
-                        });
-                    });
-                }));
-            });
-            poll_result.insert("peer_addresses".into(), Value::Array(pp));
-
-            let _ = self.state.get("status").map(|status| {
-                if status.is_object() {
-                    poll_result.insert("status".into(), status.clone());
-                }
-            });
-
-            Value::Object(poll_result)
-        } else {
-            Value::Null.clone()
-        }
+    pub fn get_all_json(&self) -> String {
+        serde_json::to_string(&self.state).unwrap()
     }
 
     pub fn networks(&self) -> Vec<(String, Map<String, Value>)> {
@@ -260,7 +215,7 @@ impl ServiceClient {
                 }
             }
             if posted {
-                self.dirty = true;
+                self.dirty.store(true, Ordering::Relaxed);
             }
             posted
         } else {
@@ -274,21 +229,20 @@ impl ServiceClient {
             self.sync_client_config();
         }
         if self.is_initialized() {
-            let mut ok = true;
-            for endpoint in self.refresh_base_urls.iter() {
-                let data = self.http_get(*endpoint);
+            for endpoint in self.refresh_base_paths.iter() {
+                let endpoint = *endpoint;
+                let data = self.http_get(endpoint);
                 if data.0 == 200 {
                     let mut c64 = crc64fast::Digest::new();
                     c64.write(data.1.as_bytes());
-                    if self.state_crc64.insert((*endpoint).into(), c64.sum64()).is_some() {
+                    let c64 = c64.sum64();
+                    if self.state_crc64.insert(endpoint.into(), c64).map_or(true, |s| s != c64) {
                         self.state.insert((*endpoint).into(), serde_json::from_str::<Value>(data.1.as_str()).unwrap_or(Value::Null));
-                        self.dirty = true;
+                        self.dirty.store(true, Ordering::Relaxed);
+                        self.online = true;
                     }
-                } else {
-                    ok = false;
                 }
             }
-            self.online = ok;
         }
     }
 }

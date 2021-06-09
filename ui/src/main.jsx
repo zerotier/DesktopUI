@@ -13,8 +13,9 @@ export default class Main extends React.Component {
     }
 
 	render() {
+		let zt = this.state.zt;
 		return (
-			<div>zt: {JSON.stringify(this.state.zt)}</div>
+			<div>zt: {JSON.stringify(zt)}</div>
 		);
 	}
 }
