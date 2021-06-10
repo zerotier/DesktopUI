@@ -1,5 +1,5 @@
 import React from 'react';
-import { EuiPanel, EuiFlexGrid, EuiFlexItem, EuiFormRow, EuiText, EuiHorizontalRule, EuiFieldText, EuiCheckbox, EuiButton } from '@elastic/eui';
+import { EuiPanel, EuiFlexGrid, EuiFlexItem, EuiFormRow, EuiText, EuiSpacer, EuiFieldText, EuiCheckbox, EuiButton } from '@elastic/eui';
 
 export default class ConfigPanel extends React.Component {
     constructor(props) {
@@ -55,14 +55,16 @@ export default class ConfigPanel extends React.Component {
         if (status) {
             inner = (<>
                 <EuiFlexGrid columns={2} gutterSize="s" alignItems="center">
-                    <EuiHorizontalRule/>
                     <EuiFlexItem><EuiText><h4>ZeroTier Address</h4></EuiText></EuiFlexItem>
                     <EuiFlexItem><EuiText><span className="font-monospaced">{status.address}</span></EuiText></EuiFlexItem>
                     <EuiFlexItem><EuiText><h4>Version</h4></EuiText></EuiFlexItem>
                     <EuiFlexItem><EuiText>{status.version}</EuiText></EuiFlexItem>
                     <EuiFlexItem><EuiText><h4>Status</h4></EuiText></EuiFlexItem>
                     <EuiFlexItem><EuiText>{status.online ? (status.tcpFallbackActive ? 'Tunneled' : 'Online') : 'Offline'}</EuiText></EuiFlexItem>
-                    <EuiHorizontalRule/>
+
+                    <EuiFlexItem><EuiSpacer/></EuiFlexItem>
+                    <EuiFlexItem><EuiSpacer/></EuiFlexItem>
+
                     <EuiFlexItem><EuiText><h4>Primary Port</h4></EuiText></EuiFlexItem>
                     <EuiFlexItem>
                         <EuiFormRow helpText="(service restart required)">
@@ -75,7 +77,10 @@ export default class ConfigPanel extends React.Component {
                             <EuiCheckbox checked={this.state.portMappingEnabled} label="Enabled" onChange={(e) => { this.setState({portMappingEnabled: !this.state.portMappingEnabled}) }}/>
                         </EuiFormRow>
                     </EuiFlexItem>
-                    <EuiHorizontalRule/>
+
+                    <EuiFlexItem><EuiSpacer/></EuiFlexItem>
+                    <EuiFlexItem><EuiSpacer/></EuiFlexItem>
+
                     {(this.state.changes) ? (<>
                         <EuiFlexItem>
                             <EuiButton size="s" color="text">Cancel</EuiButton>
