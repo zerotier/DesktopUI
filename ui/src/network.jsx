@@ -4,7 +4,12 @@ import { EuiPanel, EuiFlexGroup, EuiFlexItem, EuiFormRow, EuiCheckbox, EuiListGr
 export default class Network extends React.Component {
     constructor(props) {
         super(props);
+        this.adiToIp = this.adiToIp.bind(this);
         this.state = {};
+    }
+
+    adiToIp(adi) {
+        return ((adi >> 24) & 0xff).toString() + '.' + ((adi >> 16) & 0xff).toString() + '.' + ((adi >> 8) & 0xff).toString() + '.' + (adi & 0xff).toString();
     }
 
     render() {
@@ -76,7 +81,7 @@ export default class Network extends React.Component {
                                         try {
                                             adi = parseInt(ms.adi);
                                         } catch (e) {}
-                                        adi = (adi > 0) ? '/'+adi.toString(16) : '';
+                                        adi = (adi > 0) ? ((ms.mac == 'ff:ff:ff:ff:ff:ff') ? ' (ARP ADI: '+this.adiToIp(adi)+')' : ' (non-ARP ADI: '+adi.toString(16)+')') : '';
                                         return <div className="font-monospaced" key={(ms.mac+adi)}>{ms.mac}{adi}</div>;
                                     })}
                                 </EuiText>

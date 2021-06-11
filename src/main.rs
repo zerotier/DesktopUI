@@ -317,7 +317,7 @@ fn tray() {
                     checked: false,
                     disabled: false,
                     handler: Some(Box::new(move || {
-                        open_window_subprocess(main_window2.lock().unwrap(), "Main", 1000, 400);
+                        open_window_subprocess(main_window2.lock().unwrap(), "Main", 1200, 360);
                     })),
                 });
 
