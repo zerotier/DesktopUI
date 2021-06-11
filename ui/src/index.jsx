@@ -3,9 +3,10 @@ import ReactDOM from 'react-dom';
 
 //import { EuiPanel, EuiPageTemplate, EuiText, EuiResizableContainer } from '@elastic/eui';
 
-import Main from './main'
+import Main from './main';
+import Join from './join';
+import About from './about';
 
-// Send a log to stdout from the UI process.
 window.extLog = (data) => {
     external.invoke(JSON.stringify({
         cmd: "log",
@@ -13,7 +14,7 @@ window.extLog = (data) => {
     }));
 };
 
-// Post something back to the service (via the Rust code).
+// Sends a message to the Rust code to be passed through as a POST to the service's JSON API.
 window.ztPost = (path, data) => {
     external.invoke(JSON.stringify({
         cmd: "post",
@@ -30,17 +31,20 @@ window.copyToClipboard = (str) => {
 };
 
 // NOTE: window.zt_ui_update is set by primary React controls like Main. It's
-// called from Rust code during polling if things have changed.
+// called from Rust code during polling if things have changed. This is a dummy
+// for modes that don't need these updates.
+window.zt_ui_update = (update) => {};
 
 // Called from Rust code in response to 'ready' command indicating that UI should render.
 window.zt_ui_render = (ui_mode) => {
-    setInterval(function() { external.invoke('{ "cmd": "poll" }'); }, 250);
+    setInterval(function() { external.invoke('{ "cmd": "poll" }'); }, 200);
+
     if (ui_mode == "Main") {
         ReactDOM.render(<Main/>, document.getElementById("_app_root"));
     } else if (ui_mode == "Join") {
-        ReactDOM.render((<div>window_type = {window_type}</div>), document.getElementById("_app_root"));
+        ReactDOM.render(<Join height="100%" width="100%"/>, document.getElementById("_app_root"));
     } else if (ui_mode == "About") {
-        ReactDOM.render((<div>window_type = {window_type}</div>), document.getElementById("_app_root"));
+        ReactDOM.render(<About/>, document.getElementById("_app_root"));
     } else {
         ReactDOM.render((<div>unrecognized ui_mode = {ui_mode}</div>), document.getElementById("_app_root"));
     }

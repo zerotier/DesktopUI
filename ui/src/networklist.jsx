@@ -3,6 +3,7 @@ import { EuiPanel, EuiEmptyPrompt, EuiBasicTable, EuiBottomBar, EuiText, EuiHori
 import equal from 'fast-deep-equal';
 
 import Network from './network';
+import Join from './join';
 
 export default class NetworkList extends React.Component {
     constructor(props) {
@@ -10,10 +11,8 @@ export default class NetworkList extends React.Component {
         this.state = {
             networks: [],
             selectedRowNetworkId: '',
-            joinNetworkId: '',
             initialized: false
         };
-        this.onJoinNetworkChanged = this.onJoinNetworkChanged.bind(this);
         this.itemIdToExpandedRowMap = {};
         this.networkTableColumns = [
             {
@@ -78,21 +77,6 @@ export default class NetworkList extends React.Component {
         return !equal(nextState, this.state);
     }
 
-    onJoinNetworkChanged(e) {
-        try {
-            let vstr = e.target.value||'';
-            let s = '';
-            for(let i=0;(i<vstr.length)&&(i<16);++i) {
-                let c = vstr.charAt(i);
-                if ("0123456789abcdefABCDEF".indexOf(c) >= 0)
-                    s += c;
-            }
-            this.setState({ joinNetworkId: s.toLowerCase() });
-        } catch (exc) {
-            this.setState({ joinNetworkId: '' });
-        }
-    }
-
     render() {
         let networks = this.state.networks;
 
@@ -127,16 +111,7 @@ export default class NetworkList extends React.Component {
             return (
                 <EuiPanel borderRadius="none" paddingSize="none" hasShadow={false} hasBorder={false} className="eui-fullHeight" style={{ overflowY: 'hidden' }}>
                     <EuiPanel borderRadius="none" hasShadow={false} hasBorder={false} paddingSize="m" className="eui-yScroll" style={{ height: 'calc(100% - 70px)' }}>{content}</EuiPanel>
-                    <EuiPanel paddingSize="m" borderRadius="none" hasShadow={false} hasBorder={false} style={{ height: '70px' }}>
-                        <EuiFlexGroup gutterSize="s">
-                            <EuiFlexItem grow={false}>
-                                <EuiFieldText value={this.state.joinNetworkId} placeholder="################" style={{width: '12em'}} className="font-monospaced" onChange={(e) => { this.onJoinNetworkChanged(e); }}/>
-                            </EuiFlexItem>
-                            <EuiFlexItem>
-                                <EuiButton isDisabled={((this.state.joinNetworkId||'').length !== 16)} color="text" fill style={{width: '12rem'}}>Join&nbsp;Network</EuiButton>
-                            </EuiFlexItem>
-                        </EuiFlexGroup>
-                    </EuiPanel>
+                    <Join height="70px" width="24em"/>
                 </EuiPanel>
             );
         }

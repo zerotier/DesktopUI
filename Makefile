@@ -18,6 +18,6 @@ mac-ui-test: FORCE
 	mac-app-template/ZeroTier.app/Contents/MacOS/ZeroTier window Main 1280 360
 
 clean: FORCE
-	rm -rf target web-view/target ui/dist mac-app-template/ZeroTier.app/Contents/MacOS/ZeroTier mac-app-template/ZeroTier.app/Contents/Resources/ui.html tray/*.o tray/*.a
+	rm -rf target web-view/target mac-app-template/ZeroTier.app/Contents/MacOS/ZeroTier mac-app-template/ZeroTier.app/Contents/Resources/*.html mac-app-template/ZeroTier.app/Contents/Resources/*.css tray/*.o tray/*.a
 
 FORCE:

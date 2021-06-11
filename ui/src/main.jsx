@@ -10,8 +10,7 @@ export default class Main extends React.Component {
         super(props);
         this.state = { zt: {} };
         this.onZtUpdate = this.onZtUpdate.bind(this);
-
-        window.zt_ui_update = this.onZtUpdate.bind(this);
+        window.zt_ui_update = this.onZtUpdate;
     }
 
     onZtUpdate(update) {
@@ -26,7 +25,7 @@ export default class Main extends React.Component {
     render() {
         let zt = this.state.zt;
         return (
-            <EuiFlexGroup className="eui-fullHeight" gutterSize="none">
+            <EuiFlexGroup className="eui-fullHeight" gutterSize="none" responsive={false}>
                 <EuiFlexItem className="eui-fullHeight" grow={1}>
                     <ConfigPanel status={zt.status}/>
                 </EuiFlexItem>

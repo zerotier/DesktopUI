@@ -309,7 +309,7 @@ fn tray() {
                     checked: false,
                     disabled: false,
                     handler: Some(Box::new(move || {
-                        open_window_subprocess(join_network_window2.lock().unwrap(), "Join", 400, 100);
+                        open_window_subprocess(join_network_window2.lock().unwrap(), "Join", 500, 70);
                     })),
                 });
                 menu.push(TrayMenuItem::Text {
