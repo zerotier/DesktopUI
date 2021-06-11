@@ -1,15 +1,15 @@
 import React from 'react';
-import { EuiPanel, EuiFlexGrid, EuiFlexItem, EuiFormRow, EuiText, EuiSpacer, EuiFieldText, EuiCheckbox, EuiButton } from '@elastic/eui';
+import { EuiPanel, EuiFlexGrid, EuiFlexItem, EuiFormRow, EuiText, EuiSpacer, EuiFieldText, EuiCheckbox, EuiButton, EuiLink } from '@elastic/eui';
 
 export default class ConfigPanel extends React.Component {
     constructor(props) {
         super(props);
         this.onPrimaryPortChange = this.onPrimaryPortChange.bind(this);
         this.onPrimaryPortLostFocus = this.onPrimaryPortLostFocus.bind(this);
+        this.onEnablePortMappingChange = this.onEnablePortMappingChange.bind(this);
         this.state = {
             primaryPort: null,
             portMappingEnabled: null,
-            changes: false,
             receivedProps: false
         };
     }
@@ -22,10 +22,6 @@ export default class ConfigPanel extends React.Component {
                 primaryPort: primaryPort,
                 portMappingEnabled: portMappingEnabled,
                 receivedProps: true
-            });
-        } else {
-            this.setState({
-                changes: primaryPort!=this.state.primaryPort || portMappingEnabled!=this.state.portMappingEnabled
             });
         }
     }
@@ -49,51 +45,62 @@ export default class ConfigPanel extends React.Component {
         }
     }
 
+    onEnablePortMappingChange(e) {
+        this.setState({ portMappingEnabled: !this.state.portMappingEnabled });
+    }
+
     render() {
         let status = this.props.status;
         let inner = <div></div>;
         if (status) {
+            let changes = 
+                (this.state.primaryPort != this.props.status?.config?.settings?.primaryPort) ||
+                (this.state.portMappingEnabled != this.props.status?.config?.settings?.portMappingEnabled);
             inner = (<>
                 <EuiFlexGrid columns={2} gutterSize="s" alignItems="center">
-                    <EuiFlexItem><EuiText><h4>ZeroTier Address</h4></EuiText></EuiFlexItem>
-                    <EuiFlexItem><EuiText><span className="font-monospaced">{status.address}</span></EuiText></EuiFlexItem>
-                    <EuiFlexItem><EuiText><h4>Version</h4></EuiText></EuiFlexItem>
+                    <EuiFlexItem><EuiText>ZeroTier Address</EuiText></EuiFlexItem>
+                    <EuiFlexItem>
+                        <EuiText>
+                            <EuiLink className="font-monospaced" color="text" onClick={ () => { copyToClipboard(status.address) } }>{status.address}</EuiLink>
+                        </EuiText>
+                    </EuiFlexItem>
+                    <EuiFlexItem><EuiText>Version</EuiText></EuiFlexItem>
                     <EuiFlexItem><EuiText>{status.version}</EuiText></EuiFlexItem>
-                    <EuiFlexItem><EuiText><h4>Status</h4></EuiText></EuiFlexItem>
+                    <EuiFlexItem><EuiText>Status</EuiText></EuiFlexItem>
                     <EuiFlexItem><EuiText>{status.online ? (status.tcpFallbackActive ? 'Tunneled' : 'Online') : 'Offline'}</EuiText></EuiFlexItem>
 
                     <EuiFlexItem><EuiSpacer/></EuiFlexItem>
                     <EuiFlexItem><EuiSpacer/></EuiFlexItem>
 
-                    <EuiFlexItem><EuiText><h4>Primary Port</h4></EuiText></EuiFlexItem>
+                    <EuiFlexItem><EuiText>Primary Port</EuiText></EuiFlexItem>
                     <EuiFlexItem>
                         <EuiFormRow helpText="(service restart required)">
                             <EuiFieldText value={this.state.primaryPort} onBlur={(e) => { this.onPrimaryPortLostFocus(e) }} onChange={(e) => { this.onPrimaryPortChange(e) }}/>
                         </EuiFormRow>
                     </EuiFlexItem>
-                    <EuiFlexItem><EuiText><h4>Port Mapping (uPnP)</h4></EuiText></EuiFlexItem>
+                    <EuiFlexItem><EuiText>Port Mapping (uPnP)</EuiText></EuiFlexItem>
                     <EuiFlexItem>
                         <EuiFormRow>
-                            <EuiCheckbox checked={this.state.portMappingEnabled} label="Enabled" onChange={(e) => { this.setState({portMappingEnabled: !this.state.portMappingEnabled}) }}/>
+                            <EuiCheckbox checked={this.state.portMappingEnabled} label="Enabled" onChange={(e) => { this.onEnablePortMappingChange(e) }}/>
                         </EuiFormRow>
                     </EuiFlexItem>
 
                     <EuiFlexItem><EuiSpacer/></EuiFlexItem>
                     <EuiFlexItem><EuiSpacer/></EuiFlexItem>
 
-                    {(this.state.changes) ? (<>
+                    {changes ? (<>
                         <EuiFlexItem>
                             <EuiButton size="s" color="text">Cancel</EuiButton>
                         </EuiFlexItem>
                         <EuiFlexItem>
-                            <EuiButton size="s" color="text">Apply</EuiButton>
+                            <EuiButton size="s" color="text" fill>Apply</EuiButton>
                         </EuiFlexItem>
                     </>) : null}
                 </EuiFlexGrid>
             </>);
         }
         return (
-            <EuiPanel borderRadius="none" hasShadow={false} hasBorder={false}>
+            <EuiPanel borderRadius="none" hasShadow={false} hasBorder={false} paddingSize="m" color="subdued">
                 {inner}
             </EuiPanel>
         );

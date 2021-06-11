@@ -5,6 +5,7 @@
   "dependencies": {
     "@elastic/datemath": "^5.0.3",
     "@elastic/eui": "^34.1.0",
+    "fast-deep-equal": "^3.1.3",
     "moment": "^2.29.1",
     "prop-types": "^15.7.2",
     "react": "^17.0.2",
@@ -12,10 +13,13 @@
   },
   "devDependencies": {
     "@parcel/transformer-sass": "2.0.0-beta.3.1",
-    "parcel": "next"
+    "parcel": "next",
+    "sass": "^1.34.1"
   },
   "scripts": {
     "dev": "parcel serve ./src/index.html",
-    "build": "parcel build ./src/index.html"
+    "build": "parcel build --no-content-hash --no-source-maps ./src/index.html",
+    "build-css-dark": "parcel build --no-content-hash --no-source-maps src/themes/zerotier/dark.scss",
+    "build-css-light": "parcel build --no-content-hash --no-source-maps src/themes/zerotier/light.scss"
   }
 }

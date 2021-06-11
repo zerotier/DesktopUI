@@ -237,7 +237,10 @@ fn window(args: &Vec<String>) {
                         let _ = wv.eval(format!("zt_ui_render('{}');", args[2]).as_str());
                     },
                     "post" => {
-                       let _ =  ui_client.lock().map(|mut c| c.enqueue_post(cmd.name, cmd.data));
+                        let _ =  ui_client.lock().map(|mut c| c.enqueue_post(cmd.name, cmd.data));
+                    },
+                    "copy_to_clipboard" => {
+                        copy_to_clipboard(cmd.data.as_str());
                     },
                     "poll" => {
                         if dirty_flag.swap(false, std::sync::atomic::Ordering::Relaxed) {

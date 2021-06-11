@@ -22,11 +22,19 @@ window.ztPost = (path, data) => {
     }));
 };
 
+window.copyToClipboard = (str) => {
+    external.invoke(JSON.stringify({
+        cmd: "copy_to_clipboard",
+        data: str
+    }));
+};
+
 // NOTE: window.zt_ui_update is set by primary React controls like Main. It's
 // called from Rust code during polling if things have changed.
 
 // Called from Rust code in response to 'ready' command indicating that UI should render.
 window.zt_ui_render = (ui_mode) => {
+    setInterval(function() { external.invoke('{ "cmd": "poll" }'); }, 250);
     if (ui_mode == "Main") {
         ReactDOM.render(<Main/>, document.getElementById("_app_root"));
     } else if (ui_mode == "Join") {
@@ -39,4 +47,3 @@ window.zt_ui_render = (ui_mode) => {
 };
 
 setTimeout(function() { external.invoke('{ "cmd": "ready" }'); }, 5);
-setInterval(function() { external.invoke('{ "cmd": "poll" }'); }, 250);

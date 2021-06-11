@@ -15,11 +15,39 @@ html, body {
 	overflow: hidden;
 	font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif;
 }
-.font-monospaced {
-	font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
-}
+
 /* This placeholder has to be something that the packager won't minify out. */
 .XXXthis_is_replaced_by_css_in_the_rust_codeXXX{border:0}
+
+.font-monospaced {
+	font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace !important;
+}
+*:focus {
+	outline: none !important;
+}
+.euiCheckbox__square :focus {
+	outline: none !important;
+}
+*:indeterminate {
+	outline: none !important;
+}
+.euiCheckbox__square :indeterminate {
+	outline: none !important;
+}
+.euiCheckbox__square :active {
+	outline: none !important;
+}
+*:not(.essentialAnimation),
+*:not(.essentialAnimation):before,
+*:not(.essentialAnimation):after {
+  -webkit-animation-duration: 0s !important;
+  animation-duration: 0s !important;
+  -webkit-transition-duration: 0s !important;
+  transition-duration: 0s !important;
+}
+::selection {
+  background: transparent !important;
+}
 </style>
 </head>
 <body style="width: 100vw; height: 100vh; border: 0; margin: 0; padding: 0; max-width: 100vw; max-height: 100vh;">

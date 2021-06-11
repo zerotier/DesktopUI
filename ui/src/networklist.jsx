@@ -1,79 +1,138 @@
 import React, { Fragment } from 'react';
-import { EuiPanel, EuiEmptyPrompt, EuiBasicTable, EuiBottomBar, EuiText, EuiHorizontalRule } from '@elastic/eui';
+import { EuiPanel, EuiEmptyPrompt, EuiBasicTable, EuiBottomBar, EuiText, EuiHorizontalRule, EuiFieldText, EuiButton, EuiFlexGroup, EuiFlexItem, EuiLink } from '@elastic/eui';
+import equal from 'fast-deep-equal';
 
-export const NETWORK_TABLE_COLUMNS = [
-    {
-        field: 'id',
-        name: 'Network ID',
-        sortable: true,
-        width: '12rem',
-        render: (id) => (
-            <span className="font-monospaced">{id}</span>
-        )
-    },
-    {
-        field: 'type',
-        name: 'Private',
-        sortable: true,
-        width: '5rem',
-        render: (type) => (
-            (type == "PRIVATE") ? '✓' : ' '
-        )
-    },
-    {
-        field: 'name',
-        name: 'Name',
-        sortable: true,
-        truncateText: true
-    }
-];
+import Network from './network';
 
-export default class Main extends React.Component {
+export default class NetworkList extends React.Component {
     constructor(props) {
         super(props);
-        this.state = { networks: [] };
-        this.getRowProps = this.getRowProps.bind(this);
+        this.state = {
+            networks: [],
+            selectedRowNetworkId: '',
+            joinNetworkId: ''
+        };
+        this.onJoinNetworkChanged = this.onJoinNetworkChanged.bind(this);
+        this.itemIdToExpandedRowMap = {};
+        this.networkTableColumns = [
+            {
+                field: 'id',
+                name: 'Network ID',
+                width: '12rem',
+                render: (id) => (
+                    <EuiLink onClick={ () => { copyToClipboard(id) }} className="font-monospaced" color="text">{id}</EuiLink>
+                )
+            },
+            {
+                field: 'type',
+                name: 'Private',
+                width: '5rem',
+                render: (type) => (
+                    (type.toLowerCase() == 'private') ? '✓' : ' '
+                )
+            },
+            {
+                field: 'name',
+                name: 'Name',
+                truncateText: true
+            }
+            {
+                width: '3rem',
+                isExpander: true,
+                render: (item) => {
+                    return (
+                        <EuiText size="xs">
+                            <EuiLink style={{fontSize: '16pt'}} onClick={() => {
+                                if (!this.itemIdToExpandedRowMap[item.id]) {
+                                    this.itemIdToExpandedRowMap[item.id] = <Network config={item}/>;
+                                } else {
+                                    delete this.itemIdToExpandedRowMap[item.id];
+                                }
+                                this.forceUpdate();
+                            }} aria-label={(!!this.itemIdToExpandedRowMap[item.id]) ? 'Collapse' : 'Expand'}>{(!!this.itemIdToExpandedRowMap[item.id]) ? '↑' : '↓'}</EuiLink>
+                        </EuiText>
+                    );
+                },
+            },
+        ];
     }
 
     componentWillReceiveProps(nextProps) {
-        this.setState({networks: (Array.isArray(nextProps.networks)) ? nextProps.networks : []});
+        if (!equal(this.props, nextProps)) {
+            let n = nextProps.networks;
+            if (Array.isArray(n)) {
+                // If networks change, ensure that expanded network panels also change.
+                for(let i=0;i<n.length;++i) {
+                    if (this.itemIdToExpandedRowMap[n[i].id])
+                        this.itemIdToExpandedRowMap[n[i].id] = <Network config={n[i]}/>;
+                }
+                this.setState({ networks: n });
+            } else {
+                this.setState({ networks: [] });
+            }
+        }
     }
 
-    getRowProps(item) {
-        return {};
+    shouldComponentUpdate(nextProps, nextState) {
+        return !equal(nextState, this.state);
+    }
+
+    onJoinNetworkChanged(e) {
+        try {
+            let vstr = e.target.value||'';
+            let s = '';
+            for(let i=0;(i<vstr.length)&&(i<16);++i) {
+                let c = vstr.charAt(i);
+                if ("0123456789abcdefABCDEF".indexOf(c) >= 0)
+                    s += c;
+            }
+            this.setState({ joinNetworkId: s.toLowerCase() });
+        } catch (exc) {
+            this.setState({ joinNetworkId: '' });
+        }
     }
 
     render() {
         let networks = this.state.networks;
+
         let content = null;
         if ((Array.isArray(networks))&&(networks.length > 0)) {
-            content = (
-                <EuiPanel borderRadius="none" hasShadow={false} hasBorder={false} className="eui-fullHeight">
-                    <EuiBasicTable items={networks} rowHeader="id" columns={NETWORK_TABLE_COLUMNS} tableLayout="custom" rowProps={(item) => { return this.getRowProps(item); }}/>
-                </EuiPanel>
-            );
+            content = <EuiBasicTable
+                items={networks}
+                itemId='id'
+                itemIdToExpandedRowMap={this.itemIdToExpandedRowMap}
+                isExpandable={true}
+                isSelectable={false}
+                responsive={false}
+                rowHeader="id"
+                columns={this.networkTableColumns}
+                tableLayout="custom"
+            />;
         } else {
             content = (
-                <EuiPanel borderRadius="none" hasShadow={false} hasBorder={false} color="subdued" className="eui-fullHeight">
-                    <EuiEmptyPrompt title={<h3>You have not joined any networks.</h3>} body={
-                        <Fragment>
-                            <p>
-                                To join a network obtain a network ID from <a>my.zerotier.com</a>, a <a>self-hosted controller</a>, or someone else who is inviting you to join their network.
-                            </p>
-                        </Fragment>
-                    }/>
-                </EuiPanel>
+                <EuiEmptyPrompt title={<h3>You have not joined any networks.</h3>} body={
+                    <Fragment>
+                        <p>
+                            To join a network obtain a network ID from <a>my.zerotier.com</a>, a <a>self-hosted controller</a>, or someone else who is inviting you to join their network.
+                        </p>
+                    </Fragment>
+                }/>
             );
         }
+
         return (
-            <EuiPanel borderRadius="none" paddingSize="none" hasShadow={false} hasBorder={false} className="eui-fullHeight eui-yScroll">
-                {content}
-                <EuiBottomBar position="sticky" affordForDisplacement={false} paddingSize="none" landmarkHeading="Join network">
-                    <EuiHorizontalRule margin="none"/>
-                    <EuiPanel paddingSize="m" hasShadow={false} hasBorder={false} borderRadius="none" className="eui-fullHeight">
-                        <EuiText>foo</EuiText>
-                    </EuiPanel>
-                </EuiBottomBar>
+            <EuiPanel borderRadius="none" paddingSize="none" hasShadow={false} hasBorder={false} className="eui-fullHeight" style={{ overflowY: 'hidden' }}>
+                <EuiPanel borderRadius="none" hasShadow={false} hasBorder={false} paddingSize="m" className="eui-yScroll" style={{ height: 'calc(100% - 70px)' }}>{content}</EuiPanel>
+                <EuiPanel paddingSize="m" borderRadius="none" hasShadow={false} hasBorder={false} style={{ height: '70px' }}>
+                    <EuiFlexGroup gutterSize="s">
+                        <EuiFlexItem grow={false}>
+                            <EuiFieldText value={this.state.joinNetworkId} placeholder="################" style={{width: '12em'}} className="font-monospaced" onChange={(e) => { this.onJoinNetworkChanged(e); }}/>
+                        </EuiFlexItem>
+                        <EuiFlexItem>
+                            <EuiButton isDisabled={((this.state.joinNetworkId||'').length !== 16)} color="text" fill style={{width: '12rem'}}>Join&nbsp;Network</EuiButton>
+                        </EuiFlexItem>
+                    </EuiFlexGroup>
+                </EuiPanel>
             </EuiPanel>
         );
     }

@@ -1,0 +1,50 @@
+@import '../../../node_modules/@elastic/eui/src/themes/eui-amsterdam/eui_amsterdam_colors_dark';
+
+// ZeroTier overrides which adjust the stock EUI color palette to look more native.
+
+$euiColorGhost: #FFFFFF;
+$euiColorInk: #000000;
+
+$euiColorPrimary: #36A2EF;
+$euiColorSecondary: #7DDED8;
+$euiColorAccent: #F68FBE;
+
+$euiColorSuccess: $euiColorSecondary;
+$euiColorWarning: #F3D371;
+$euiColorDanger: #F86B63;
+$euiColorDisabled: #515761;
+
+$euiColorEmptyShade: #282924;
+$euiColorLightestShade: #282924;
+$euiColorLightShade: #343741;
+$euiColorMediumShade: #535966;
+$euiColorDarkShade: #98A2B3;
+$euiColorDarkestShade: #D4DAE5;
+$euiColorFullShade: #FFFFFF;
+
+$euiPageBackgroundColor: #1B1A18;
+$euiColorHighlight: #2E2D25;
+
+$euiTextColor: #DFE5EF;
+$euiTitleColor: $euiTextColor;
+$euiTextSubduedColor: #1B1A18;
+
+$euiColorPrimaryText: makeHighContrastColor($euiColorPrimary);
+$euiColorSecondaryText: makeHighContrastColor($euiColorSecondary);
+$euiColorAccentText: makeHighContrastColor($euiColorAccent);
+$euiColorWarningText: makeHighContrastColor($euiColorWarning);
+$euiColorDangerText: makeHighContrastColor($euiColorDanger);
+$euiColorDisabledText: makeDisabledContrastColor($euiColorDisabled);
+$euiColorSuccessText: $euiColorSecondaryText;
+$euiLinkColor: $euiColorPrimaryText;
+
+$euiColorChartLines: $euiColorLightShade;
+$euiColorChartBand: tint($euiColorLightestShade, 2.5%);
+
+$euiShadowColor: #000000;
+$euiShadowColorLarge: #000000;
+
+@import '../../../node_modules/@elastic/eui/src/themes/eui-amsterdam/global_styling/index';
+@import '../../../node_modules/@elastic/eui/src/components/index';
+@import '../../../node_modules/@elastic/eui/packages/index';
+@import '../../../node_modules/@elastic/eui/src/themes/eui-amsterdam/overrides/index';
