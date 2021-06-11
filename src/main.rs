@@ -40,7 +40,7 @@ fn is_dark_mode() -> bool {
 
 #[cfg(target_os = "macos")]
 fn tray_icon_name() -> &'static str {
-    if is_dark_mode() { "mac-dark.png" } else { "mac-light.png" }
+    "trayIconTemplate.png"
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]
@@ -274,7 +274,7 @@ fn tray() {
      * this binary in webview mode.
      */
 
-    set_thread_to_background_priority();
+    //set_thread_to_background_priority();
 
     let mut icon_name = tray_icon_name();
     let mut tray: Option<Tray> = None;

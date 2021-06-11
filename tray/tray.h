@@ -197,9 +197,21 @@ int tray_loop(int blocking) {
 
 void tray_update(struct tray *tray) {
 	if (tray->icon) {
-	  objc_msgSend(statusBarButton, sel_registerName("setImage:"),
-	    objc_msgSend((id)objc_getClass("NSImage"), sel_registerName("imageNamed:"),
-	      objc_msgSend((id)objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), tray->icon)));
+	  objc_msgSend(
+      statusBarButton,
+      sel_registerName("setImage:"),
+	    objc_msgSend(
+        (id)objc_getClass("NSImage"),
+        sel_registerName("imageNamed:"),
+	      objc_msgSend(
+          (id)objc_getClass("NSString"),
+          sel_registerName("stringWithUTF8String:"),
+          tray->icon
+        ),
+        sel_registerName("isTemplate:"),
+        true
+      )
+    );
 	}
 
   objc_msgSend(statusItem, sel_registerName("setMenu:"), _tray_menu(tray->menu));
