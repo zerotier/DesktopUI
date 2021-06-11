@@ -20,6 +20,8 @@ use crate::serviceclient::ServiceClient;
 /// It's a bit weird so web app bundlers don't optimize it out.
 const CSS_PLACEHOLDER: &'static str = ".XXXthis_is_replaced_by_css_in_the_rust_codeXXX{border:0}";
 
+const UNICODE_CHECKMARK: char = '✓';
+
 #[derive(Serialize, Deserialize)]
 pub struct CommandFromWebView {
     #[serde(default)]
@@ -109,42 +111,6 @@ fn copy_to_clipboard(s: &str) {
         });
         let _ = c.wait();
     });
-}
-
-// WARNING: here be unicode! Make sure not to edit these things and replace
-// unicode characters with vanilla ones or with a text editor that clobbers
-// UTF-8 special characters.
-const UNICODE_CHECKMARK: char = '✓';
-fn hex_to_unicode_monospace(s: &str) -> String {
-    let mut m = String::new();
-    for c in s.chars().into_iter() {
-        match c {
-            '0' => m.push('𝟶'),
-            '1' => m.push('𝟷'),
-            '2' => m.push('𝟸'),
-            '3' => m.push('𝟹'),
-            '4' => m.push('𝟺'),
-            '5' => m.push('𝟻'),
-            '6' => m.push('𝟼'),
-            '7' => m.push('𝟽'),
-            '8' => m.push('𝟾'),
-            '9' => m.push('𝟿'),
-            'a' => m.push('𝚊'),
-            'b' => m.push('𝚋'),
-            'c' => m.push('𝚌'),
-            'd' => m.push('𝚍'),
-            'e' => m.push('𝚎'),
-            'f' => m.push('𝚏'),
-            'A' => m.push('𝚊'),
-            'B' => m.push('𝚋'),
-            'C' => m.push('𝚌'),
-            'D' => m.push('𝚍'),
-            'E' => m.push('𝚎'),
-            'F' => m.push('𝚏'),
-            _ => m.push(c)
-        }
-    }
-    m
 }
 
 #[cfg(target_os = "macos")]
@@ -309,7 +275,7 @@ fn tray() {
                     checked: false,
                     disabled: false,
                     handler: Some(Box::new(move || {
-                        open_window_subprocess(join_network_window2.lock().unwrap(), "Join", 500, 70);
+                        open_window_subprocess(join_network_window2.lock().unwrap(), "Join", 350, 70);
                     })),
                 });
                 menu.push(TrayMenuItem::Text {
@@ -495,7 +461,7 @@ fn tray() {
                         });
 
                         menu.push(TrayMenuItem::Submenu {
-                            text: format!("{}\t{}\t{} ", UNICODE_CHECKMARK, hex_to_unicode_monospace((*network).0.as_str()), nw_obj.get("name").map_or("", |n| n.as_str().unwrap_or(""))),
+                            text: format!("{}\t{}\t{} ", UNICODE_CHECKMARK, (*network).0, nw_obj.get("name").map_or("", |n| n.as_str().unwrap_or(""))),
                             items: network_menu,
                         });
                     });
