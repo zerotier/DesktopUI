@@ -42,7 +42,7 @@ fn is_dark_mode() -> bool {
 
 #[cfg(target_os = "macos")]
 fn tray_icon_name() -> &'static str {
-    "trayIconTemplate.png"
+    "trayIconTemplate.pdf"
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]
@@ -283,7 +283,7 @@ fn tray() {
                     checked: false,
                     disabled: false,
                     handler: Some(Box::new(move || {
-                        open_window_subprocess(main_window2.lock().unwrap(), "Main", 1200, 360);
+                        open_window_subprocess(main_window2.lock().unwrap(), "Main", 1300, 480);
                     })),
                 });
 

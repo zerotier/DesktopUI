@@ -14,6 +14,8 @@ export default class NetworkList extends React.Component {
             initialized: false
         };
         this.itemIdToExpandedRowMap = {};
+        this.toggleExpand = this.toggleExpand.bind(this);
+        this.getRowProps = this.getRowProps.bind(this);
         this.networkTableColumns = [
             {
                 field: 'id',
@@ -34,6 +36,7 @@ export default class NetworkList extends React.Component {
             {
                 field: 'name',
                 name: 'Name',
+                textOnly: true,
                 truncateText: true
             }
             {
@@ -42,14 +45,7 @@ export default class NetworkList extends React.Component {
                 render: (item) => {
                     return (
                         <EuiText size="xs">
-                            <EuiLink style={{fontSize: '16pt'}} onClick={() => {
-                                if (!this.itemIdToExpandedRowMap[item.id]) {
-                                    this.itemIdToExpandedRowMap[item.id] = <Network config={item}/>;
-                                } else {
-                                    delete this.itemIdToExpandedRowMap[item.id];
-                                }
-                                this.forceUpdate();
-                            }} aria-label={(!!this.itemIdToExpandedRowMap[item.id]) ? 'Collapse' : 'Expand'}>{(!!this.itemIdToExpandedRowMap[item.id]) ? '↑' : '↓'}</EuiLink>
+                            <EuiLink style={{fontSize: '16pt'}} aria-label={(!!this.itemIdToExpandedRowMap[item.id]) ? 'Collapse' : 'Expand'}>{(!!this.itemIdToExpandedRowMap[item.id]) ? '↑' : '↓'}</EuiLink>
                         </EuiText>
                     );
                 },
@@ -77,13 +73,26 @@ export default class NetworkList extends React.Component {
         return !equal(nextState, this.state);
     }
 
+    toggleExpand(item) {
+        if (!this.itemIdToExpandedRowMap[item.id]) {
+            this.itemIdToExpandedRowMap[item.id] = <Network config={item}/>;
+        } else {
+            delete this.itemIdToExpandedRowMap[item.id];
+        }
+        this.forceUpdate();
+    }
+
+    getRowProps(item) {
+        return {
+            onClick: () => { this.toggleExpand(item) }
+        };
+    }
+
     render() {
         let networks = this.state.networks;
 
         let content = null;
-        if (!this.state.initialized) {
-            return <div></div>;
-        } else {
+        if (this.state.initialized) {
             if ((Array.isArray(networks))&&(networks.length > 0)) {
                 content = <EuiBasicTable
                     items={networks}
@@ -93,6 +102,7 @@ export default class NetworkList extends React.Component {
                     isSelectable={false}
                     responsive={false}
                     rowHeader="id"
+                    rowProps={this.getRowProps}
                     columns={this.networkTableColumns}
                     tableLayout="custom"
                 />;
@@ -101,7 +111,8 @@ export default class NetworkList extends React.Component {
                     <EuiEmptyPrompt title={<h3>You have not joined any networks.</h3>} body={
                         <Fragment>
                             <p>
-                                To join a network obtain a network ID from <a>my.zerotier.com</a>, a <a>self-hosted controller</a>, or someone else who is inviting you to join their network.
+                                To join a network obtain a network ID from <a>my.zerotier.com</a>, a <a>self-hosted controller</a>,
+                                or someone else who is inviting you to join their network.
                             </p>
                         </Fragment>
                     }/>
@@ -114,6 +125,8 @@ export default class NetworkList extends React.Component {
                     <Join height="70px" width="24em"/>
                 </EuiPanel>
             );
+        } else {
+            return <div></div>;
         }
     }
 }

@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <string.h>
 
+/* This builds the tray and some assorted utility functions so that it can be included from Rust code. */
+
 #if defined (_WIN32) || defined (_WIN64)
 #define TRAY_WINAPI 1
 #elif defined (__linux__) || defined (linux) || defined (__linux)
