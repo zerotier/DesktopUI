@@ -36,16 +36,26 @@ export default class Network extends React.Component {
                         <EuiFlexItem><EuiText size="s">{(((config.dns||{}).domain) ? config.dns.domain : '(not configured)')}</EuiText></EuiFlexItem>
                         <EuiFlexItem><EuiText size="s">DNS Servers</EuiText></EuiFlexItem>
                         <EuiFlexItem><EuiText size="s">{((((config.dns||{}).servers||[]).length > 0) ? config.dns.servers.map((server) => { return <span key={server}>{server}</span>; }) : '(none)')}</EuiText></EuiFlexItem>
+
                         <EuiFlexItem><EuiSpacer size="s"/></EuiFlexItem>
                         <EuiFlexItem><EuiSpacer size="s"/></EuiFlexItem>
+
                         <EuiFlexItem><EuiText size="s">Allow Managed IPs</EuiText></EuiFlexItem>
-                        <EuiFlexItem><EuiCheckbox compressed={true} checked={config.allowManaged} onChange={(e) => {  }}/></EuiFlexItem>
+                        <EuiFlexItem><EuiCheckbox compressed={true} checked={config.allowManaged} onChange={(e) => {
+                            window.ztPost('/network/' + config.id, { allowManaged: !config.allowManaged });
+                        }}/></EuiFlexItem>
                         <EuiFlexItem><EuiText size="s">Allow Global Internet IPs</EuiText></EuiFlexItem>
-                        <EuiFlexItem><EuiCheckbox compressed={true} checked={config.allowGlobal} onChange={(e) => {  }}/></EuiFlexItem>
+                        <EuiFlexItem><EuiCheckbox compressed={true} checked={config.allowGlobal} onChange={(e) => {
+                            window.ztPost('/network/' + config.id, { allowGlobal: !config.allowGlobal });
+                        }}/></EuiFlexItem>
                         <EuiFlexItem><EuiText size="s">Allow Default Route Override</EuiText></EuiFlexItem>
-                        <EuiFlexItem><EuiCheckbox compressed={true} checked={config.allowDefault} onChange={(e) => {  }}/></EuiFlexItem>
+                        <EuiFlexItem><EuiCheckbox compressed={true} checked={config.allowDefault} onChange={(e) => {
+                            window.ztPost('/network/' + config.id, { allowDefault: !config.allowDefault });
+                        }}/></EuiFlexItem>
                         <EuiFlexItem><EuiText size="s">Allow DNS Configuration</EuiText></EuiFlexItem>
-                        <EuiFlexItem><EuiCheckbox compressed={true} checked={config.allowDNS} onChange={(e) => {  }}/></EuiFlexItem>
+                        <EuiFlexItem><EuiCheckbox compressed={true} checked={config.allowDNS} onChange={(e) => {
+                            window.ztPost('/network/' + config.id, { allowDNS: !config.allowDNS });
+                        }}/></EuiFlexItem>
                     </EuiFlexGrid>
                 </EuiFlexItem>
                 <EuiFlexItem>

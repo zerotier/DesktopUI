@@ -1,5 +1,5 @@
 import React from 'react';
-import { EuiPanel, EuiFlexGrid, EuiFlexItem, EuiFormRow, EuiText, EuiSpacer, EuiFieldText, EuiCheckbox, EuiButton, EuiLink } from '@elastic/eui';
+import { EuiPanel, EuiFlexGrid, EuiFlexItem, EuiFormRow, EuiText, EuiSpacer, EuiFieldText, EuiCheckbox, EuiButton, EuiLink, EuiSplitPanel } from '@elastic/eui';
 
 export default class ConfigPanel extends React.Component {
     constructor(props) {
@@ -56,48 +56,49 @@ export default class ConfigPanel extends React.Component {
             let changes = 
                 (this.state.primaryPort != this.props.status?.config?.settings?.primaryPort) ||
                 (this.state.portMappingEnabled != this.props.status?.config?.settings?.portMappingEnabled);
-            inner = (<>
-                <EuiFlexGrid columns={2} gutterSize="s" alignItems="center">
-                    <EuiFlexItem><EuiText>ZeroTier Address</EuiText></EuiFlexItem>
-                    <EuiFlexItem>
-                        <EuiText>
-                            <EuiLink className="font-monospaced" color="text" onClick={ () => { copyToClipboard(status.address) } }>{status.address}</EuiLink>
-                        </EuiText>
-                    </EuiFlexItem>
-                    <EuiFlexItem><EuiText>Version</EuiText></EuiFlexItem>
-                    <EuiFlexItem><EuiText>{status.version}</EuiText></EuiFlexItem>
-                    <EuiFlexItem><EuiText>Status</EuiText></EuiFlexItem>
-                    <EuiFlexItem><EuiText>{status.online ? (status.tcpFallbackActive ? 'Tunneled' : 'Online') : 'Offline'}</EuiText></EuiFlexItem>
+            inner = (
+                <EuiSplitPanel.Outer grow={true} className="eui-fullHeight" hasShadow={false} hasBorder={false} borderRadius="none">
+                    <EuiSplitPanel.Inner paddingSize="none" color="subdued">
+                        <EuiFlexGrid columns={2} gutterSize="s" alignItems="center">
+                            <EuiFlexItem><EuiText>ZeroTier Address</EuiText></EuiFlexItem>
+                            <EuiFlexItem>
+                                <EuiText>
+                                    <EuiLink className="font-monospaced" color="text" onClick={ () => { copyToClipboard(status.address) } }>{status.address}</EuiLink>
+                                </EuiText>
+                            </EuiFlexItem>
+                            <EuiFlexItem><EuiText>Version</EuiText></EuiFlexItem>
+                            <EuiFlexItem><EuiText>{status.version}</EuiText></EuiFlexItem>
+                            <EuiFlexItem><EuiText>Status</EuiText></EuiFlexItem>
+                            <EuiFlexItem><EuiText>{status.online ? (status.tcpFallbackActive ? 'Tunneled' : 'Online') : 'Offline'}</EuiText></EuiFlexItem>
 
-                    <EuiFlexItem><EuiSpacer/></EuiFlexItem>
-                    <EuiFlexItem><EuiSpacer/></EuiFlexItem>
+                            <EuiFlexItem><EuiSpacer/></EuiFlexItem>
+                            <EuiFlexItem><EuiSpacer/></EuiFlexItem>
 
-                    <EuiFlexItem><EuiText>Primary Port</EuiText></EuiFlexItem>
-                    <EuiFlexItem>
-                        <EuiFormRow helpText="(service restart required)">
-                            <EuiFieldText value={this.state.primaryPort} onBlur={(e) => { this.onPrimaryPortLostFocus(e) }} onChange={(e) => { this.onPrimaryPortChange(e) }}/>
-                        </EuiFormRow>
-                    </EuiFlexItem>
-                    <EuiFlexItem><EuiText>Port Mapping (uPnP)</EuiText></EuiFlexItem>
-                    <EuiFlexItem>
-                        <EuiFormRow>
-                            <EuiCheckbox checked={this.state.portMappingEnabled} label="Enabled" onChange={(e) => { this.onEnablePortMappingChange(e) }}/>
-                        </EuiFormRow>
-                    </EuiFlexItem>
-
-                    <EuiFlexItem><EuiSpacer/></EuiFlexItem>
-                    <EuiFlexItem><EuiSpacer/></EuiFlexItem>
-
-                    {changes ? (<>
-                        <EuiFlexItem>
-                            <EuiButton size="s" color="text">Cancel</EuiButton>
-                        </EuiFlexItem>
-                        <EuiFlexItem>
-                            <EuiButton size="s" color="text" fill>Apply</EuiButton>
-                        </EuiFlexItem>
-                    </>) : null}
-                </EuiFlexGrid>
-            </>);
+                            <EuiFlexItem><EuiText>Primary Port</EuiText></EuiFlexItem>
+                            <EuiFlexItem>
+                                <EuiFormRow helpText="(service restart required)">
+                                    <EuiFieldText value={this.state.primaryPort} onBlur={(e) => { this.onPrimaryPortLostFocus(e) }} onChange={(e) => { this.onPrimaryPortChange(e) }}/>
+                                </EuiFormRow>
+                            </EuiFlexItem>
+                            <EuiFlexItem><EuiText>Port Mapping (uPnP)</EuiText></EuiFlexItem>
+                            <EuiFlexItem>
+                                <EuiFormRow>
+                                    <EuiCheckbox checked={this.state.portMappingEnabled} label="Enabled" onChange={(e) => { this.onEnablePortMappingChange(e) }}/>
+                                </EuiFormRow>
+                            </EuiFlexItem>
+                        </EuiFlexGrid>
+                    </EuiSplitPanel.Inner>
+                    {changes ? (
+                        <EuiSplitPanel.Inner grow={false} paddingSize="none" color="subdued">
+                            <EuiSpacer size="m"/>
+                            <EuiFlexGrid columns={2} gutterSize="s" alignItems="center">
+                                <EuiFlexItem><EuiButton size="s" color="text">Cancel</EuiButton></EuiFlexItem>
+                                <EuiFlexItem><EuiButton size="s" color="text" fill>Apply</EuiButton></EuiFlexItem>
+                            </EuiFlexGrid>
+                        </EuiSplitPanel.Inner>
+                    ) : null}
+                </EuiSplitPanel.Outer>
+            );
         }
         return (
             <EuiPanel borderRadius="none" hasShadow={false} hasBorder={false} paddingSize="m" color="subdued">

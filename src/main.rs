@@ -43,14 +43,14 @@ fn is_dark_mode() -> bool {
     })
 }
 
-#[cfg(target_os = "macos")]
-fn tray_icon_name() -> &'static str {
-    "trayIconTemplate.pdf"
-}
-
 #[cfg(all(unix, not(target_os = "macos")))]
 fn is_dark_mode() -> bool {
     false
+}
+
+#[cfg(target_os = "macos")]
+fn tray_icon_name() -> &'static str {
+    "trayIconTemplate.pdf"
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]

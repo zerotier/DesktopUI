@@ -1,5 +1,5 @@
 import React from 'react';
-import { EuiPanel } from '@elastic/eui';
+import { EuiPanel, EuiText, EuiHorizontalRule } from '@elastic/eui';
 
 export default class About extends React.Component {
     constructor(props) {
@@ -9,7 +9,14 @@ export default class About extends React.Component {
 
     render() {
         return (
-            <div>foo</div>
+            <EuiPanel borderRadius="none" hasShadow={false} hasBorder={false} paddingSize="m" color="subdued">
+                <EuiText>
+                    <h2>ZeroTier Network Virtualization Service</h2>
+                    GUI Control Application<br/>
+                    (c) ZeroTier, Inc.
+                </EuiText>
+                <EuiHorizontalRule/>
+            </EuiPanel>
         );
     }
 }

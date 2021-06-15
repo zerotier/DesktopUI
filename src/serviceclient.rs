@@ -159,7 +159,7 @@ impl ServiceClient {
     }
 
     fn http_post(&self, path: &str, payload: &str) -> (u16, String) {
-        println!("POST {} {}", path, payload);
+        //println!("POST {} {}", path, payload);
         if self.auth_token.is_empty() || self.base_url.is_empty() {
             (0, String::new())
         } else {
