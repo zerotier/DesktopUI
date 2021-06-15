@@ -6,8 +6,6 @@ NOTARIZE=echo
 NOTARIZE_USER_ID=null
 
 ifeq ($(ZT_OFFICIAL_RELEASE),1)
-        DEFS+=-DZT_SOFTWARE_UPDATE_DEFAULT="\"apply\""
-        ZT_USE_MINIUPNPC=1
         CODESIGN=codesign
         PRODUCTSIGN=productsign
         CODESIGN_APP_CERT="Developer ID Application: ZeroTier, Inc (8ZD9JUCZ4V)"
