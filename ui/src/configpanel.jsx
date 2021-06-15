@@ -71,8 +71,8 @@ export default class ConfigPanel extends React.Component {
                             <EuiFlexItem><EuiText>Status</EuiText></EuiFlexItem>
                             <EuiFlexItem><EuiText>{status.online ? (status.tcpFallbackActive ? 'Tunneled' : 'Online') : 'Offline'}</EuiText></EuiFlexItem>
 
-                            <EuiFlexItem><EuiSpacer/></EuiFlexItem>
-                            <EuiFlexItem><EuiSpacer/></EuiFlexItem>
+                            <EuiFlexItem><EuiSpacer size="m"/></EuiFlexItem>
+                            <EuiFlexItem><EuiSpacer size="m"/></EuiFlexItem>
 
                             <EuiFlexItem><EuiText>Primary Port</EuiText></EuiFlexItem>
                             <EuiFlexItem>
