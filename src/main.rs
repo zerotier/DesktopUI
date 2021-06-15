@@ -22,6 +22,9 @@ const CSS_PLACEHOLDER: &'static str = ".XXXthis_is_replaced_by_css_in_the_rust_c
 
 const UNICODE_CHECKMARK: char = '✓';
 
+const MAIN_WINDOW_WIDTH: i32 = 1300;
+const MAIN_WINDOW_HEIGHT: i32 = 500;
+
 #[derive(Serialize, Deserialize)]
 pub struct CommandFromWebView {
     #[serde(default)]
@@ -271,19 +274,11 @@ fn tray() {
                 menu.push(TrayMenuItem::Separator);
 
                 menu.push(TrayMenuItem::Text {
-                    text: "Join Network ".into(),
+                    text: "Open Control Panel... ".into(),
                     checked: false,
                     disabled: false,
                     handler: Some(Box::new(move || {
-                        open_window_subprocess(join_network_window2.lock().unwrap(), "Join", 350, 70);
-                    })),
-                });
-                menu.push(TrayMenuItem::Text {
-                    text: "Open Control Panel ".into(),
-                    checked: false,
-                    disabled: false,
-                    handler: Some(Box::new(move || {
-                        open_window_subprocess(main_window2.lock().unwrap(), "Main", 1300, 480);
+                        open_window_subprocess(main_window2.lock().unwrap(), "Main", MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT);
                     })),
                 });
 

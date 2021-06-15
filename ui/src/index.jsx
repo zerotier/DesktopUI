@@ -41,8 +41,6 @@ window.zt_ui_render = (ui_mode) => {
 
     if (ui_mode == "Main") {
         ReactDOM.render(<Main/>, document.getElementById("_app_root"));
-    } else if (ui_mode == "Join") {
-        ReactDOM.render(<Join height="100%" width="100%"/>, document.getElementById("_app_root"));
     } else if (ui_mode == "About") {
         ReactDOM.render(<About/>, document.getElementById("_app_root"));
     } else {

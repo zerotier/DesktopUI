@@ -29,7 +29,7 @@ export default class Join extends React.Component {
                 <EuiFlexGroup gutterSize="m" responsive={false}>
                     <EuiFlexItem grow={false}>
                         <EuiFormRow>
-                            <EuiFieldText value={this.state.joinNetworkId} placeholder="################" style={{width: '12em'}} className="font-monospaced" onChange={(e) => { this.onJoinNetworkChanged(e); }}/>
+                            <EuiFieldText autofocus={true} controlOnly={true} value={this.state.joinNetworkId} placeholder="################" style={{width: '12em'}} className="font-monospaced" onChange={(e) => { this.onJoinNetworkChanged(e); }}/>
                         </EuiFormRow>
                     </EuiFlexItem>
                     <EuiFlexItem>
