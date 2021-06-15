@@ -1,3 +1,5 @@
+.DS*
+.Icon*
 /target
 *.o
 *.a
