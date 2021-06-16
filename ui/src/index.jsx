@@ -19,12 +19,18 @@ window.copyToClipboard = (str) => {
     }));
 };
 
-// Sends a message to the Rust code to be passed through as a POST to the service's JSON API.
 window.ztPost = (path, data) => {
     external.invoke(JSON.stringify({
         cmd: "post",
         name: path,
         data: JSON.stringify(data)
+    }));
+};
+
+window.ztDelete = (path) => {
+    external.invoke(JSON.stringify({
+        cmd: "delete",
+        name: path
     }));
 };
 

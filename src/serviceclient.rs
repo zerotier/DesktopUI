@@ -18,6 +18,7 @@ pub struct ServiceClient {
     state: Map<String, Value>,
     state_crc64: HashMap<String, u64>,
     post_queue: LinkedList<(String, String)>,
+    delete_queue: LinkedList<String>,
     dirty: Arc<AtomicBool>,
     online: bool,
 }
@@ -182,6 +183,11 @@ impl ServiceClient {
         self.post_queue.push_back((path, payload));
     }
 
+    #[inline(always)]
+    pub fn enqueue_delete(&mut self, path: String) {
+        self.delete_queue.push_back(path);
+    }
+
     /// Check auth token and port for running service and update if changed.
     pub fn sync_client_config(&mut self) {
         get_auth_token_and_port().map(|token_port| {
@@ -209,6 +215,19 @@ impl ServiceClient {
                     } else {
                         self.post_queue.push_front(pq);
                         break;
+                    }
+                } else {
+                    break;
+                }
+            }
+            loop {
+                let pq = self.delete_queue.pop_front();
+                if pq.is_some() {
+                    let pq = pq.unwrap();
+                    if ureq::delete(format!("{}{}", self.base_url, pq).as_str()).timeout(Duration::from_millis(QUERY_TIMEOUT_MS)).set("X-ZT1-Auth", self.auth_token.as_str()).call().map_or(0_u16, |res| res.status()) == 200 {
+                        posted = true;
+                    } else {
+                        self.delete_queue.push_front(pq);
                     }
                 } else {
                     break;

@@ -31,7 +31,9 @@ export default class Join extends React.Component {
                         <EuiFormRow><EuiFieldText autofocus={true} controlOnly={true} value={this.state.joinNetworkId} placeholder="################" style={{width: '12em'}} className="font-monospaced" onChange={(e) => { this.onJoinNetworkChanged(e); }}/></EuiFormRow>
                     </EuiFlexItem>
                     <EuiFlexItem>
-                        <EuiButton isDisabled={((this.state.joinNetworkId||'').length !== 16)} color="text" fill>Join&nbsp;Network</EuiButton>
+                        <EuiButton isDisabled={((this.state.joinNetworkId||'').length !== 16)} color="text" fill onClick={() => {
+                            ztPost('network/' + this.state.joinNetworkId, {});
+                        }}>Join&nbsp;Network</EuiButton>
                     </EuiFlexItem>
                 </EuiFlexGroup>
             </div>

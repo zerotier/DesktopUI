@@ -206,7 +206,10 @@ fn window(args: &Vec<String>) {
                         let _ = wv.eval(format!("zt_ui_render('{}');", args[2]).as_str());
                     },
                     "post" => {
-                        let _ =  ui_client.lock().map(|mut c| c.enqueue_post(cmd.name, cmd.data));
+                        let _ = ui_client.lock().map(|mut c| c.enqueue_post(cmd.name, cmd.data));
+                    },
+                    "delete" => {
+                        let _ = ui_client.lock().map(|mut c| c.enqueue_delete(cmd.name));
                     },
                     "copy_to_clipboard" => {
                         copy_to_clipboard(cmd.data.as_str());
@@ -446,13 +449,7 @@ fn tray() {
                             text: "Leave Network ".into(),
                             checked: false,
                             disabled: false,
-                            handler: None, // TODO
-                        });
-                        network_menu.push(TrayMenuItem::Text {
-                            text: "Forget Network ".into(),
-                            checked: false,
-                            disabled: false,
-                            handler: None, // TODO
+                            handler: Some(Box::new(move || client2.lock().unwrap().enqueue_delete(format!("network/{}", nwid)))),
                         });
 
                         menu.push(TrayMenuItem::Submenu {

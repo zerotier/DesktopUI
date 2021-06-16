@@ -1,5 +1,5 @@
 import React from 'react';
-import { EuiPanel, EuiFlexGroup, EuiFlexItem, EuiFormRow, EuiCheckbox, EuiListGroup, EuiFlexGrid, EuiListGroupItem, EuiText, EuiSpacer } from '@elastic/eui';
+import { EuiPanel, EuiFlexGroup, EuiFlexItem, EuiFormRow, EuiCheckbox, EuiListGroup, EuiFlexGrid, EuiListGroupItem, EuiText, EuiSpacer, EuiButton } from '@elastic/eui';
 
 export default class Network extends React.Component {
     constructor(props) {
@@ -42,19 +42,19 @@ export default class Network extends React.Component {
 
                         <EuiFlexItem><EuiText size="s">Allow Managed IPs</EuiText></EuiFlexItem>
                         <EuiFlexItem><EuiCheckbox compressed={true} checked={config.allowManaged} onChange={(e) => {
-                            window.ztPost('/network/' + config.id, { allowManaged: !config.allowManaged });
+                            window.ztPost('network/' + config.id, { allowManaged: !config.allowManaged });
                         }}/></EuiFlexItem>
                         <EuiFlexItem><EuiText size="s">Allow Global Internet IPs</EuiText></EuiFlexItem>
                         <EuiFlexItem><EuiCheckbox compressed={true} checked={config.allowGlobal} onChange={(e) => {
-                            window.ztPost('/network/' + config.id, { allowGlobal: !config.allowGlobal });
+                            window.ztPost('network/' + config.id, { allowGlobal: !config.allowGlobal });
                         }}/></EuiFlexItem>
                         <EuiFlexItem><EuiText size="s">Allow Default Route Override</EuiText></EuiFlexItem>
                         <EuiFlexItem><EuiCheckbox compressed={true} checked={config.allowDefault} onChange={(e) => {
-                            window.ztPost('/network/' + config.id, { allowDefault: !config.allowDefault });
+                            window.ztPost('network/' + config.id, { allowDefault: !config.allowDefault });
                         }}/></EuiFlexItem>
                         <EuiFlexItem><EuiText size="s">Allow DNS Configuration</EuiText></EuiFlexItem>
                         <EuiFlexItem><EuiCheckbox compressed={true} checked={config.allowDNS} onChange={(e) => {
-                            window.ztPost('/network/' + config.id, { allowDNS: !config.allowDNS });
+                            window.ztPost('network/' + config.id, { allowDNS: !config.allowDNS });
                         }}/></EuiFlexItem>
                     </EuiFlexGrid>
                 </EuiFlexItem>
@@ -98,6 +98,12 @@ export default class Network extends React.Component {
                             </EuiPanel>
                         </div>
                     </EuiFormRow>
+                    <EuiSpacer size="m"/>
+                    <div className="eui-textRight">
+                        <EuiButton color="danger" size="s" onClick={() => {
+                            ztDelete('network/' + config.id);
+                        }}>Leave Network</EuiButton>
+                    </div>
                 </EuiFlexItem>
             </EuiFlexGroup>
         );
