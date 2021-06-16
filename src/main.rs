@@ -48,6 +48,11 @@ fn is_dark_mode() -> bool {
     false
 }
 
+#[cfg(windows)]
+fn is_dark_mode() -> bool {
+    false // TODO
+}
+
 #[cfg(target_os = "macos")]
 fn tray_icon_name() -> &'static str {
     "trayIconTemplate.pdf"
@@ -56,6 +61,11 @@ fn tray_icon_name() -> &'static str {
 #[cfg(all(unix, not(target_os = "macos")))]
 fn tray_icon_name() -> &'static str {
     if is_dark_mode() { "generic-dark.png" } else { "generic-light.png" }
+}
+
+#[cfg(windows)]
+fn tray_icon_name() -> &'static str {
+    "windows.ico"
 }
 
 #[cfg(target_os = "macos")]
@@ -79,6 +89,47 @@ fn set_thread_to_foreground_priority() {
 
 #[cfg(not(target_os = "macos"))]
 fn set_thread_to_foreground_priority() {}
+
+#[cfg(target_os = "macos")]
+fn copy_to_clipboard(s: &str) {
+    let _ = Command::new("/usr/bin/pbcopy").stdin(Stdio::piped()).stdout(Stdio::inherit()).stderr(Stdio::inherit()).spawn().map(|mut c| {
+        c.stdin.take().map(|mut stdin| {
+            let _ = stdin.write_all(s.as_bytes());
+        });
+        let _ = c.wait();
+    });
+}
+
+#[cfg(windows)]
+fn copy_to_clipboard(s: &str) {
+    // TODO
+}
+
+#[cfg(target_os = "macos")]
+#[inline(always)]
+fn get_web_ui_blob() -> String {
+    let css = if is_dark_mode() { "dark.css" } else { "light.css" };
+    let resources_path = std::env::current_exe().unwrap().parent().unwrap().parent().unwrap().join("Resources");
+    std::fs::read_to_string(resources_path.join("ui.html")).map_or_else(|_| {
+        "<html><body>Error: unable to load ui.html from application bundle Resources.<script>window.zt_ui_render = function(window_type) {}; setTimeout(function() { external.invoke('{ \"cmd\": \"ready\" }'); }, 1);</script></body></html>".into()
+    }, |ui| {
+        ui.replace(CSS_PLACEHOLDER, std::fs::read_to_string(resources_path.join(css)).unwrap_or(String::new()).as_str())
+    })
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+#[inline(always)]
+fn get_web_ui_blob() -> String {
+    let css = if is_dark_mode() { include_str!("../ui/dist/dark.css") } else { include_str!("../ui/dist/light.css") };
+    include_str!("../ui/dist/index.html").replace(CSS_PLACEHOLDER, css)
+}
+
+#[cfg(windows)]
+#[inline(always)]
+fn get_web_ui_blob() -> String {
+    let css = if is_dark_mode() { include_str!("..\\ui\\dist\\dark.css") } else { include_str!("..\\ui\\dist\\light.css") };
+    include_str!("..\\ui\\dist\\index.html").replace(CSS_PLACEHOLDER, css)
+}
 
 fn check_window_subprocess_exit(w: &mut MutexGuard<Option<Child>>) {
     if w.is_some() {
@@ -104,35 +155,6 @@ fn open_window_subprocess(mut w: MutexGuard<Option<Child>>, ui_mode: &str, width
             let _ = w.replace(ch.unwrap());
         }
     }
-}
-
-#[cfg(target_os = "macos")]
-fn copy_to_clipboard(s: &str) {
-    let _ = Command::new("/usr/bin/pbcopy").stdin(Stdio::piped()).stdout(Stdio::inherit()).stderr(Stdio::inherit()).spawn().map(|mut c| {
-        c.stdin.take().map(|mut stdin| {
-            let _ = stdin.write_all(s.as_bytes());
-        });
-        let _ = c.wait();
-    });
-}
-
-#[cfg(target_os = "macos")]
-#[inline(always)]
-fn get_web_ui_blob() -> String {
-    let css = if is_dark_mode() { "dark.css" } else { "light.css" };
-    let resources_path = std::env::current_exe().unwrap().parent().unwrap().parent().unwrap().join("Resources");
-    std::fs::read_to_string(resources_path.join("ui.html")).map_or_else(|_| {
-        "<html><body>Error: unable to load ui.html from application bundle Resources.<script>window.zt_ui_render = function(window_type) {}; setTimeout(function() { external.invoke('{ \"cmd\": \"ready\" }'); }, 1);</script></body></html>".into()
-    }, |ui| {
-        ui.replace(CSS_PLACEHOLDER, std::fs::read_to_string(resources_path.join(css)).unwrap_or(String::new()).as_str())
-    })
-}
-
-#[cfg(all(unix, not(target_os = "macos")))]
-#[inline(always)]
-fn get_web_ui_blob() -> String {
-    let css = if is_dark_mode() { include_str!("../ui/node_modules/@elastic/eui/dist/eui_theme_amsterdam_dark.css") } else { include_str!("../ui/node_modules/@elastic/eui/dist/eui_theme_amsterdam_light.css") };
-    include_str!("../ui/dist/index.html").replace(CSS_PLACEHOLDER, css)
 }
 
 /// This is called once per process to start the client I/O loop.
