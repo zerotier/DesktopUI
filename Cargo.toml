@@ -11,7 +11,7 @@ codegen-units = 1
 panic = 'abort'
 
 [dependencies]
-web-view = { path = "web-view" }
+web-view = { path = "web-view", features = ["edge"] }
 serde = { version = "*", features = ["derive"] }
 serde_json = "*"
 ureq = { version = "*", features = [] }

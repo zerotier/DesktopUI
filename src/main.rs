@@ -9,6 +9,7 @@ use std::time::Duration;
 use std::io::Write;
 use std::cmp::Ordering;
 use std::sync::atomic::AtomicBool;
+use std::os::raw::{c_int, c_char};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -23,6 +24,12 @@ const CSS_PLACEHOLDER: &'static str = ".XXXthis_is_replaced_by_css_in_the_rust_c
 const MAIN_WINDOW_WIDTH: i32 = 1300;
 const MAIN_WINDOW_HEIGHT: i32 = 500;
 
+#[cfg(not(windows))]
+const WEBVIEW_WINDOW_FRAMELESS: bool = false;
+
+#[cfg(windows)]
+const WEBVIEW_WINDOW_FRAMELESS: bool = true;
+
 #[derive(Serialize, Deserialize)]
 pub struct CommandFromWebView {
     #[serde(default)]
@@ -32,6 +39,22 @@ pub struct CommandFromWebView {
     #[serde(default)]
     pub data: String,
 }
+
+/*******************************************************************************************************************/
+
+#[cfg(windows)]
+extern "C" {
+    pub fn c_windows_is_dark_theme() -> c_int;
+    pub fn c_windows_post_to_clipboard(data: *const c_char);
+}
+
+#[cfg(target_os = "macos")]
+extern "C" {
+    pub fn c_set_this_thread_to_background_priority();
+    pub fn c_set_this_thread_to_foreground_priority();
+}
+
+/*******************************************************************************************************************/
 
 #[cfg(target_os = "macos")]
 fn is_dark_mode() -> bool {
@@ -48,8 +71,10 @@ fn is_dark_mode() -> bool {
 
 #[cfg(windows)]
 fn is_dark_mode() -> bool {
-    false // TODO
+    unsafe { c_windows_is_dark_theme() != 0 }
 }
+
+/*******************************************************************************************************************/
 
 #[cfg(target_os = "macos")]
 fn tray_icon_name() -> &'static str {
@@ -66,11 +91,7 @@ fn tray_icon_name() -> &'static str {
     "windows.ico"
 }
 
-#[cfg(target_os = "macos")]
-extern "C" {
-    pub fn c_set_this_thread_to_background_priority();
-    pub fn c_set_this_thread_to_foreground_priority();
-}
+/*******************************************************************************************************************/
 
 #[cfg(target_os = "macos")]
 fn set_thread_to_background_priority() {
@@ -88,6 +109,8 @@ fn set_thread_to_foreground_priority() {
 #[cfg(not(target_os = "macos"))]
 fn set_thread_to_foreground_priority() {}
 
+/*******************************************************************************************************************/
+
 #[cfg(target_os = "macos")]
 fn copy_to_clipboard(s: &str) {
     let _ = Command::new("/usr/bin/pbcopy").stdin(Stdio::piped()).stdout(Stdio::inherit()).stderr(Stdio::inherit()).spawn().map(|mut c| {
@@ -103,6 +126,8 @@ fn copy_to_clipboard(s: &str) {
     // TODO
 }
 
+/*******************************************************************************************************************/
+
 #[cfg(target_os = "macos")]
 #[inline(always)]
 fn get_web_ui_blob() -> String {
@@ -115,19 +140,14 @@ fn get_web_ui_blob() -> String {
     })
 }
 
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(not(target_os = "macos"))]
 #[inline(always)]
 fn get_web_ui_blob() -> String {
     let css = if is_dark_mode() { include_str!("../ui/dist/dark.css") } else { include_str!("../ui/dist/light.css") };
     include_str!("../ui/dist/index.html").replace(CSS_PLACEHOLDER, css)
 }
 
-#[cfg(windows)]
-#[inline(always)]
-fn get_web_ui_blob() -> String {
-    let css = if is_dark_mode() { include_str!("..\\ui\\dist\\dark.css") } else { include_str!("..\\ui\\dist\\light.css") };
-    include_str!("..\\ui\\dist\\index.html").replace(CSS_PLACEHOLDER, css)
-}
+/*******************************************************************************************************************/
 
 fn check_window_subprocess_exit(w: &mut MutexGuard<Option<Child>>) {
     if w.is_some() {
@@ -215,15 +235,15 @@ fn window(args: &Vec<String>) {
             if args.len() >= 5 { i32::from_str_radix(args[4].as_str(), 10).unwrap_or(600) } else { 600 })
         .resizable(true)
         .visible(false)
-        .frameless(false)
-        .debug(true)
+        .frameless(WEBVIEW_WINDOW_FRAMELESS)
+        .debug(false)
         .user_data(())
         .invoke_handler(move |wv, arg| {
             let _ = serde_json::from_str::<CommandFromWebView>(arg).map(|cmd| {
                 match cmd.cmd.as_str() {
                     "ready" => {
                         wv.set_visible(true);
-                        let _ = wv.eval(format!("zt_ui_render('{}');", args[2]).as_str());
+                        let _ = wv.eval(format!("zt_ui_render('{}', {});", args[2], WEBVIEW_WINDOW_FRAMELESS).as_str());
                     },
                     "post" => {
                         let _ = ui_client.lock().map(|mut c| c.enqueue_post(cmd.name, cmd.data));
@@ -270,6 +290,7 @@ fn tray() {
 
     let mut icon_name = tray_icon_name();
     let mut tray: Option<Tray> = None;
+    let exit_flag = Arc::new(AtomicBool::new(false));
 
     let (client, dirty_flag) = start_client(vec!["status", "network"], 500, 20);
 
@@ -490,6 +511,7 @@ fn tray() {
                         open_window_subprocess(about_window2.lock().unwrap(), "About", 800, 600);
                     }))
                 });
+                let exit_flag2 = exit_flag.clone();
                 menu.push(TrayMenuItem::Text {
                     text: "Quit ZeroTier UI ".into(),
                     checked: false,
@@ -498,7 +520,7 @@ fn tray() {
                         for w in [&main_window3, &join_network_window3, &about_window3].iter() {
                             kill_window_subprocess(w.lock().unwrap());
                         }
-                        std::process::exit(0);
+                        exit_flag2.store(true, std::sync::atomic::Ordering::Relaxed);
                     }))
                 });
             } else {
@@ -512,6 +534,8 @@ fn tray() {
 
             if tray.is_none() {
                 tray.replace(Tray::init(icon_name, menu));
+            } else if exit_flag.load(std::sync::atomic::Ordering::Relaxed) {
+                break;
             } else {
                 let new_icon = tray_icon_name();
                 if new_icon != icon_name {
