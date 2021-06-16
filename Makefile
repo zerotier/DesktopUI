@@ -1,18 +1,38 @@
+ifeq ($(OS),Windows_NT)
+	CC=gcc
+	MAINTARGET=windows
+else ifeq ($(shell uname -s),Linux)
+	MAINTARGET=linux
+else ifeq ($(shell uname -s),Darwin)
+	MAINTARGET=mac
+endif
+
 CODESIGN=echo
 PRODUCTSIGN=echo
 CODESIGN_APP_CERT=
 CODESIGN_INSTALLER_CERT=
 NOTARIZE=echo
 NOTARIZE_USER_ID=null
-
 ifeq ($(ZT_OFFICIAL_RELEASE),1)
-        CODESIGN=codesign
-        PRODUCTSIGN=productsign
-        CODESIGN_APP_CERT="Developer ID Application: ZeroTier, Inc (8ZD9JUCZ4V)"
-        CODESIGN_INSTALLER_CERT="Developer ID Installer: ZeroTier, Inc (8ZD9JUCZ4V)"
-        NOTARIZE=xcrun altool
-        NOTARIZE_USER_ID="adam.ierymenko@gmail.com"
+	CODESIGN=codesign
+	PRODUCTSIGN=productsign
+	CODESIGN_APP_CERT="Developer ID Application: ZeroTier, Inc (8ZD9JUCZ4V)"
+	CODESIGN_INSTALLER_CERT="Developer ID Installer: ZeroTier, Inc (8ZD9JUCZ4V)"
+	NOTARIZE=xcrun altool
+	NOTARIZE_USER_ID="adam.ierymenko@gmail.com"
 endif
+
+all:    $(MAINTARGET)
+
+windows: FORCE
+	make -C tray clean
+	make -C tray zt_lib
+	cargo build --release
+
+linux: FORCE
+	cd tray ; make clean
+	cd tray ; make zt_lib
+	cargo build --release
 
 mac: FORCE
 	cd tray ; make clean
@@ -34,7 +54,15 @@ mac-test-webui: FORCE
 	cp -f ui/dist/light.css mac-app-template/ZeroTier.app/Contents/Resources/light.css
 	mac-app-template/ZeroTier.app/Contents/MacOS/ZeroTier
 
+ifeq ($(OS),Windows_NT)
 clean: FORCE
-	rm -rf target web-view/target mac-app-template/ZeroTier.app/Contents/MacOS/ZeroTier mac-app-template/ZeroTier.app/Contents/Resources/*.html mac-app-template/ZeroTier.app/Contents/Resources/*.css mac-app-template/ZeroTier.app/Contents/_CodeSignature tray/*.o tray/*.a
+	-make -C tray clean
+	-rmdir /Q /S target
+	-rmdir /Q /S web-view\target
+else
+clean: FORCE
+	rm -f mac-app-template/ZeroTier.app/Contents/MacOS/ZeroTier mac-app-template/ZeroTier.app/Contents/Resources/*.html mac-app-template/ZeroTier.app/Contents/Resources/*.css tray/*.o tray/*.a tray/example tray/example.exe
+	rm -rf target web-view/target mac-app-template/ZeroTier.app/Contents/_CodeSignature
+endif
 
 FORCE:

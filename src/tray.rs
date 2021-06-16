@@ -76,6 +76,14 @@ extern "C" {
     fn tray_exit();
 }
 
+#[cfg(windows)]
+extern "C" {
+    fn tray_init(tray: *const CTray) -> c_int;
+    fn tray_loop(blocking: c_int) -> c_int;
+    fn tray_update(tray: *const CTray);
+    fn tray_exit();
+}
+
 unsafe extern "C" fn tray_handler_callback(item: *const CTrayMenu) {
     if !item.is_null() {
         let f: *mut Box<dyn FnMut()> = (*item).context.cast();
