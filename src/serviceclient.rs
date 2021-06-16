@@ -44,7 +44,7 @@ pub fn get_auth_token_and_port() -> Option<(String, u16)> {
         p.push_str(format!("/Library/Application Support/ZeroTier/One/authtoken.secret").as_str());
 
         #[cfg(windows)]
-        p.push_str(format!("\\AppData\\Local\\ZeroTier\\One").as_str());
+        p.push_str(format!("\\AppData\\Local\\ZeroTier\\One\\authtoken.secret").as_str());
 
         #[cfg(all(unix, not(target_os = "macos")))]
         p.push_str(format!("/.zeroTierOneAuthToken").as_str());
@@ -75,6 +75,7 @@ impl ServiceClient {
             state: Map::new(),
             state_crc64: HashMap::new(),
             post_queue: LinkedList::new(),
+            delete_queue: LinkedList::new(),
             dirty: dirty_flag.clone(),
             online: false,
         }, dirty_flag)
