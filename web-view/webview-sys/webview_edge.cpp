@@ -125,13 +125,13 @@ public:
 
         EnableDpiAwareness();
 
-        DWORD style = WS_OVERLAPPEDWINDOW | WS_BORDER;
+        DWORD style = WS_OVERLAPPEDWINDOW; /* WS_OVERLAPPED | WS_SYSMENU | WS_CAPTION | WS_BORDER; */
         if (!resizable) {
             style &= ~(WS_SIZEBOX | WS_MAXIMIZEBOX);
         }
 
         if (frameless) {
-            style &= ~(WS_SYSMENU | WS_CAPTION | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_OVERLAPPEDWINDOW);
+            style &= ~(WS_SYSMENU | WS_CAPTION | WS_MINIMIZEBOX | WS_MAXIMIZEBOX);
         }
 
         // Create window first, because we need the window to get DPI for the window.

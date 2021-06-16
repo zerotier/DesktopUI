@@ -241,6 +241,7 @@ fn window(args: &Vec<String>) {
             let _ = serde_json::from_str::<CommandFromWebView>(arg).map(|cmd| {
                 match cmd.cmd.as_str() {
                     "ready" => {
+                        wv.set_color((0, 0, 0, 255));
                         wv.set_visible(true);
                         let _ = wv.eval(format!("zt_ui_render('{}', {});", args[2], WEBVIEW_WINDOW_FRAMELESS).as_str());
                     },
@@ -524,7 +525,7 @@ fn tray() {
                 });
             } else {
                 menu.push(TrayMenuItem::Text {
-                    text: "Service not running.".into(),
+                    text: "Service unreachable...".into(),
                     checked: false,
                     disabled: true,
                     handler: None,
