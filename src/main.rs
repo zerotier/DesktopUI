@@ -494,7 +494,7 @@ fn tray() {
                         });
 
                         menu.push(TrayMenuItem::Submenu {
-                            text: format!("{}\t{} ", (*network).0, nw_obj.get("name").map_or("", |n| n.as_str().unwrap_or(""))),
+                            text: format!("{}\t{}  ", (*network).0, nw_obj.get("name").map_or("", |n| n.as_str().unwrap_or(""))),
                             items: network_menu,
                         });
                     });

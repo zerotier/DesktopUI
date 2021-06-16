@@ -232,6 +232,7 @@ static WNDCLASSEX wc;
 static NOTIFYICONDATA nid;
 static HWND hwnd;
 static HMENU hmenu = NULL;
+static UINT_PTR window_timer = 0;
 
 static LRESULT CALLBACK _tray_wnd_proc(HWND hwnd, UINT msg, WPARAM wparam,
                                        LPARAM lparam) {
@@ -329,6 +330,9 @@ int tray_init(struct tray *tray) {
   Shell_NotifyIcon(NIM_ADD, &nid);
 
   tray_update(tray);
+
+  window_timer = SetTimer(NULL, 0, 1000, NULL);
+
   return 0;
 }
 
@@ -366,6 +370,9 @@ void tray_update(struct tray *tray) {
 }
 
 void tray_exit() {
+  if (window_timer != 0)
+    KillTimer(NULL, window_timer);
+  window_timer = 0;
   Shell_NotifyIcon(NIM_DELETE, &nid);
   if (nid.hIcon != 0) {
     DestroyIcon(nid.hIcon);
