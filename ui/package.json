@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "license": "UNLICENSED",
   "dependencies": {
+    "@babel/polyfill": "^7.12.1",
     "@elastic/datemath": "^5.0.3",
     "@elastic/eui": "^34.1.0",
     "fast-deep-equal": "^3.1.3",
