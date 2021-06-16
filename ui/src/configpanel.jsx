@@ -57,9 +57,9 @@ export default class ConfigPanel extends React.Component {
                 (this.state.primaryPort != this.props.status?.config?.settings?.primaryPort) ||
                 (this.state.portMappingEnabled != this.props.status?.config?.settings?.portMappingEnabled);
             inner = (
-                <EuiSplitPanel.Outer grow={true} className="eui-fullHeight" hasShadow={false} hasBorder={false} borderRadius="none">
-                    <EuiSplitPanel.Inner paddingSize="none" color="subdued">
-                        <EuiFlexGrid columns={2} gutterSize="s" alignItems="center">
+                <EuiSplitPanel.Outer responsive={false} grow={true} className="eui-fullHeight" hasShadow={false} hasBorder={false} borderRadius="none">
+                    <EuiSplitPanel.Inner paddingSize="none" color="subdued" responsive={false}>
+                        <EuiFlexGrid columns={2} gutterSize="s" alignItems="center" responsive={false}>
                             <EuiFlexItem><EuiText>ZeroTier Address</EuiText></EuiFlexItem>
                             <EuiFlexItem>
                                 <EuiText>
@@ -89,9 +89,9 @@ export default class ConfigPanel extends React.Component {
                         </EuiFlexGrid>
                     </EuiSplitPanel.Inner>
                     {changes ? (
-                        <EuiSplitPanel.Inner grow={false} paddingSize="none" color="subdued">
+                        <EuiSplitPanel.Inner grow={false} paddingSize="none" color="subdued" responsive={false}>
                             <EuiSpacer size="m"/>
-                            <EuiFlexGrid columns={2} gutterSize="s" alignItems="center">
+                            <EuiFlexGrid columns={2} gutterSize="s" alignItems="center" responsive={false}>
                                 <EuiFlexItem><EuiButton size="s" color="text">Cancel</EuiButton></EuiFlexItem>
                                 <EuiFlexItem><EuiButton size="s" color="text" fill>Apply</EuiButton></EuiFlexItem>
                             </EuiFlexGrid>

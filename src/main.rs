@@ -20,8 +20,6 @@ use crate::serviceclient::ServiceClient;
 /// It's a bit weird so web app bundlers don't optimize it out.
 const CSS_PLACEHOLDER: &'static str = ".XXXthis_is_replaced_by_css_in_the_rust_codeXXX{border:0}";
 
-const UNICODE_CHECKMARK: char = '✓';
-
 const MAIN_WINDOW_WIDTH: i32 = 1300;
 const MAIN_WINDOW_HEIGHT: i32 = 500;
 
@@ -476,7 +474,7 @@ fn tray() {
                         });
 
                         menu.push(TrayMenuItem::Submenu {
-                            text: format!("{}\t{}\t{} ", UNICODE_CHECKMARK, (*network).0, nw_obj.get("name").map_or("", |n| n.as_str().unwrap_or(""))),
+                            text: format!("{}\t{} ", (*network).0, nw_obj.get("name").map_or("", |n| n.as_str().unwrap_or(""))),
                             items: network_menu,
                         });
                     });
