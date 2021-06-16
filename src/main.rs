@@ -467,6 +467,7 @@ fn tray() {
                             });
                         }
                         network_menu.push(TrayMenuItem::Separator);
+                        let (nwid, client2) = ((*network).0.clone(), client.clone());
                         network_menu.push(TrayMenuItem::Text {
                             text: "Leave Network ".into(),
                             checked: false,
