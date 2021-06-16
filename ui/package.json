@@ -2,7 +2,6 @@
   "name": "zerotier-desktop-ui-js",
   "version": "1.0.0",
   "license": "UNLICENSED",
-  "browserslist": "IE 11",
   "dependencies": {
     "@elastic/datemath": "^5.0.3",
     "@elastic/eui": "^34.1.0",
@@ -13,6 +12,8 @@
     "react-dom": "^17.0.2"
   },
   "devDependencies": {
+    "@babel/cli": "^7.14.5",
+    "@babel/plugin-proposal-optional-chaining": "^7.14.5",
     "@babel/preset-env": "^7.14.5",
     "@babel/preset-react": "^7.14.5",
     "@parcel/transformer-sass": "2.0.0-beta.3.1",
@@ -20,8 +21,7 @@
     "sass": "^1.34.1"
   },
   "scripts": {
-    "dev": "parcel serve ./src/index.html",
-    "build": "parcel build --no-content-hash --no-source-maps ./src/index.html",
+    "build": "parcel build --no-content-hash --no-source-maps ./src/index.jsx && babel --minified --no-comments -o dist/index-min.js dist/index.js && parcel build --no-content-hash --no-source-maps ./src/index.html && rm dist/index-min.js dist/index.js",
     "build-css-dark": "parcel build --no-content-hash --no-source-maps src/themes/zerotier/dark.scss",
     "build-css-light": "parcel build --no-content-hash --no-source-maps src/themes/zerotier/light.scss"
   }

@@ -1,4 +1,11 @@
 {
+	"parserOpts": {
+		"allowImportExportEverywhere": true,
+		"allowAwaitOutsideFunction": true,
+		"allowUndeclaredExports": true,
+		"allowReturnOutsideFunction": true
+	},
+	"plugins": ["@babel/plugin-syntax-dynamic-import", "@babel/plugin-proposal-optional-chaining"],
 	"presets": [
 		[
 			"@babel/preset-react"
