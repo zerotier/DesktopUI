@@ -10,6 +10,7 @@ use std::io::Write;
 use std::cmp::Ordering;
 use std::sync::atomic::AtomicBool;
 use std::os::raw::{c_int, c_char};
+use std::ffi::CString;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -24,11 +25,7 @@ const CSS_PLACEHOLDER: &'static str = ".XXXthis_is_replaced_by_css_in_the_rust_c
 const MAIN_WINDOW_WIDTH: i32 = 1300;
 const MAIN_WINDOW_HEIGHT: i32 = 500;
 
-#[cfg(not(windows))]
 const WEBVIEW_WINDOW_FRAMELESS: bool = false;
-
-#[cfg(windows)]
-const WEBVIEW_WINDOW_FRAMELESS: bool = true;
 
 #[derive(Serialize, Deserialize)]
 pub struct CommandFromWebView {
@@ -123,7 +120,9 @@ fn copy_to_clipboard(s: &str) {
 
 #[cfg(windows)]
 fn copy_to_clipboard(s: &str) {
-    // TODO
+    CString::new(s).map(|s| {
+        unsafe { c_windows_post_to_clipboard(s.as_ptr()) };
+    });
 }
 
 /*******************************************************************************************************************/

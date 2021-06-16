@@ -6,11 +6,18 @@ import Main from './main';
 import Join from './join';
 import About from './about';
 
+window.oncontextmenu = function() { return false; }
+
 window.extLog = (data) => {
     external.invoke(JSON.stringify({
         cmd: "log",
         data: JSON.stringify(data)
     }));
+};
+
+window.onerror = function(message, source, lineno, colno, error) {
+    if (message)
+        extLog(message);
 };
 
 window.copyToClipboard = (str) => {
@@ -41,15 +48,29 @@ window.ztDelete = (path) => {
 window.zt_ui_update = (update) => {};
 
 // Called from Rust code in response to 'ready' command indicating that UI should render.
-window.zt_ui_render = (ui_mode) => {
+window.zt_ui_render = (ui_mode, frameless) => {
+    let topbar = (frameless) ? (
+        <div style={{width: '100%', height: '30px'}}>
+            <button style={{border: 0, padding: '2px 2px 4px 2px', width: '30px', height: '30px', textAlign: 'center', fontSize: '24px', float: 'right', display: 'inline-block'}} onClick={() => {
+                external.invoke('{"cmd": "quit"}');
+            }}>╳</button>
+        </div>
+    ) : null;
     if (ui_mode == "Main") {
-        ReactDOM.render(<Main/>, document.getElementById("_app_root"));
+        ReactDOM.render((
+            <div style={{width: '100%', height: '100%'}}>
+                {topbar}
+                <Main/>
+            </div>
+        ), document.getElementById("_app_root"));
     } else if (ui_mode == "About") {
-        ReactDOM.render(<About/>, document.getElementById("_app_root"));
-    } else {
-        ReactDOM.render((<div>unrecognized ui_mode = {ui_mode}</div>), document.getElementById("_app_root"));
+        ReactDOM.render((
+            <div style={{width: '100%', height: '100%'}}>
+                {topbar}
+                <About/>
+            </div>
+        ), document.getElementById("_app_root"));
     }
-
     setInterval(function() { external.invoke('{ "cmd": "poll" }'); }, 200);
 };
 

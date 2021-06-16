@@ -1,5 +1,9 @@
 /* This builds the tray and some assorted utility functions so that it can be included from Rust code. */
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 #if defined (_WIN32) || defined (_WIN64)
 #define TRAY_WINAPI 1
 #elif defined (__linux__) || defined (linux) || defined (__linux)
@@ -9,10 +13,6 @@
 #endif
 
 #include "tray.h"
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 #ifdef __APPLE__
 #include <pthread.h>
