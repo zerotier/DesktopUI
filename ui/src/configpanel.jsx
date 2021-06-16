@@ -61,27 +61,27 @@ export default class ConfigPanel extends React.Component {
                     <EuiSplitPanel.Inner paddingSize="none" color="subdued" responsive={false}>
                         <EuiFlexGrid columns={2} gutterSize="s" alignItems="center" responsive={false}>
                             <EuiFlexItem><EuiText>ZeroTier Address</EuiText></EuiFlexItem>
-                            <EuiFlexItem>
+                            <EuiFlexItem grow={false}>
                                 <EuiText>
                                     <EuiLink className="font-monospaced" color="text" onClick={ () => { copyToClipboard(status.address) } }>{status.address}</EuiLink>
                                 </EuiText>
                             </EuiFlexItem>
                             <EuiFlexItem><EuiText>Version</EuiText></EuiFlexItem>
-                            <EuiFlexItem><EuiText>{status.version}</EuiText></EuiFlexItem>
+                            <EuiFlexItem grow={false}><EuiText>{status.version}</EuiText></EuiFlexItem>
                             <EuiFlexItem><EuiText>Status</EuiText></EuiFlexItem>
-                            <EuiFlexItem><EuiText>{status.online ? (status.tcpFallbackActive ? 'Tunneled' : 'Online') : 'Offline'}</EuiText></EuiFlexItem>
+                            <EuiFlexItem grow={false}><EuiText>{status.online ? (status.tcpFallbackActive ? 'Tunneled' : 'Online') : 'Offline'}</EuiText></EuiFlexItem>
 
-                            <EuiFlexItem><EuiSpacer size="m"/></EuiFlexItem>
-                            <EuiFlexItem><EuiSpacer size="m"/></EuiFlexItem>
+                            <EuiFlexItem grow={false}><EuiSpacer size="m"/></EuiFlexItem>
+                            <EuiFlexItem grow={false}><EuiSpacer size="m"/></EuiFlexItem>
 
                             <EuiFlexItem><EuiText>Primary Port</EuiText></EuiFlexItem>
-                            <EuiFlexItem>
+                            <EuiFlexItem grow={false}>
                                 <EuiFormRow helpText="(service restart required)">
-                                    <EuiFieldText value={this.state.primaryPort} onBlur={(e) => { this.onPrimaryPortLostFocus(e) }} onChange={(e) => { this.onPrimaryPortChange(e) }}/>
+                                    <EuiFieldText style={{width: '5rem'}} value={this.state.primaryPort} onBlur={(e) => { this.onPrimaryPortLostFocus(e) }} onChange={(e) => { this.onPrimaryPortChange(e) }}/>
                                 </EuiFormRow>
                             </EuiFlexItem>
                             <EuiFlexItem><EuiText>Port Mapping (uPnP)</EuiText></EuiFlexItem>
-                            <EuiFlexItem>
+                            <EuiFlexItem grow={false}>
                                 <EuiFormRow>
                                     <EuiCheckbox checked={this.state.portMappingEnabled} label="Enabled" onChange={(e) => { this.onEnablePortMappingChange(e) }}/>
                                 </EuiFormRow>
