@@ -38,7 +38,7 @@ export default class NetworkList extends React.Component {
                 name: 'Name',
                 textOnly: true,
                 truncateText: true
-            }
+            },
             {
                 width: '3rem',
                 isExpander: true,
