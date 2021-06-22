@@ -78,14 +78,13 @@ fn tray_icon_name() -> &'static str {
     "trayIconTemplate.pdf"
 }
 
-#[cfg(all(unix, not(target_os = "macos")))]
-fn tray_icon_name() -> &'static str {
-    if is_dark_mode() { "generic-dark.png" } else { "generic-light.png" }
-}
-
-#[cfg(windows)]
-fn tray_icon_name() -> &'static str {
-    "windows.ico"
+#[cfg(not(target_os = "macos"))]
+fn tray_icon_name() -> String {
+    let icon_path = std::env::temp_dir().join("zerotier-tray-icon.ico");
+    if std::fs::metadata(&icon_path).is_err() {
+        let _ = std::fs::write(&icon_path, include_bytes!("../icon.ico"));
+    }
+    icon_path.to_str().unwrap().into()
 }
 
 /*******************************************************************************************************************/
@@ -129,8 +128,8 @@ fn copy_to_clipboard(s: &str) {
 
 #[cfg(target_os = "macos")]
 #[inline(always)]
-fn get_web_ui_blob() -> String {
-    let css = if is_dark_mode() { "dark.css" } else { "light.css" };
+fn get_web_ui_blob(dark: bool) -> String {
+    let css = if dark { "dark.css" } else { "light.css" };
     let resources_path = std::env::current_exe().unwrap().parent().unwrap().parent().unwrap().join("Resources");
     std::fs::read_to_string(resources_path.join("ui.html")).map_or_else(|_| {
         "<html><body>Error: unable to load ui.html from application bundle Resources.<script>window.zt_ui_render = function(window_type) {}; setTimeout(function() { external.invoke('{ \"cmd\": \"ready\" }'); }, 1);</script></body></html>".into()
@@ -141,8 +140,8 @@ fn get_web_ui_blob() -> String {
 
 #[cfg(not(target_os = "macos"))]
 #[inline(always)]
-fn get_web_ui_blob() -> String {
-    let css = if is_dark_mode() { include_str!("../ui/dist/dark.css") } else { include_str!("../ui/dist/light.css") };
+fn get_web_ui_blob(dark: bool) -> String {
+    let css = if dark { include_str!("../ui/dist/dark.css") } else { include_str!("../ui/dist/light.css") };
     include_str!("../ui/dist/index.html").replace(CSS_PLACEHOLDER, css)
 }
 
@@ -228,7 +227,7 @@ fn window(args: &Vec<String>) {
     let _ = ui_client.lock().map(|mut c| c.sync());
     let _ = web_view::builder()
         .title("ZeroTier")
-        .content(web_view::Content::Html(get_web_ui_blob()))
+        .content(web_view::Content::Html(get_web_ui_blob(is_dark_mode())))
         .size(
             if args.len() >= 5 { i32::from_str_radix(args[3].as_str(), 10).unwrap_or(800) } else { 800 },
             if args.len() >= 5 { i32::from_str_radix(args[4].as_str(), 10).unwrap_or(600) } else { 600 })
@@ -241,7 +240,6 @@ fn window(args: &Vec<String>) {
             let _ = serde_json::from_str::<CommandFromWebView>(arg).map(|cmd| {
                 match cmd.cmd.as_str() {
                     "ready" => {
-                        wv.set_color((0, 0, 0, 255));
                         wv.set_visible(true);
                         let _ = wv.eval(format!("zt_ui_render('{}', {});", args[2], WEBVIEW_WINDOW_FRAMELESS).as_str());
                     },
@@ -533,14 +531,14 @@ fn tray() {
             }
 
             if tray.is_none() {
-                tray.replace(Tray::init(icon_name, menu));
+                tray.replace(Tray::init(icon_name.as_ref(), menu));
             } else if exit_flag.load(std::sync::atomic::Ordering::Relaxed) {
                 break;
             } else {
                 let new_icon = tray_icon_name();
                 if new_icon != icon_name {
                     icon_name = new_icon;
-                    tray.as_ref().unwrap().update(Some(icon_name), menu);
+                    tray.as_ref().unwrap().update(Some(icon_name.as_ref()), menu);
                 } else {
                     tray.as_ref().unwrap().update(None, menu);
                 }
