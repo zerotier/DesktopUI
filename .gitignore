@@ -12,8 +12,5 @@
 /ui/.parcel-cache
 /ui/dist/index*.js
 /ui/*.log
-/mac-app-template/ZeroTier.app/Contents/MacOS/ZeroTier
-/mac-app-template/ZeroTier.app/Contents/Resources/*.html
-/mac-app-template/ZeroTier.app/Contents/Resources/*.css
-/mac-app-template/ZeroTier.app/Contents/_CodeSignature
+/ZeroTier.app
 /web-view/target

@@ -37,22 +37,21 @@ linux: FORCE
 mac: FORCE
 	cd tray ; make clean
 	cd tray ; make zt_lib
-	cd ui ; yarn build
 	MACOSX_DEPLOYMENT_TARGET=10.13 cargo build --release
-	cp -f target/release/zerotier_desktop_ui mac-app-template/ZeroTier.app/Contents/MacOS/ZeroTier
-	cp -f ui/dist/index.html mac-app-template/ZeroTier.app/Contents/Resources/ui.html
-	cp -f ui/dist/dark.css mac-app-template/ZeroTier.app/Contents/Resources/dark.css
-	cp -f ui/dist/light.css mac-app-template/ZeroTier.app/Contents/Resources/light.css
-	cd mac-app-template ; $(CODESIGN) -f --options=runtime -s $(CODESIGN_APP_CERT) ZeroTier.app
+	make mac-assemble-app
 
-# This is a shortcut to rebuild only the web UI and run the main webview window. It only works on Macs.
-# We use it for edit, test, edit, test cycle sort of UI development.
-mac-test-webui: FORCE
+mac-assemble-app: FORCE
+	rm -rf ZeroTier.app
+	cp -av mac-app-template/ZeroTier.app .
+	cp -f target/release/zerotier_desktop_ui ZeroTier.app/Contents/MacOS/ZeroTier
+	cp -f ui/dist/index.html ZeroTier.app/Contents/Resources/ui.html
+	cp -f ui/dist/dark.css ZeroTier.app/Contents/Resources/dark.css
+	cp -f ui/dist/light.css ZeroTier.app/Contents/Resources/light.css
+	xattr -cr ZeroTier.app
+	$(CODESIGN) -f --options=runtime -s $(CODESIGN_APP_CERT) ZeroTier.app
+
+rebuild-ui: FORCE
 	cd ui ; yarn build
-	cp -f ui/dist/index.html mac-app-template/ZeroTier.app/Contents/Resources/ui.html
-	cp -f ui/dist/dark.css mac-app-template/ZeroTier.app/Contents/Resources/dark.css
-	cp -f ui/dist/light.css mac-app-template/ZeroTier.app/Contents/Resources/light.css
-	mac-app-template/ZeroTier.app/Contents/MacOS/ZeroTier
 
 ifeq ($(OS),Windows_NT)
 clean: FORCE
@@ -61,8 +60,8 @@ clean: FORCE
 	-rmdir /Q /S web-view\target
 else
 clean: FORCE
-	rm -f mac-app-template/ZeroTier.app/Contents/MacOS/ZeroTier mac-app-template/ZeroTier.app/Contents/Resources/*.html mac-app-template/ZeroTier.app/Contents/Resources/*.css tray/*.o tray/*.a tray/example tray/example.exe
-	rm -rf target web-view/target mac-app-template/ZeroTier.app/Contents/_CodeSignature
+	rm -f tray/*.o tray/*.a tray/example tray/example.exe
+	rm -rf ZeroTier.app target web-view/target
 endif
 
 FORCE:

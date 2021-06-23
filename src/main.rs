@@ -9,7 +9,9 @@ use std::time::Duration;
 use std::io::Write;
 use std::cmp::Ordering;
 use std::sync::atomic::AtomicBool;
+#[allow(unused)]
 use std::os::raw::{c_int, c_char};
+#[allow(unused)]
 use std::ffi::CString;
 
 use serde::{Deserialize, Serialize};
@@ -26,6 +28,10 @@ const MAIN_WINDOW_WIDTH: i32 = 1300;
 const MAIN_WINDOW_HEIGHT: i32 = 500;
 
 const WEBVIEW_WINDOW_FRAMELESS: bool = false;
+
+static mut APPLICATION_PATH: String = String::new();
+#[cfg(target_os = "macos")]
+static mut START_ON_LOGIN: bool = false;
 
 #[derive(Serialize, Deserialize)]
 pub struct CommandFromWebView {
@@ -49,6 +55,21 @@ extern "C" {
 extern "C" {
     pub fn c_set_this_thread_to_background_priority();
     pub fn c_set_this_thread_to_foreground_priority();
+}
+
+/*******************************************************************************************************************/
+
+#[cfg(target_os = "macos")]
+fn refresh_mac_start_on_login() {
+    // osascript -e 'tell application "System Events" to get the name of every login item'
+    let out = Command::new("/usr/bin/osascript").arg("-e").arg("tell application \"System Events\" to get the name of every login item").output();
+    unsafe {
+        START_ON_LOGIN = out.map_or(false, |app_list| {
+            String::from_utf8(app_list.stdout.to_ascii_lowercase()).map_or(false, |app_list| {
+                app_list.contains("zerotier")
+            })
+        });
+    }
 }
 
 /*******************************************************************************************************************/
@@ -298,7 +319,7 @@ fn tray() {
     let main_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
     let about_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
 
-    loop {
+    while !exit_flag.load(std::sync::atomic::Ordering::Relaxed) {
         if dirty_flag.swap(false, std::sync::atomic::Ordering::Relaxed) {
             let (main_window2, main_window3) = (main_window.clone(), main_window.clone());
             let (about_window2, about_window3) = (about_window.clone(), about_window.clone());
@@ -502,6 +523,37 @@ fn tray() {
 
                 menu.push(TrayMenuItem::Separator);
 
+                #[cfg(target_os = "macos")] {
+                    let dirty_flag2 = dirty_flag.clone();
+                    menu.push(TrayMenuItem::Text {
+                        text: "Start at Login ".into(),
+                        checked: unsafe { START_ON_LOGIN },
+                        disabled: false,
+                        handler: Some(Box::new(move || {
+                            refresh_mac_start_on_login();
+                            if unsafe { START_ON_LOGIN } {
+                                // osascript -e 'tell application "System Events" to get the name of every login item'
+                                let out = Command::new("/usr/bin/osascript").arg("-e").arg("tell application \"System Events\" to get the name of every login item").output();
+                                let _ = out.map(|app_list| {
+                                    String::from_utf8(app_list.stdout).map(|app_list| {
+                                        app_list.split('\n').for_each(|app| {
+                                            if app.to_ascii_lowercase().contains("zerotier") {
+                                                // osascript -e 'tell application "System Events" to delete login item "itemname"'
+                                                let _ = Command::new("/usr/bin/osascript").arg("-e").arg(format!("tell application \"System Events\" to delete login item \"{}\"", app.trim())).output();
+                                            }
+                                        });
+                                    })
+                                });
+                            } else {
+                                // osascript -e 'tell application "System Events" to make login item at end with properties {path:"PATH_TO_APP", hidden:false}'
+                                let _ = Command::new("/usr/bin/osascript").arg("-e").arg(format!("tell application \"System Events\" to make login item at end with properties {{path:\"{}\", hidden:false}}", unsafe { &APPLICATION_PATH })).output();
+                            }
+                            refresh_mac_start_on_login();
+                            dirty_flag2.store(true, std::sync::atomic::Ordering::Relaxed);
+                        }))
+                    });
+                }
+
                 menu.push(TrayMenuItem::Text {
                     text: "About ".into(),
                     checked: false,
@@ -510,6 +562,7 @@ fn tray() {
                         open_window_subprocess(about_window2.lock().unwrap(), "About", 800, 600);
                     }))
                 });
+
                 let exit_flag2 = exit_flag.clone();
                 menu.push(TrayMenuItem::Text {
                     text: "Quit ZeroTier UI ".into(),
@@ -519,7 +572,7 @@ fn tray() {
                         for w in [&main_window3, &about_window3].iter() {
                             kill_window_subprocess(w.lock().unwrap());
                         }
-                        exit_flag2.store(true, std::sync::atomic::Ordering::Relaxed);
+                        exit_flag2.store(true, std::sync::atomic::Ordering::SeqCst);
                     }))
                 });
             } else {
@@ -533,8 +586,6 @@ fn tray() {
 
             if tray.is_none() {
                 tray.replace(Tray::init(icon_name.as_ref(), menu));
-            } else if exit_flag.load(std::sync::atomic::Ordering::Relaxed) {
-                break;
             } else {
                 let new_icon = tray_icon_name();
                 if new_icon != icon_name {
@@ -561,6 +612,26 @@ fn tray() {
 }
 
 fn main() {
+    unsafe {
+        #[cfg(target_os = "macos")] {
+            let p = std::env::current_exe().unwrap();
+            for pp in p.ancestors() {
+                let pps = pp.to_str().unwrap();
+                if pps.ends_with(".app") {
+                    APPLICATION_PATH = String::from(pps);
+                    break;
+                }
+            }
+            if APPLICATION_PATH.is_empty() {
+                APPLICATION_PATH = String::from(p.to_str().unwrap());
+            }
+        }
+        #[cfg(not(target_os = "macos"))] {
+            APPLICATION_PATH = std::env::current_exe().unwrap().to_str().unwrap().into_string();
+        }
+    }
+    refresh_mac_start_on_login();
+
     let args: Vec<String> = std::env::args().collect();
     if args.len() >= 2 {
         match args[1].as_str() {
