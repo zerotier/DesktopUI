@@ -125,7 +125,7 @@ public:
 
         EnableDpiAwareness();
 
-        DWORD style = WS_OVERLAPPEDWINDOW; /* WS_OVERLAPPED | WS_SYSMENU | WS_CAPTION | WS_BORDER; */
+        DWORD style = WS_OVERLAPPEDWINDOW;
         if (!resizable) {
             style &= ~(WS_SIZEBOX | WS_MAXIMIZEBOX);
         }
