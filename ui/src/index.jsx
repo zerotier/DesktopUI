@@ -71,7 +71,9 @@ window.zt_ui_render = (ui_mode, frameless) => {
             </div>
         ), document.getElementById("_app_root"));
     }
+
     setInterval(function() { external.invoke('{ "cmd": "poll" }'); }, 200);
+    setTimeout(function() { external.invoke('{ "cmd": "raise" }'); }, 500);
 };
 
 setTimeout(function() { external.invoke('{ "cmd": "ready" }'); }, 5);

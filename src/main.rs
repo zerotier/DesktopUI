@@ -252,6 +252,9 @@ fn window(args: &Vec<String>) {
                     "copy_to_clipboard" => {
                         copy_to_clipboard(cmd.data.as_str());
                     },
+                    "raise" => {
+                        wv.set_visible(true);
+                    },
                     "poll" => {
                         if dirty_flag.swap(false, std::sync::atomic::Ordering::Relaxed) {
                             let _ = ui_client.lock().map(|ui_client| {
@@ -293,13 +296,11 @@ fn tray() {
     let (client, dirty_flag) = start_client(vec!["status", "network"], 500, 20);
 
     let main_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
-    let join_network_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
     let about_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
 
     loop {
         if dirty_flag.swap(false, std::sync::atomic::Ordering::Relaxed) {
             let (main_window2, main_window3) = (main_window.clone(), main_window.clone());
-            let (join_network_window2, join_network_window3) = (join_network_window.clone(), join_network_window.clone());
             let (about_window2, about_window3) = (about_window.clone(), about_window.clone());
 
             let mut menu: Vec<TrayMenuItem> = Vec::new();
@@ -515,7 +516,7 @@ fn tray() {
                     checked: false,
                     disabled: false,
                     handler: Some(Box::new(move || {
-                        for w in [&main_window3, &join_network_window3, &about_window3].iter() {
+                        for w in [&main_window3, &about_window3].iter() {
                             kill_window_subprocess(w.lock().unwrap());
                         }
                         exit_flag2.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -543,7 +544,7 @@ fn tray() {
                     tray.as_ref().unwrap().update(None, menu);
                 }
 
-                for w in [&main_window, &join_network_window, &about_window].iter() {
+                for w in [&main_window, &about_window].iter() {
                     check_window_subprocess_exit(w.lock().as_mut().unwrap());
                 }
             }
@@ -554,7 +555,7 @@ fn tray() {
         }
     }
 
-    for w in [&main_window, &join_network_window, &about_window].iter() {
+    for w in [&main_window, &about_window].iter() {
         kill_window_subprocess(w.lock().unwrap());
     }
 }
