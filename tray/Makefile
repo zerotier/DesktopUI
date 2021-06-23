@@ -12,7 +12,7 @@ else ifeq ($(shell uname -s),Linux)
 else ifeq ($(shell uname -s),Darwin)
 	RM=rm -f
 	LIB_NAME=libzt_desktop_tray.a
-	TRAY_CFLAGS := -Os -DTRAY_APPKIT=1 -std=c99 -mmacosx-version-min=10.13
+	TRAY_CFLAGS := -Os -arch x86_64 -arch arm64 -DTRAY_APPKIT=1 -std=c99 -mmacosx-version-min=10.13
 	TRAY_LDFLAGS := -framework Cocoa
 endif
 
