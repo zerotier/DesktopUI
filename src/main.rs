@@ -3,9 +3,11 @@
 mod tray;
 mod serviceclient;
 
+#[allow(unused)]
 use std::process::{Child, Command, Stdio};
 use std::sync::{Mutex, Arc, MutexGuard};
 use std::time::Duration;
+#[allow(unused)]
 use std::io::Write;
 use std::cmp::Ordering;
 use std::sync::atomic::AtomicBool;
@@ -140,7 +142,7 @@ fn copy_to_clipboard(s: &str) {
 
 #[cfg(windows)]
 fn copy_to_clipboard(s: &str) {
-    CString::new(s).map(|s| {
+    let _ = CString::new(s).map(|s| {
         unsafe { c_windows_post_to_clipboard(s.as_ptr()) };
     });
 }
@@ -627,9 +629,11 @@ fn main() {
             }
         }
         #[cfg(not(target_os = "macos"))] {
-            APPLICATION_PATH = std::env::current_exe().unwrap().to_str().unwrap().into_string();
+            APPLICATION_PATH = String::from(std::env::current_exe().unwrap().to_str().unwrap());
         }
     }
+
+    #[cfg(target_os = "macos")]
     refresh_mac_start_on_login();
 
     let args: Vec<String> = std::env::args().collect();
