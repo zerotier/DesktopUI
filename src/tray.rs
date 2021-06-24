@@ -1,6 +1,6 @@
 // (c)2021 ZeroTier, Inc.
 
-use std::os::raw::{c_char, c_int, c_void, c_short};
+use std::os::raw::{c_char, c_int, c_void};
 use std::pin::Pin;
 use std::sync::Mutex;
 use std::ffi::CString;
@@ -96,6 +96,7 @@ unsafe extern "C" fn tray_handler_callback(item: *const CTrayMenu) {
 }
 
 const C_DASH: [c_char; 2] = [ 45, 0 ]; // "-"
+const WC_DASH: [u16; 2] = [ 45, 0 ]; // "-" in wchar_t
 const CHECKMARK: char = '✓';
 
 impl Tray {
@@ -105,7 +106,8 @@ impl Tray {
             match mi {
                 TrayMenuItem::Text { text, checked, disabled, handler } => {
                     #[cfg(windows)] {
-                        let c_text16: Vec<u16> = text.encode_utf16().collect();
+                        let mut c_text16: Vec<u16> = text.encode_utf16().collect();
+                        c_text16.push(0);
                         let c_text16 = Pin::new(c_text16.into_boxed_slice());
                         let c_text16_ptr = c_text16.as_ptr();
                         v.push(CTrayMenuContainer {
@@ -152,7 +154,7 @@ impl Tray {
                         c_items: None,
                         c_tray_menu: CTrayMenu {
                             text: C_DASH.as_ptr(),
-                            wtext: null(),
+                            wtext: WC_DASH.as_ptr(),
                             disabled: 0,
                             checked: 0,
                             cb: tray_handler_callback,
@@ -164,7 +166,8 @@ impl Tray {
                 TrayMenuItem::Submenu { text, items } => {
                     if !items.is_empty() {
                         #[cfg(windows)] {
-                            let c_text16: Vec<u16> = text.encode_utf16().collect();
+                            let mut c_text16: Vec<u16> = text.encode_utf16().collect();
+                            c_text16.push(0);
                             let c_text16 = Pin::new(c_text16.into_boxed_slice());
                             let c_text16_ptr = c_text16.as_ptr();
                             v.push(CTrayMenuContainer {

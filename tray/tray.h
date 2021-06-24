@@ -338,12 +338,15 @@ void tray_update(struct tray *tray) {
 void tray_exit() { ((void(*)(id, SEL, id))objc_msgSend)(app, sel_registerName("terminate:"), app); }
 
 #elif defined(TRAY_WINAPI)
-#include <windows.h>
 
+#define UNICODE
+#define _UNICODE
+
+#include <windows.h>
 #include <shellapi.h>
 
 #define WM_TRAY_CALLBACK_MESSAGE (WM_USER + 1)
-#define WC_TRAY_CLASS_NAME "TRAY"
+#define WC_TRAY_CLASS_NAME L"ZeroTierTray"
 #define ID_TRAY_FIRST 1000
 
 static WNDCLASSEX wc;
@@ -393,13 +396,13 @@ static LRESULT CALLBACK _tray_wnd_proc(HWND hwnd, UINT msg, WPARAM wparam,
 
 static HMENU _tray_menu(struct tray_menu *m, UINT *id) {
   HMENU hmenu = CreatePopupMenu();
-  for (; m != NULL && m->text != NULL; m++, (*id)++) {
-    if (strcmp(m->text, "-") == 0) {
-      InsertMenu(hmenu, *id, MF_SEPARATOR, TRUE, "");
+  for (; m != NULL && m->wtext != NULL; m++, (*id)++) {
+    if (!wcscmp(m->wtext, L"-")) {
+      InsertMenuW(hmenu, *id, MF_SEPARATOR, TRUE, L"");
     } else {
-      MENUITEMINFO item;
+      MENUITEMINFOW item;
       memset(&item, 0, sizeof(item));
-      item.cbSize = sizeof(MENUITEMINFO);
+      item.cbSize = sizeof(MENUITEMINFOW);
       item.fMask = MIIM_ID | MIIM_TYPE | MIIM_STATE | MIIM_DATA;
       item.fType = 0;
       item.fState = 0;
@@ -414,10 +417,9 @@ static HMENU _tray_menu(struct tray_menu *m, UINT *id) {
         item.fState |= MFS_CHECKED;
       }
       item.wID = *id;
-      item.dwTypeData = m->text;
+      item.dwTypeData = m->wtext;
       item.dwItemData = (ULONG_PTR)m;
-
-      InsertMenuItem(hmenu, *id, TRUE, &item);
+      InsertMenuItemW(hmenu, *id, TRUE, &item);
     }
   }
   return hmenu;
@@ -433,7 +435,7 @@ int tray_init(struct tray *tray) {
     return -1;
   }
 
-  hwnd = CreateWindowEx(0, WC_TRAY_CLASS_NAME, NULL, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  hwnd = CreateWindowExW(0, WC_TRAY_CLASS_NAME, NULL, 0, 0, 0, 0, 0, 0, 0, 0, 0);
   if (hwnd == NULL) {
     return -1;
   }
@@ -475,7 +477,7 @@ void tray_update(struct tray *tray) {
   hmenu = _tray_menu(tray->menu, &id);
   SendMessage(hwnd, WM_INITMENUPOPUP, (WPARAM)hmenu, 0);
   HICON icon;
-  ExtractIconEx(tray->icon, 0, NULL, &icon, 1);
+  ExtractIconExA(tray->icon, 0, NULL, &icon, 1);
   if (nid.hIcon) {
     DestroyIcon(nid.hIcon);
   }

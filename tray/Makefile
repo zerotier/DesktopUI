@@ -24,10 +24,5 @@ all: zt_lib
 zt_lib: zt_desktop_tray.o
 	ar rcs ${LIB_NAME} zt_desktop_tray.o
 
-example: example.o
-	$(CC) $^ $(LDFLAGS) -o $@
-
-example.o: example.c tray.h
-
 clean:
 	-$(RM) *.o *.a example *.exe *.lib
