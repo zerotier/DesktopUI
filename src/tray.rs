@@ -1,6 +1,6 @@
 // (c)2021 ZeroTier, Inc.
 
-use std::os::raw::{c_char, c_int, c_void};
+use std::os::raw::{c_char, c_int, c_void, c_short};
 use std::pin::Pin;
 use std::sync::Mutex;
 use std::ffi::CString;
@@ -10,6 +10,7 @@ use std::ptr::{null, null_mut};
 #[derive(Clone)]
 struct CTrayMenu {
     text: *const c_char,
+    wtext: *const u16, // only used on Windows
     disabled: c_int,
     checked: c_int,
     cb: unsafe extern "C" fn(*const CTrayMenu),
@@ -26,6 +27,7 @@ struct CTray {
 #[allow(unused)]
 struct CTrayMenuContainer {
     c_text: Option<Pin<Box<CString>>>,
+    c_text16: Option<Pin<Box<[u16]>>>,
     items: Vec<CTrayMenuContainer>,
     c_items: Option<Pin<Box<[CTrayMenu]>>>,
     c_tray_menu: CTrayMenu,
@@ -94,6 +96,7 @@ unsafe extern "C" fn tray_handler_callback(item: *const CTrayMenu) {
 }
 
 const C_DASH: [c_char; 2] = [ 45, 0 ]; // "-"
+const CHECKMARK: char = '✓';
 
 impl Tray {
     fn tray_create_c_structs(menu: Vec<TrayMenuItem>) -> Vec<CTrayMenuContainer> {
@@ -101,29 +104,55 @@ impl Tray {
         menu.into_iter().for_each(|mi: TrayMenuItem| {
             match mi {
                 TrayMenuItem::Text { text, checked, disabled, handler } => {
-                    let c_text = Box::pin(CString::new(text.as_str()).unwrap());
-                    let c_text_ptr: *const c_char = c_text.as_ptr();
-                    v.push(CTrayMenuContainer {
-                        c_text: Some(c_text),
-                        items: Vec::new(),
-                        c_items: None,
-                        c_tray_menu: CTrayMenu {
-                            text: c_text_ptr,
-                            disabled: disabled as c_int,
-                            checked: checked as c_int,
-                            cb: tray_handler_callback,
-                            context: handler.map_or(null_mut(), |h| Box::into_raw(Box::new(h)).cast()), // freed in CTrayMenuContainer drop()
-                            submenu: null(),
-                        }
-                    });
+                    #[cfg(windows)] {
+                        let c_text16: Vec<u16> = text.encode_utf16().collect();
+                        let c_text16 = Pin::new(c_text16.into_boxed_slice());
+                        let c_text16_ptr = c_text16.as_ptr();
+                        v.push(CTrayMenuContainer {
+                            c_text: None,
+                            c_text16: Some(c_text16),
+                            items: Vec::new(),
+                            c_items: None,
+                            c_tray_menu: CTrayMenu {
+                                text: null(),
+                                wtext: c_text16_ptr,
+                                disabled: disabled as c_int,
+                                checked: checked as c_int,
+                                cb: tray_handler_callback,
+                                context: handler.map_or(null_mut(), |h| Box::into_raw(Box::new(h)).cast()), // freed in CTrayMenuContainer drop()
+                                submenu: null(),
+                            }
+                        });
+                    }
+                    #[cfg(not(windows))] {
+                        let c_text = Box::pin(CString::new(text.as_str()).unwrap());
+                        let c_text_ptr = c_text.as_ptr();
+                        v.push(CTrayMenuContainer {
+                            c_text: Some(c_text),
+                            c_text16: None,
+                            items: Vec::new(),
+                            c_items: None,
+                            c_tray_menu: CTrayMenu {
+                                text: c_text_ptr,
+                                wtext: null(),
+                                disabled: disabled as c_int,
+                                checked: checked as c_int,
+                                cb: tray_handler_callback,
+                                context: handler.map_or(null_mut(), |h| Box::into_raw(Box::new(h)).cast()), // freed in CTrayMenuContainer drop()
+                                submenu: null(),
+                            }
+                        });
+                    }
                 },
                 TrayMenuItem::Separator => {
                     v.push(CTrayMenuContainer {
                         c_text: None,
+                        c_text16: None,
                         items: Vec::new(),
                         c_items: None,
                         c_tray_menu: CTrayMenu {
                             text: C_DASH.as_ptr(),
+                            wtext: null(),
                             disabled: 0,
                             checked: 0,
                             cb: tray_handler_callback,
@@ -134,21 +163,45 @@ impl Tray {
                 },
                 TrayMenuItem::Submenu { text, items } => {
                     if !items.is_empty() {
-                        let c_text = Box::pin(CString::new(text.as_str()).unwrap());
-                        let c_text_ptr: *const c_char = c_text.as_ptr();
-                        v.push(CTrayMenuContainer {
-                            c_text: Some(c_text),
-                            items: Self::tray_create_c_structs(items),
-                            c_items: None,
-                            c_tray_menu: CTrayMenu {
-                                text: c_text_ptr,
-                                disabled: 0,
-                                checked: 0,
-                                cb: tray_handler_callback,
-                                context: null_mut(),
-                                submenu: null(),
-                            }
-                        });
+                        #[cfg(windows)] {
+                            let c_text16: Vec<u16> = text.encode_utf16().collect();
+                            let c_text16 = Pin::new(c_text16.into_boxed_slice());
+                            let c_text16_ptr = c_text16.as_ptr();
+                            v.push(CTrayMenuContainer {
+                                c_text: None,
+                                c_text16: Some(c_text16),
+                                items: Self::tray_create_c_structs(items),
+                                c_items: None,
+                                c_tray_menu: CTrayMenu {
+                                    text: null(),
+                                    wtext: c_text16_ptr,
+                                    disabled: 0,
+                                    checked: 0,
+                                    cb: tray_handler_callback,
+                                    context: null_mut(),
+                                    submenu: null(),
+                                }
+                            });
+                        }
+                        #[cfg(not(windows))] {
+                            let c_text = Box::pin(CString::new(text.as_str()).unwrap());
+                            let c_text_ptr: *const c_char = c_text.as_ptr();
+                            v.push(CTrayMenuContainer {
+                                c_text: Some(c_text),
+                                c_text16: None,
+                                items: Self::tray_create_c_structs(items),
+                                c_items: None,
+                                c_tray_menu: CTrayMenu {
+                                    text: c_text_ptr,
+                                    wtext: null(),
+                                    disabled: 0,
+                                    checked: 0,
+                                    cb: tray_handler_callback,
+                                    context: null_mut(),
+                                    submenu: null(),
+                                }
+                            });
+                        }
 
                         let c = v.last_mut().unwrap();
                         let mut c_items: Vec<CTrayMenu> = Vec::new();
@@ -157,6 +210,7 @@ impl Tray {
                         }
                         c_items.push(CTrayMenu {
                             text: null(),
+                            wtext: null(),
                             disabled: 0,
                             checked: 0,
                             cb: tray_handler_callback,
@@ -180,6 +234,7 @@ impl Tray {
         }
         c_menu_items.push(CTrayMenu {
             text: null(),
+            wtext: null(),
             disabled: 0,
             checked: 0,
             cb: tray_handler_callback,

@@ -10,6 +10,7 @@ struct tray {
 
 struct tray_menu {
   char *text;
+  wchar_t *wtext; /* Windows only */
   int disabled;
   int checked;
 

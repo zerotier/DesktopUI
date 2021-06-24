@@ -20,6 +20,8 @@ export default class Network extends React.Component {
                     <EuiFlexGrid columns={2} gutterSize="none" responsive={false}>
                         <EuiFlexItem><EuiText size="s">Name</EuiText></EuiFlexItem>
                         <EuiFlexItem><EuiText size="s">{config.name}</EuiText></EuiFlexItem>
+                        <EuiFlexItem><EuiText size="s">Type</EuiText></EuiFlexItem>
+                        <EuiFlexItem><EuiText size="s">{(config.private) ? 'PRIVATE' : 'PUBLIC'}</EuiText></EuiFlexItem>
                         <EuiFlexItem><EuiText size="s">Status</EuiText></EuiFlexItem>
                         <EuiFlexItem><EuiText size="s">{config.status}</EuiText></EuiFlexItem>
                         <EuiFlexItem><EuiText size="s">Ethernet MAC</EuiText></EuiFlexItem>
@@ -102,7 +104,7 @@ export default class Network extends React.Component {
                     <div className="eui-textRight">
                         <EuiButton color="danger" size="s" onClick={() => {
                             ztDelete('network/' + config.id);
-                        }}>Leave Network</EuiButton>
+                        }}>Disconnect</EuiButton>
                     </div>
                 </EuiFlexItem>
             </EuiFlexGroup>

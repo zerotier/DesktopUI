@@ -56,14 +56,15 @@ window.zt_ui_render = (ui_mode, frameless) => {
             }}>╳</button>
         </div>
     ) : null;
-    if (ui_mode == "Main") {
+
+    if (ui_mode === "Main") {
         ReactDOM.render((
             <div style={{width: '100%', height: '100%'}}>
                 {topbar}
                 <Main/>
             </div>
         ), document.getElementById("_app_root"));
-    } else if (ui_mode == "About") {
+    } else if (ui_mode === "About") {
         ReactDOM.render((
             <div style={{width: '100%', height: '100%'}}>
                 {topbar}
@@ -73,7 +74,9 @@ window.zt_ui_render = (ui_mode, frameless) => {
     }
 
     setInterval(function() { external.invoke('{ "cmd": "poll" }'); }, 200);
-    setTimeout(function() { external.invoke('{ "cmd": "raise" }'); }, 500);
+
+    setTimeout(function() { external.invoke('{ "cmd": "raise" }'); }, 1000);
+    setTimeout(function() { external.invoke('{ "cmd": "raise" }'); }, 2000);
 };
 
 setTimeout(function() { external.invoke('{ "cmd": "ready" }'); }, 5);

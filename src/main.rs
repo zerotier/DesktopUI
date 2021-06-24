@@ -21,6 +21,7 @@ use serde_json::Value;
 
 use crate::tray::*;
 use crate::serviceclient::ServiceClient;
+use std::io::Read;
 
 /// The string in the HTML blob to replace with the right CSS for this platform and light/dark mode.
 /// It's a bit weird so web app bundlers don't optimize it out.
@@ -189,10 +190,13 @@ fn kill_window_subprocess(mut w: MutexGuard<Option<Child>>) {
 fn open_window_subprocess(mut w: MutexGuard<Option<Child>>, ui_mode: &str, width: i32, height: i32) {
     check_window_subprocess_exit(&mut w);
     if w.is_none() {
-        let ch = Command::new(std::env::current_exe().unwrap()).arg("window").arg(ui_mode).arg(width.to_string()).arg(height.to_string()).spawn();
+        let ch = Command::new(std::env::current_exe().unwrap()).arg("window").arg(ui_mode).arg(width.to_string()).arg(height.to_string()).stdin(Stdio::piped()).spawn();
         if ch.is_ok() {
             let _ = w.replace(ch.unwrap());
         }
+    } else {
+        // Sending 'r' causes subprocess to raise the window at the first opportunity.
+        let _ = w.as_mut().unwrap().stdin.as_mut().unwrap().write_all(&['r' as u8]);
     }
 }
 
@@ -244,6 +248,20 @@ fn window(args: &Vec<String>) {
      */
 
     let (client, dirty_flag) = start_client(vec!["status", "network", "peer"], 100, 5);
+
+    let raise_window = Arc::new(AtomicBool::new(false));
+    let raise_window2 = raise_window.clone();
+    let _ = std::thread::spawn(move || {
+        set_thread_to_background_priority();
+        loop {
+            let mut buf: [u8; 1] = [0_u8];
+            let _ = std::io::stdin().read_exact(&mut buf);
+            if buf[0] == ('r' as u8) {
+                raise_window2.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
+    });
+
     set_thread_to_foreground_priority();
 
     let ui_client = client.clone();
@@ -260,6 +278,10 @@ fn window(args: &Vec<String>) {
         .debug(false)
         .user_data(())
         .invoke_handler(move |wv, arg| {
+            if raise_window.swap(false, std::sync::atomic::Ordering::Relaxed) {
+                wv.set_visible(true);
+            }
+
             let _ = serde_json::from_str::<CommandFromWebView>(arg).map(|cmd| {
                 match cmd.cmd.as_str() {
                     "ready" => {
@@ -294,6 +316,7 @@ fn window(args: &Vec<String>) {
                     _ => {},
                 }
             });
+
             Ok(())
         })
         .run()

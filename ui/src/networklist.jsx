@@ -26,14 +26,6 @@ export default class NetworkList extends React.Component {
                 )
             },
             {
-                field: 'type',
-                name: 'Private',
-                width: '5rem',
-                render: (type) => (
-                    (type.toLowerCase() == 'private') ? '✓' : ' '
-                )
-            },
-            {
                 field: 'name',
                 name: 'Name',
                 textOnly: true,
