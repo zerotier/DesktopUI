@@ -316,7 +316,7 @@ fn tray() {
     let mut tray: Option<Tray> = None;
     let exit_flag = Arc::new(AtomicBool::new(false));
 
-    let (client, dirty_flag) = start_client(vec!["status", "network"], 500, 20);
+    let (client, dirty_flag) = start_client(vec!["status", "network"], 500, 10);
 
     let main_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
     let about_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));

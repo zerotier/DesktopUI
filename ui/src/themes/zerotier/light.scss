@@ -1,5 +1,41 @@
 @import '../../../node_modules/@elastic/eui/src/themes/eui-amsterdam/eui_amsterdam_colors_light';
 
+$euiColorGhost: #FFF !default;
+$euiColorInk: #000 !default;
+
+$euiColorPrimary: #07C;
+$euiColorSecondary: #00BFB3;
+$euiColorAccent: #F04E98;
+
+$euiColorSuccess: $euiColorSecondary;
+$euiColorWarning: #FEC514;
+$euiColorDanger: #BD271E !default;
+$euiColorDisabled: #ABB4C4;
+
+$euiColorEmptyShade: #FFF !default;
+$euiColorLightestShade: #ececec !default;
+$euiColorLightShade: #e5e5e5 !default;
+$euiColorMediumShade: #98A2B3 !default;
+$euiColorDarkShade: #69707D !default;
+$euiColorDarkestShade: #343741 !default;
+$euiColorFullShade: #000 !default;
+
+$euiPageBackgroundColor: tint($euiColorLightestShade, 50%);
+$euiColorHighlight: tint($euiColorWarning, 90%);
+
+$euiTextColor: $euiColorDarkestShade !default;
+$euiTitleColor: shade($euiTextColor, 50%) !default;
+$euiTextSubduedColor: $euiColorDarkShade;
+$euiColorDisabled: tint($euiTextColor, 70%) !default;
+
+$euiColorPrimaryText: makeHighContrastColor($euiColorPrimary);
+$euiColorSecondaryText: makeHighContrastColor($euiColorSecondary);
+$euiColorAccentText: makeHighContrastColor($euiColorAccent);
+$euiColorWarningText: makeHighContrastColor($euiColorWarning);
+$euiColorDisabledText: makeDisabledContrastColor($euiColorDisabled);
+$euiColorSuccessText: $euiColorSecondaryText;
+$euiLinkColor: $euiColorPrimaryText;
+
 @import '../../../node_modules/@elastic/eui/src/themes/eui-amsterdam/global_styling/index';
 @import '../../../node_modules/@elastic/eui/src/components/index';
 @import '../../../node_modules/@elastic/eui/packages/index';
