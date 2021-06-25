@@ -533,14 +533,14 @@ fn tray() {
                         network_menu.push(TrayMenuItem::Separator);
                         let (nwid, client2) = ((*network).0.clone(), client.clone());
                         network_menu.push(TrayMenuItem::Text {
-                            text: "Leave Network ".into(),
+                            text: "Disconnect ".into(),
                             checked: false,
                             disabled: false,
                             handler: Some(Box::new(move || client2.lock().unwrap().enqueue_delete(format!("network/{}", nwid)))),
                         });
 
                         menu.push(TrayMenuItem::Submenu {
-                            text: format!("{}\t{}  ", (*network).0, nw_obj.get("name").map_or("", |n| n.as_str().unwrap_or(""))),
+                            text: format!("✓ {}\t{}  ", (*network).0, nw_obj.get("name").map_or("", |n| n.as_str().unwrap_or(""))),
                             items: network_menu,
                         });
                     });

@@ -97,7 +97,6 @@ unsafe extern "C" fn tray_handler_callback(item: *const CTrayMenu) {
 
 const C_DASH: [c_char; 2] = [ 45, 0 ]; // "-"
 const WC_DASH: [u16; 2] = [ 45, 0 ]; // "-" in wchar_t
-const CHECKMARK: char = '✓';
 
 impl Tray {
     fn tray_create_c_structs(menu: Vec<TrayMenuItem>) -> Vec<CTrayMenuContainer> {
