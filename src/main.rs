@@ -476,6 +476,7 @@ fn tray() {
                                 }
                                 network_menu.push(TrayMenuItem::Submenu {
                                     text: "Managed Addresses ".into(),
+                                    checked: false,
                                     items: assigned_addrs_menu,
                                 });
                             }
@@ -527,6 +528,7 @@ fn tray() {
                             }
                             network_menu.push(TrayMenuItem::Submenu {
                                 text: "Managed Routes ".into(),
+                                checked: false,
                                 items: managed_routes_menu,
                             });
                         }
@@ -540,7 +542,8 @@ fn tray() {
                         });
 
                         menu.push(TrayMenuItem::Submenu {
-                            text: format!("✓ {}\t{}  ", (*network).0, nw_obj.get("name").map_or("", |n| n.as_str().unwrap_or(""))),
+                            text: format!("{}\t{}  ", (*network).0, nw_obj.get("name").map_or("", |n| n.as_str().unwrap_or(""))),
+                            checked: true,
                             items: network_menu,
                         });
                     });

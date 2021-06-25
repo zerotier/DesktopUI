@@ -55,6 +55,7 @@ pub enum TrayMenuItem {
     Separator,
     Submenu {
         text: String,
+        checked: bool,
         items: Vec<TrayMenuItem>,
     },
 }
@@ -162,7 +163,7 @@ impl Tray {
                         }
                     });
                 },
-                TrayMenuItem::Submenu { text, items } => {
+                TrayMenuItem::Submenu { text, checked, items } => {
                     if !items.is_empty() {
                         #[cfg(windows)] {
                             let mut c_text16: Vec<u16> = text.encode_utf16().collect();
@@ -178,7 +179,7 @@ impl Tray {
                                     text: null(),
                                     wtext: c_text16_ptr,
                                     disabled: 0,
-                                    checked: 0,
+                                    checked: checked as c_int,
                                     cb: tray_handler_callback,
                                     context: null_mut(),
                                     submenu: null(),
@@ -197,7 +198,7 @@ impl Tray {
                                     text: c_text_ptr,
                                     wtext: null(),
                                     disabled: 0,
-                                    checked: 0,
+                                    checked: checked as c_int,
                                     cb: tray_handler_callback,
                                     context: null_mut(),
                                     submenu: null(),
