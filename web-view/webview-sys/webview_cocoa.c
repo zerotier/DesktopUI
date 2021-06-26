@@ -89,6 +89,13 @@ WEBVIEW_API webview_t webview_new(
 #define NSApplicationActivationPolicyAccessory 1
 #define NSApplicationDefinedEvent 15
 #define NSWindowStyleMaskBorderless 0
+#define NSNormalWindowLevel kCGNormalWindowLevel
+#define NSMainMenuWindowLevel kCGMainMenuWindowLevel
+#define NSStatusWindowLevel kCGStatusWindowLevel
+#define NSPopupWindowMenuLevel kCGPopUpMenuWindowLevel
+#define NSFloatingWindowLevel kCGFloatingWindowLevel
+
+extern id NSApp;
 
 static id get_nsstring(const char *c_str) {
   return ((id(*)(id, SEL, id))objc_msgSend)((id)objc_getClass("NSString"),
@@ -399,21 +406,19 @@ WEBVIEW_API int webview_init(webview_t w) {
   if (wv->frameless) {
     style = NSWindowStyleMaskBorderless | NSWindowStyleMaskMiniaturizable;
   } else {
-    style = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable |
-                        NSWindowStyleMaskMiniaturizable;
+    style = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable;
   }
   if (wv->resizable) {
     style = style | NSWindowStyleMaskResizable;
   }
 
-  wv->priv.window =
-      ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSWindow"), sel_registerName("alloc"));
+  wv->priv.window = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSWindow"), sel_registerName("alloc"));
   ((id(*)(id, SEL, CGRect, id, id, id))objc_msgSend)(wv->priv.window,
                sel_registerName("initWithContentRect:styleMask:backing:defer:"),
                r, style, NSBackingStoreBuffered, 0);
-
   ((id(*)(id, SEL))objc_msgSend)(wv->priv.window, sel_registerName("autorelease"));
   ((id(*)(id, SEL, id))objc_msgSend)(wv->priv.window, sel_registerName("setTitle:"), nsTitle);
+  /* ((id(*)(id, SEL, id))objc_msgSend)(wv->priv.window, sel_registerName("setLevel:"), NSFloatingWindowLevel); */
   ((id(*)(id, SEL, id))objc_msgSend)(wv->priv.window, sel_registerName("setDelegate:"),
                wv->priv.windowDelegate);
   ((id(*)(id, SEL))objc_msgSend)(wv->priv.window, sel_registerName("center"));
@@ -629,7 +634,6 @@ WEBVIEW_API void webview_set_minimized(webview_t w, int minimize) {
 
 WEBVIEW_API void webview_set_visible(webview_t w, int visible) {
   struct cocoa_webview* wv = (struct cocoa_webview*)w;
-
   if (visible) {
     ((id(*)(id, SEL))objc_msgSend)(wv->priv.window, sel_registerName("orderFrontRegardless"));
   } else {

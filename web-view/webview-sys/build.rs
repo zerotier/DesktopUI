@@ -13,7 +13,6 @@ fn main() {
             .atleast_version("2.8")
             .probe("webkit2gtk-4.0")
             .unwrap();
-
         return;
     }
 
@@ -22,6 +21,7 @@ fn main() {
     build
         .include("webview.h")
         .flag_if_supported("-std=c11")
+        .flag_if_supported("-O")
         .flag_if_supported("-w");
 
     if env::var("DEBUG").is_err() {
@@ -32,18 +32,15 @@ fn main() {
 
     if target.contains("windows") {
         build.define("UNICODE", None);
-
         if cfg!(feature = "edge") {
             build
                 .file("webview_edge.cpp")
                 .flag_if_supported("/std:c++17");
-
             for &lib in &["windowsapp", "user32", "gdi32", "ole32"] {
                 println!("cargo:rustc-link-lib={}", lib);
             }
         } else {
             build.file("webview_mshtml.c");
-
             for &lib in &["ole32", "comctl32", "oleaut32", "uuid", "gdi32", "user32"] {
                 println!("cargo:rustc-link-lib={}", lib);
             }

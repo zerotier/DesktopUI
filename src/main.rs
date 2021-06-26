@@ -141,11 +141,21 @@ fn copy_to_clipboard(s: &str) {
     });
 }
 
+#[cfg(target_os = "macos")]
+fn read_from_clipboard() -> String {
+    Command::new("/usr/bin/pbpaste").output().map_or_else(|_| String::new(), |out| String::from_utf8(out.stdout).map_or_else(|_| String::new(), |s| s))
+}
+
 #[cfg(windows)]
 fn copy_to_clipboard(s: &str) {
     let _ = CString::new(s).map(|s| {
         unsafe { c_windows_post_to_clipboard(s.as_ptr()) };
     });
+}
+
+#[cfg(windows)]
+fn read_from_clipboard() -> String {
+    String::new()
 }
 
 /*******************************************************************************************************************/
@@ -296,6 +306,12 @@ fn window(args: &Vec<String>) {
                     },
                     "copy_to_clipboard" => {
                         copy_to_clipboard(cmd.data.as_str());
+                    },
+                    "paste_from_clipboard" => {
+                        let data = read_from_clipboard();
+                        let data: Vec<u16> = data.encode_utf16().collect();
+                        let data = format!("zt_paste_from_clipboard_callback({});", serde_json::to_string(data.as_slice()).unwrap());
+                        let _ = wv.eval(data.as_str());
                     },
                     "raise" => {
                         wv.set_visible(true);
