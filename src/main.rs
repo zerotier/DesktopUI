@@ -367,7 +367,8 @@ fn tray() {
         std::process::exit(1);
     }
 
-    //set_thread_to_background_priority();
+    #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+    set_thread_to_background_priority();
 
     let mut icon_name = tray_icon_name();
     let mut tray: Option<Tray> = None;
