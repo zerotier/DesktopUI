@@ -52,7 +52,7 @@ mac-assemble-app: FORCE
 	xattr -cr ZeroTier.app
 	$(CODESIGN) -f --options=runtime -s $(CODESIGN_APP_CERT) ZeroTier.app
 
-rebuild-ui: FORCE
+ui: FORCE
 	cd ui ; yarn build
 
 ifeq ($(OS),Windows_NT)

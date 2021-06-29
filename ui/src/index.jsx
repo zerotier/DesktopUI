@@ -8,7 +8,7 @@ import About from './about';
 window.oncontextmenu = function() { return false; }
 
 window.addEventListener("keypress", (event) => {
-    if ((event.metaKey||event.altKey) && event.key === 'q') {
+    if ((event.metaKey||event.altKey) && ((event.key === 'q')||(event.key === 'x'))) {
         external.invoke('{"cmd": "quit"}');
         event.preventDefault();
     }

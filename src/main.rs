@@ -67,11 +67,7 @@ fn refresh_mac_start_on_login() {
     // osascript -e 'tell application "System Events" to get the name of every login item'
     let out = Command::new("/usr/bin/osascript").arg("-e").arg("tell application \"System Events\" to get the name of every login item").output();
     unsafe {
-        START_ON_LOGIN = out.map_or(false, |app_list| {
-            String::from_utf8(app_list.stdout.to_ascii_lowercase()).map_or(false, |app_list| {
-                app_list.contains("zerotier")
-            })
-        });
+        START_ON_LOGIN = out.map_or(false, |app_list| String::from_utf8(app_list.stdout.to_ascii_lowercase()).map_or(false, |app_list| app_list.contains("zerotier")));
     }
 }
 
@@ -100,7 +96,7 @@ fn is_dark_mode() -> bool {
 #[cfg(target_os = "macos")]
 fn tray_icon_name() -> &'static str {
     "trayIconTemplate.pdf"
-}
+} // must be in resources folder of app bundle
 
 #[cfg(not(target_os = "macos"))]
 fn tray_icon_name() -> String {

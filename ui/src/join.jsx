@@ -25,13 +25,18 @@ export default class Join extends React.Component {
     }
 
     onJoinNetworkKeyPress(e) {
-        if ((e.metaKey||event.altKey) && e.key === 'v') {
+        if ((e.metaKey||e.ctrlKey) && e.key === 'v') {
             e.preventDefault();
             window.pasteFromClipboard((data) => {
                 if (typeof data === 'string') {
                     this.onJoinNetworkChangedSet(data);
                 }
             });
+        }
+        if ((e.metaKey||e.ctrlKey) && e.key === 'c') {
+            e.preventDefault();
+            if (e.target.value)
+                window.copyToClipboard(e.target.value);
         }
     }
 
