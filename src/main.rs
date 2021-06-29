@@ -33,7 +33,6 @@ const MAIN_WINDOW_HEIGHT: i32 = 500;
 const WEBVIEW_WINDOW_FRAMELESS: bool = false;
 
 static mut APPLICATION_PATH: String = String::new();
-#[cfg(target_os = "macos")]
 static mut START_ON_LOGIN: bool = false;
 
 #[derive(Serialize, Deserialize)]
@@ -69,6 +68,16 @@ fn refresh_mac_start_on_login() {
     let out = Command::new("/usr/bin/osascript").arg("-e").arg("tell application \"System Events\" to get the name of every login item").output();
     unsafe {
         START_ON_LOGIN = out.map_or(false, |app_list| String::from_utf8(app_list.stdout.to_ascii_lowercase()).map_or(false, |app_list| app_list.contains("zerotier")));
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn refresh_windows_start_on_login() {
+    let hkcu = winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER);
+    let startup = hkcu.open_subkey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run");
+    let enabled = startup.map_or(false, |startup| startup.get_value::<String, &str>("ZeroTierUI").is_ok());
+    unsafe {
+        START_ON_LOGIN = enabled;
     }
 }
 
@@ -573,7 +582,7 @@ fn tray() {
                 #[cfg(target_os = "macos")] {
                     let dirty_flag2 = dirty_flag.clone();
                     menu.push(TrayMenuItem::Text {
-                        text: "Start at Login ".into(),
+                        text: "Start UI at Login ".into(),
                         checked: unsafe { START_ON_LOGIN },
                         disabled: false,
                         handler: Some(Box::new(move || {
@@ -596,6 +605,31 @@ fn tray() {
                                 let _ = Command::new("/usr/bin/osascript").arg("-e").arg(format!("tell application \"System Events\" to make login item at end with properties {{path:\"{}\", hidden:false}}", unsafe { &APPLICATION_PATH })).output();
                             }
                             refresh_mac_start_on_login();
+                            dirty_flag2.store(true, std::sync::atomic::Ordering::Relaxed);
+                        }))
+                    });
+                }
+
+                #[cfg(windows)] {
+                    let dirty_flag2 = dirty_flag.clone();
+                    menu.push(TrayMenuItem::Text {
+                        text: "Start UI at Login ".into(),
+                        checked: unsafe { START_ON_LOGIN },
+                        disabled: false,
+                        handler: Some(Box::new(move || {
+                            refresh_windows_start_on_login();
+                            let hkcu = winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER);
+                            let startup = hkcu.create_subkey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"); // opens read/write if exists
+                            if startup.is_ok() {
+                                let startup = startup.unwrap().0;
+                                if unsafe { START_ON_LOGIN } {
+                                    let _ = startup.delete_value("ZeroTierUI");
+                                } else {
+                                    let exe = String::from(std::env::current_exe().unwrap().to_str().unwrap());
+                                    let _ = startup.set_value("ZeroTierUI", &exe);
+                                }
+                            }
+                            refresh_windows_start_on_login();
                             dirty_flag2.store(true, std::sync::atomic::Ordering::Relaxed);
                         }))
                     });
@@ -680,6 +714,9 @@ fn main() {
 
     #[cfg(target_os = "macos")]
     refresh_mac_start_on_login();
+
+    #[cfg(windows)]
+    refresh_windows_start_on_login();
 
     let args: Vec<String> = std::env::args().collect();
     if args.len() >= 2 {
