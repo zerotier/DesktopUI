@@ -61,4 +61,23 @@ extern void c_windows_post_to_clipboard(const char *const data)
 	SetClipboardData(CF_TEXT, hMem);
 	CloseClipboard();
 }
+extern unsigned int c_windows_get_from_clipboard(char *buf, unsigned int len)
+{
+	if ((!buf)||(!len))
+		return 0;
+	buf[0] = 0;
+	OpenClipboard(0);
+	HANDLE hData = GetClipboardData(CF_TEXT);
+	if (hData != NULL) {
+		LPTSTR lptstr = GlobalLock(hData);
+		if (lptstr != NULL) {
+			int rl = (int)WideCharToMultiByte(CP_UTF8, 0, lptstr, -1, buf, (int)len, NULL, NULL);
+			GlobalUnlock(lptstr);
+			buf[len - 1] = 0;
+			return (rl > 0) ? (unsigned int)rl : 0;
+		}
+	}
+	CloseClipboard();
+	return 0;
+}
 #endif

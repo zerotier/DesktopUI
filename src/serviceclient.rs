@@ -143,6 +143,7 @@ impl ServiceClient {
         nw
     }
 
+    /*
     pub fn peers(&self) -> Vec<(String, Map<String, Value>)> {
         let mut pp: Vec<(String, Map<String, Value>)> = Vec::new();
         self.with(&["peer"], |nws| {
@@ -159,6 +160,7 @@ impl ServiceClient {
         pp.sort_by(|a, b| (*a).0.cmp(&((*b).0)) );
         pp
     }
+    */
 
     fn http_get(&self, path: &str) -> (u16, String) {
         if self.auth_token.is_empty() || self.base_url.is_empty() {

@@ -12,7 +12,7 @@ use std::io::Write;
 use std::cmp::Ordering;
 use std::sync::atomic::AtomicBool;
 #[allow(unused)]
-use std::os::raw::{c_int, c_char};
+use std::os::raw::{c_int, c_char, c_uint};
 #[allow(unused)]
 use std::ffi::CString;
 
@@ -52,6 +52,7 @@ pub struct CommandFromWebView {
 extern "C" {
     pub fn c_windows_is_dark_theme() -> c_int;
     pub fn c_windows_post_to_clipboard(data: *const c_char);
+    pub fn c_windows_get_from_clipboard(buf: *mut c_char) -> c_uint;
 }
 
 #[cfg(target_os = "macos")]
@@ -151,6 +152,12 @@ fn copy_to_clipboard(s: &str) {
 
 #[cfg(windows)]
 fn read_from_clipboard() -> String {
+    let mut buf = [0_u8; 1024];
+    unsafe {
+        if c_windows_get_from_clipboard(buf.as_mut_ptr().cast()) > 0 {
+            return CString::from_raw(buf.as_mut_ptr().cast()).to_str().map_or_else(|_| String::new(), |s| String::from(s));
+        }
+    }
     String::new()
 }
 
