@@ -361,6 +361,12 @@ fn tray() {
      * this binary in webview mode.
      */
 
+    let single = single_instance::SingleInstance::new(std::env::temp_dir().join("ZeroTierUI_InstanceLock").to_str().unwrap()).unwrap();
+    if !single.is_single() {
+        println!("FATAL: another instance of the ZeroTier UI is already running.");
+        std::process::exit(1);
+    }
+
     //set_thread_to_background_priority();
 
     let mut icon_name = tray_icon_name();
