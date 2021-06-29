@@ -1,5 +1,5 @@
 import React, { Fragment } from 'react';
-import { EuiPanel, EuiEmptyPrompt, EuiBasicTable, EuiBottomBar, EuiText, EuiHorizontalRule, EuiFieldText, EuiButton, EuiFlexGroup, EuiFlexItem, EuiLink } from '@elastic/eui';
+import { EuiPanel, EuiEmptyPrompt, EuiBasicTable, EuiText, EuiLink } from '@elastic/eui';
 import equal from 'fast-deep-equal';
 
 import Network from './network';
@@ -118,7 +118,7 @@ export default class NetworkList extends React.Component {
                 </EuiPanel>
             );
         } else {
-            return <div></div>;
+            return <div/>;
         }
     }
 }

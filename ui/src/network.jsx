@@ -1,5 +1,5 @@
 import React from 'react';
-import { EuiPanel, EuiFlexGroup, EuiFlexItem, EuiFormRow, EuiCheckbox, EuiListGroup, EuiFlexGrid, EuiListGroupItem, EuiText, EuiSpacer, EuiButton } from '@elastic/eui';
+import { EuiPanel, EuiFlexGroup, EuiFlexItem, EuiFormRow, EuiCheckbox, EuiLink, EuiFlexGrid, EuiText, EuiSpacer, EuiButton } from '@elastic/eui';
 
 export default class Network extends React.Component {
     constructor(props) {
@@ -19,15 +19,15 @@ export default class Network extends React.Component {
                 <EuiFlexItem>
                     <EuiFlexGrid columns={2} gutterSize="none" responsive={false}>
                         <EuiFlexItem><EuiText size="s">Name</EuiText></EuiFlexItem>
-                        <EuiFlexItem><EuiText size="s">{config.name}</EuiText></EuiFlexItem>
+                        <EuiFlexItem><EuiLink style={{color: 'inherit'}} onClick={() => { copyToClipboard(config.name) }} size="s">{config.name}</EuiLink></EuiFlexItem>
                         <EuiFlexItem><EuiText size="s">Type</EuiText></EuiFlexItem>
                         <EuiFlexItem><EuiText size="s">{(config.private) ? 'PRIVATE' : 'PUBLIC'}</EuiText></EuiFlexItem>
                         <EuiFlexItem><EuiText size="s">Status</EuiText></EuiFlexItem>
                         <EuiFlexItem><EuiText size="s">{config.status}</EuiText></EuiFlexItem>
                         <EuiFlexItem><EuiText size="s">Ethernet MAC</EuiText></EuiFlexItem>
-                        <EuiFlexItem><EuiText className="font-monospaced" size="s">{config.mac}</EuiText></EuiFlexItem>
+                        <EuiFlexItem><EuiLink style={{color: 'inherit'}} onClick={() => { copyToClipboard(config.mac) }} className="font-monospaced" size="s">{config.mac}</EuiLink></EuiFlexItem>
                         <EuiFlexItem><EuiText size="s">Virtual NIC Device</EuiText></EuiFlexItem>
-                        <EuiFlexItem><EuiText size="s">{config.portDeviceName}</EuiText></EuiFlexItem>
+                        <EuiFlexItem><EuiLink style={{color: 'inherit'}} onClick={() => { copyToClipboard(config.portDeviceName) }} size="s">{config.portDeviceName}</EuiLink></EuiFlexItem>
                         <EuiFlexItem><EuiText size="s">Virtual NIC MTU</EuiText></EuiFlexItem>
                         <EuiFlexItem><EuiText size="s">{config.mtu}</EuiText></EuiFlexItem>
                         <EuiFlexItem><EuiText size="s">Ethernet Broadcast</EuiText></EuiFlexItem>
