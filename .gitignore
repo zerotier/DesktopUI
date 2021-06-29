@@ -6,6 +6,7 @@
 *.dSym
 *.dylib
 *.lib
+*.exe
 /ui/node_modules
 /ui/.cache
 /ui/.yarn

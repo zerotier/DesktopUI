@@ -268,13 +268,18 @@ impl Tray {
 
     pub fn update(&self, icon_path: Option<&str>, menu: Vec<TrayMenuItem>) {
         let mut ip = self.icon_path.lock().unwrap();
+        let mut ip_ptr = ip.as_ptr();
         if icon_path.is_some() {
-            *ip = Pin::new(CString::new(icon_path.unwrap()).unwrap());
+            let icon_path = icon_path.unwrap();
+            if ip.to_str().map_or(false, |s| s != icon_path) {
+                *ip = Pin::new(CString::new(icon_path).unwrap());
+                ip_ptr = ip.as_ptr();
+            }
         }
 
         let (menu, c_menu_items) = Self::make_menu(menu);
         let c_tray = CTray {
-            icon: ip.as_ptr(),
+            icon: ip_ptr,
             tray_menu: c_menu_items.as_ptr(),
         };
 

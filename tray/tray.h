@@ -3,18 +3,21 @@
 
 struct tray_menu;
 
-struct tray {
+struct tray
+{
   char *icon;
   struct tray_menu *menu;
 };
 
-struct tray_menu {
+struct tray_menu
+{
   char *text;
   wchar_t *wtext; /* Windows only */
   int disabled;
   int checked;
 
   void (*cb)(struct tray_menu *);
+
   void *context;
 
   struct tray_menu *submenu;
@@ -91,155 +94,25 @@ void tray_exit() { loop_result = -1; }
 
 #elif defined(TRAY_APPKIT)
 
-#if 0
 #include <objc/objc-runtime.h>
 #include <limits.h>
 
 static id app;
-static id pool;
 static id statusBar;
 static id statusItem;
 static id statusBarButton;
-
-static id _tray_menu(struct tray_menu *m) {
-    id menu = objc_msgSend((id)objc_getClass("NSMenu"), sel_registerName("new"));
-    objc_msgSend(menu, sel_registerName("autorelease"));
-    objc_msgSend(menu, sel_registerName("setAutoenablesItems:"), false);
-
-    for (; m != NULL && m->text != NULL; m++) {
-      if (strcmp(m->text, "-") == 0) {
-        objc_msgSend(menu, sel_registerName("addItem:"), 
-          objc_msgSend((id)objc_getClass("NSMenuItem"), sel_registerName("separatorItem")));
-      } else {
-        id menuItem = objc_msgSend((id)objc_getClass("NSMenuItem"), sel_registerName("alloc"));
-        objc_msgSend(menuItem, sel_registerName("autorelease"));
-        objc_msgSend(menuItem, sel_registerName("initWithTitle:action:keyEquivalent:"),
-                  objc_msgSend((id)objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), m->text),
-                  sel_registerName("menuCallback:"),
-                  objc_msgSend((id)objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), ""));
-  
-        objc_msgSend(menuItem, sel_registerName("setEnabled:"), (m->disabled ? false : true));
-          objc_msgSend(menuItem, sel_registerName("setState:"), (m->checked ? 1 : 0));
-          objc_msgSend(menuItem, sel_registerName("setRepresentedObject:"),
-            objc_msgSend((id)objc_getClass("NSValue"), sel_registerName("valueWithPointer:"), m));
-  
-          objc_msgSend(menu, sel_registerName("addItem:"), menuItem);
-  
-          if (m->submenu != NULL) {
-            objc_msgSend(menu, sel_registerName("setSubmenu:forItem:"), _tray_menu(m->submenu), menuItem);
-      }
-    }
-  }
-
-  return menu;
-}
-
-static void menu_callback(id self, SEL cmd, id sender) {
-  struct tray_menu *m =
-      (struct tray_menu *)objc_msgSend(objc_msgSend(sender, sel_registerName("representedObject")), 
-                  sel_registerName("pointerValue"));
-
-    if (m != NULL && m->cb != NULL) {
-      m->cb(m);
-    }
-}
-
-int tray_init(struct tray *tray) {
-    pool = objc_msgSend((id)objc_getClass("NSAutoreleasePool"),
-                          sel_registerName("new"));
-  
-    objc_msgSend((id)objc_getClass("NSApplication"),
-                          sel_registerName("sharedApplication"));
-  
-    Class trayDelegateClass = objc_allocateClassPair(objc_getClass("NSObject"), "Tray", 0);
-    class_addProtocol(trayDelegateClass, objc_getProtocol("NSApplicationDelegate"));
-    class_addMethod(trayDelegateClass, sel_registerName("menuCallback:"), (IMP)menu_callback, "v@:@");
-    objc_registerClassPair(trayDelegateClass);
-
-    id trayDelegate = objc_msgSend((id)trayDelegateClass,
-                          sel_registerName("new"));
-  
-    app = objc_msgSend((id)objc_getClass("NSApplication"),
-                          sel_registerName("sharedApplication"));
-  
-    objc_msgSend(app, sel_registerName("setDelegate:"), trayDelegate);
-
-    statusBar = objc_msgSend((id)objc_getClass("NSStatusBar"),
-                          sel_registerName("systemStatusBar"));
-
-    statusItem = objc_msgSend(statusBar, sel_registerName("statusItemWithLength:"), -1.0);
-
-    objc_msgSend(statusItem, sel_registerName("retain"));
-    objc_msgSend(statusItem, sel_registerName("setHighlightMode:"), true);
-    statusBarButton = objc_msgSend(statusItem, sel_registerName("button"));
-    tray_update(tray);
-    objc_msgSend(app, sel_registerName("activateIgnoringOtherApps:"), true);
-    return 0;
-}
-
-int tray_loop(int blocking) {
-    id until = (blocking ? 
-      objc_msgSend((id)objc_getClass("NSDate"), sel_registerName("now")) :
-      objc_msgSend((id)objc_getClass("NSDate"), sel_registerName("distantPast")));
-    if (blocking) {
-    	until = objc_msgSend(until, sel_registerName("dateByAddingTimeInterval:"), 2.0);
-    }
-    id event = objc_msgSend(app, sel_registerName("nextEventMatchingMask:untilDate:inMode:dequeue:"), 
-                ULONG_MAX, 
-                until, 
-                objc_msgSend((id)objc_getClass("NSString"), 
-                  sel_registerName("stringWithUTF8String:"), 
-                  "kCFRunLoopDefaultMode"), 
-                true);
-    if (event) {
-      objc_msgSend(app, sel_registerName("sendEvent:"), event);
-    }
-    return 0;
-}
-
-void tray_update(struct tray *tray) {
-	if (tray->icon) {
-	  objc_msgSend(
-      statusBarButton,
-      sel_registerName("setImage:"),
-	    objc_msgSend(
-        (id)objc_getClass("NSImage"),
-        sel_registerName("imageNamed:"),
-	      objc_msgSend(
-          (id)objc_getClass("NSString"),
-          sel_registerName("stringWithUTF8String:"),
-          tray->icon
-        ),
-        sel_registerName("isTemplate:"),
-        true
-      )
-    );
-	}
-
-  objc_msgSend(statusItem, sel_registerName("setMenu:"), _tray_menu(tray->menu));
-}
-
-void tray_exit() { objc_msgSend(app, sel_registerName("terminate:"), app); }
-#endif
-
-#include <objc/objc-runtime.h>
-#include <limits.h>
-
-static id app;
-static id pool;
-static id statusBar;
-static id statusItem;
-static id statusBarButton;
+static id kCFRunLoopDefaultMode;
 
 static id _tray_menu(struct tray_menu *m) {
     id menu = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSMenu"), sel_registerName("new"));
-    ((void(*)(id, SEL))objc_msgSend)(menu, sel_registerName("autorelease"));
+    menu = ((id(*)(id, SEL))objc_msgSend)(menu, sel_registerName("autorelease"));
     ((void(*)(id, SEL, bool))objc_msgSend)(menu, sel_registerName("setAutoenablesItems:"), false);
 
     for (; m != NULL && m->text != NULL; m++) {
       if (strcmp(m->text, "-") == 0) {
-        ((void(*)(id, SEL, id))objc_msgSend)(menu, sel_registerName("addItem:"),
-          ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSMenuItem"), sel_registerName("separatorItem")));
+          id menuItem = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSMenuItem"), sel_registerName("separatorItem"));
+          menuItem = ((id(*)(id, SEL))objc_msgSend)(menuItem, sel_registerName("autorelease"));
+          ((void(*)(id, SEL, id))objc_msgSend)(menu, sel_registerName("addItem:"), menuItem);
       } else {
         id menuItem = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSMenuItem"), sel_registerName("alloc"));
         ((void(*)(id, SEL))objc_msgSend)(menuItem, sel_registerName("autorelease"));
@@ -273,9 +146,9 @@ static void menu_callback(id self, SEL cmd, id sender) {
 }
 
 int tray_init(struct tray *tray) {
-
-    pool = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSAutoreleasePool"),
-                          sel_registerName("new"));
+    kCFRunLoopDefaultMode = ((id(*)(id, SEL, char*))objc_msgSend)((id)objc_getClass("NSString"),
+                  sel_registerName("stringWithUTF8String:"),
+                  "kCFRunLoopDefaultMode");
 
     ((void(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSApplication"),
                           sel_registerName("sharedApplication"));
@@ -298,41 +171,49 @@ int tray_init(struct tray *tray) {
 
     statusItem = ((id(*)(id, SEL, double))objc_msgSend)(statusBar, sel_registerName("statusItemWithLength:"), -1.0);
 
-    ((void(*)(id, SEL))objc_msgSend)(statusItem, sel_registerName("retain"));
+    /*((void(*)(id, SEL))objc_msgSend)(statusItem, sel_registerName("retain"));*/
     ((void(*)(id, SEL, bool))objc_msgSend)(statusItem, sel_registerName("setHighlightMode:"), true);
     statusBarButton = ((id(*)(id, SEL))objc_msgSend)(statusItem, sel_registerName("button"));
     tray_update(tray);
-    ((void(*)(id, SEL, bool))objc_msgSend)(app, sel_registerName("activateIgnoringOtherApps:"), true);
+    /*((void(*)(id, SEL, bool))objc_msgSend)(app, sel_registerName("activateIgnoringOtherApps:"), true);*/
+
     return 0;
 }
 
 int tray_loop(int blocking) {
+    id pool = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSAutoreleasePool"),
+                          sel_registerName("new"));
+
     id until = (blocking ?
       ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSDate"), sel_registerName("now")) :
       ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSDate"), sel_registerName("distantPast")));
     if (blocking) {
-    	until = ((id(*)(id, SEL, double))objc_msgSend)(until, sel_registerName("dateByAddingTimeInterval:"), 2.0);
+        until = ((id(*)(id, SEL, double))objc_msgSend)(until, sel_registerName("dateByAddingTimeInterval:"), 2.0);
     }
 
     id event = ((id(*)(id, SEL, unsigned long, id, id, bool))objc_msgSend)(app, sel_registerName("nextEventMatchingMask:untilDate:inMode:dequeue:"),
                 ULONG_MAX,
                 until,
-                ((id(*)(id, SEL, char*))objc_msgSend)((id)objc_getClass("NSString"),
-                  sel_registerName("stringWithUTF8String:"),
-                  "kCFRunLoopDefaultMode"),
+                kCFRunLoopDefaultMode,
                 true);
     if (event) {
       ((void(*)(id, SEL, id))objc_msgSend)(app, sel_registerName("sendEvent:"), event);
     }
+    if (blocking) {
+        ((id(*)(id, SEL))objc_msgSend)(until, sel_registerName("release"));
+    }
+
+    ((void(*)(id, SEL))objc_msgSend)(pool, sel_registerName("drain"));
     return 0;
 }
 
 void tray_update(struct tray *tray) {
-  ((void(*)(id, SEL, id))objc_msgSend)(statusBarButton, sel_registerName("setImage:"),
-    ((id(*)(id, SEL, id))objc_msgSend)((id)objc_getClass("NSImage"), sel_registerName("imageNamed:"),
-      ((id(*)(id, SEL, char *))objc_msgSend)((id)objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), tray->icon)));
-
-  ((void(*)(id, SEL, id))objc_msgSend)(statusItem, sel_registerName("setMenu:"), _tray_menu(tray->menu));
+    if (tray->icon) {
+        ((void(*)(id, SEL, id))objc_msgSend)(statusBarButton, sel_registerName("setImage:"),
+            ((id(*)(id, SEL, id))objc_msgSend)((id)objc_getClass("NSImage"), sel_registerName("imageNamed:"),
+            ((id(*)(id, SEL, char *))objc_msgSend)((id)objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), tray->icon)));
+    }
+    ((void(*)(id, SEL, id))objc_msgSend)(statusItem, sel_registerName("setMenu:"), _tray_menu(tray->menu));
 }
 
 void tray_exit() { ((void(*)(id, SEL, id))objc_msgSend)(app, sel_registerName("terminate:"), app); }
@@ -504,10 +385,18 @@ void tray_exit() {
   UnregisterClass(WC_TRAY_CLASS_NAME, GetModuleHandle(NULL));
 }
 #else
-int tray_init(struct tray *tray) { return -1; }
-int tray_loop(int blocking) { return -1; }
-void tray_update(struct tray *tray) {}
+
+int tray_init(struct tray *tray)
+{ return -1; }
+
+int tray_loop(int blocking)
+{ return -1; }
+
+void tray_update(struct tray *tray)
+{}
+
 void tray_exit();
+
 #endif
 
 #endif /* TRAY_H */
