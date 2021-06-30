@@ -112,7 +112,12 @@ fn tray_icon_name() -> &'static str {
 fn tray_icon_name() -> String {
     let icon_path = std::env::temp_dir().join("zerotier-tray-icon.ico");
     if std::fs::metadata(&icon_path).is_err() {
-        let _ = std::fs::write(&icon_path, include_bytes!("../icon.ico"));
+        #[cfg(windows)] {
+            let _ = std::fs::write(&icon_path, include_bytes!("../icon.ico"));
+        }
+        #[cfg(not(windows))] {
+            let _ = std::fs::write(&icon_path, include_bytes!("../icon.png"));
+        }
     }
     icon_path.to_str().unwrap().into()
 }
