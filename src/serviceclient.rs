@@ -15,6 +15,7 @@ pub struct ServiceClient {
     auth_token: String,
     port: u16,
     base_url: String,
+    saved_networks: serde_json::Map<String, Value>,
     state: Map<String, Value>,
     state_crc64: HashMap<String, u64>,
     post_queue: LinkedList<(String, String)>,
@@ -72,6 +73,11 @@ impl ServiceClient {
             auth_token: String::new(),
             port: 0,
             base_url: String::new(),
+            saved_networks: std::fs::read(unsafe { crate::NETWORK_CACHE_PATH.as_str() }).map_or_else(|_| {
+                serde_json::Map::new()
+            }, |j| {
+                serde_json::from_slice(j.as_slice()).map_or_else(|_| serde_json::Map::new(), |r| r)
+            }),
             state: Map::new(),
             state_crc64: HashMap::new(),
             post_queue: LinkedList::new(),
@@ -139,6 +145,27 @@ impl ServiceClient {
                 });
             }));
         });
+        nw.sort_by(|a, b| (*a).0.cmp(&((*b).0)) );
+        nw
+    }
+
+    pub fn saved_networks(&self) -> Vec<(String, String)> {
+        let mut nw: Vec<(String, String)> = Vec::new();
+        for kv in self.saved_networks.iter() {
+            let _ = kv.1.as_object().map(|n| {
+                n.get("id").map(|id| {
+                    id.as_str().map(|id| {
+                        if id.len() == 16 {
+                            nw.push((id.into(), n.get("name").map_or_else(|| {
+                                String::new()
+                            }, |name| {
+                                name.as_str().unwrap_or("").into()
+                            })));
+                        }
+                    })
+                })
+            });
+        }
         nw.sort_by(|a, b| (*a).0.cmp(&((*b).0)) );
         nw
     }
@@ -263,10 +290,28 @@ impl ServiceClient {
         }
     }
 
+    pub fn remember_network(&mut self, id: String, name: String) {
+        let mut n: serde_json::Map<String, Value> = serde_json::Map::new();
+        n.insert("id".into(), Value::from(id.clone()));
+        n.insert("name".into(), Value::from(name));
+        self.saved_networks.insert(id, Value::from(n));
+        self.state.insert("saved_networks".into(), serde_json::Value::from(self.saved_networks.clone()));
+        let _ = serde_json::to_vec(&self.saved_networks).map(|json| std::fs::write(unsafe { crate::NETWORK_CACHE_PATH.as_str() }, &json));
+        self.dirty.store(true, Ordering::Relaxed);
+    }
+
+    pub fn forget_network(&mut self, id: &String) {
+        self.saved_networks.remove(id);
+        self.state.insert("saved_networks".into(), serde_json::Value::from(self.saved_networks.clone()));
+        let _ = serde_json::to_vec(&self.saved_networks).map(|json| std::fs::write(unsafe { crate::NETWORK_CACHE_PATH.as_str() }, &json));
+        self.dirty.store(true, Ordering::Relaxed);
+    }
+
     /// Submit queued posts and get current service state.
     pub fn sync(&mut self) {
         if !self.is_initialized() || !self.is_online() {
             self.sync_client_config();
+            self.state.insert("saved_networks".into(), serde_json::Value::from(self.saved_networks.clone()));
         }
         if self.is_initialized() {
             for endpoint in self.refresh_base_paths.iter() {

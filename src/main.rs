@@ -8,20 +8,22 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Mutex, Arc, MutexGuard};
 use std::time::Duration;
 #[allow(unused)]
-use std::io::Write;
+use std::io::{Read, Write};
 use std::cmp::Ordering;
 use std::sync::atomic::AtomicBool;
 #[allow(unused)]
 use std::os::raw::{c_int, c_char, c_uint};
 #[allow(unused)]
 use std::ffi::CString;
+#[allow(unused)]
+use std::collections::HashMap;
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::tray::*;
 use crate::serviceclient::ServiceClient;
-use std::io::Read;
 
 /// The string in the HTML blob to replace with the right CSS for this platform and light/dark mode.
 /// It's a bit weird so web app bundlers don't optimize it out.
@@ -32,8 +34,10 @@ const MAIN_WINDOW_HEIGHT: i32 = 500;
 
 const WEBVIEW_WINDOW_FRAMELESS: bool = false;
 
-static mut APPLICATION_PATH: String = String::new();
-static mut START_ON_LOGIN: bool = false;
+pub(crate) static mut APPLICATION_PATH: String = String::new();
+pub(crate) static mut APPLICATION_HOME: String = String::new();
+pub(crate) static mut NETWORK_CACHE_PATH: String = String::new();
+pub(crate) static mut START_ON_LOGIN: bool = false;
 
 #[derive(Serialize, Deserialize)]
 pub struct CommandFromWebView {
@@ -591,6 +595,39 @@ fn tray() {
 
                 menu.push(TrayMenuItem::Separator);
 
+                let saved_networks = client.lock().unwrap().saved_networks();
+                if !saved_networks.is_empty() {
+                    let mut saved_networks_empty = true;
+                    for nw in saved_networks.iter() {
+                        if !networks.iter().any(|x| (*x).0.eq(&(*nw).0)) {
+                            let (client2, client3) = (client.clone(), client.clone());
+                            let (nwid2, nwid3) = ((*nw).0.clone(), (*nw).0.clone());
+                            menu.push(TrayMenuItem::Submenu {
+                                text: format!("{}\t{}  ", (*nw).0, (*nw).1),
+                                checked: false,
+                                items: vec![
+                                    TrayMenuItem::Text {
+                                        text: "Reconnect".into(),
+                                        checked: false,
+                                        disabled: false,
+                                        handler: Some(Box::new(move || client2.lock().unwrap().enqueue_post(format!("network/{}", nwid2), "{}".into()))),
+                                    },
+                                    TrayMenuItem::Text {
+                                        text: "Forget".into(),
+                                        checked: false,
+                                        disabled: false,
+                                        handler: Some(Box::new(move || client3.lock().unwrap().forget_network(&nwid3))),
+                                    }
+                                ],
+                            });
+                            saved_networks_empty = false;
+                        }
+                    }
+                    if !saved_networks_empty {
+                        menu.push(TrayMenuItem::Separator);
+                    }
+                }
+
                 #[cfg(target_os = "macos")] {
                     let dirty_flag2 = dirty_flag.clone();
                     menu.push(TrayMenuItem::Text {
@@ -704,31 +741,119 @@ fn tray() {
     }
 }
 
-fn main() {
-    unsafe {
-        #[cfg(target_os = "macos")] {
-            let p = std::env::current_exe().unwrap();
-            for pp in p.ancestors() {
-                let pps = pp.to_str().unwrap();
-                if pps.ends_with(".app") {
-                    APPLICATION_PATH = String::from(pps);
-                    break;
+/// Quick and dirty recursive parser for decoded plist files from the old GUI on Mac... this is just for transition.
+#[cfg(target_os = "macos")]
+fn parse_mac_network_plist(base_array: &Vec<plist::Value>, data: &plist::Value, networks: &mut HashMap<String, String>, nwid: &mut Option<u64>, name: &mut Option<String>) {
+    if nwid.as_ref().map_or(false, |x| *x != 0) && name.as_ref().map_or(false, |x| !x.eq("\0\0\0\0")) {
+        networks.insert(format!("{:0>16x}", nwid.take().unwrap()), name.take().unwrap());
+    }
+    match data {
+        plist::Value::Array(arr) => {
+            for v in arr.iter() {
+                parse_mac_network_plist(base_array, v, networks, nwid, name);
+            }
+        },
+        plist::Value::Dictionary(dict) => {
+            for kv in dict.iter() {
+                if kv.0.eq("nwid") {
+                    nwid.replace(0);
+                    parse_mac_network_plist(base_array, kv.1, networks, nwid, name);
+                } else if kv.0.eq("name") {
+                    name.replace("\0\0\0\0".into());
+                    parse_mac_network_plist(base_array, kv.1, networks, nwid, name);
                 }
             }
+        },
+        plist::Value::String(s) => {
+            if name.as_ref().map_or(false, |x| x.eq("\0\0\0\0")) {
+                name.replace(s.clone());
+            }
+        },
+        plist::Value::Integer(i) => {
+            if nwid.as_ref().map_or(false, |x| *x == 0) {
+                nwid.replace(i.as_unsigned().unwrap_or(0));
+            }
+        },
+        plist::Value::Uid(uid) => {
+            let _ = base_array.get(uid.get() as usize).map(|v| parse_mac_network_plist(base_array, v, networks, nwid, name));
+        },
+        _ => {}
+    }
+}
+
+fn main() {
+    #[cfg(target_os = "macos")] {
+        let p = std::env::current_exe().unwrap();
+        for pp in p.ancestors() {
+            let pps = pp.to_str().unwrap();
+            if pps.ends_with(".app") {
+                unsafe {
+                    APPLICATION_PATH = String::from(pps);
+                }
+                break;
+            }
+        }
+        unsafe {
             if APPLICATION_PATH.is_empty() {
                 APPLICATION_PATH = String::from(p.to_str().unwrap());
             }
+            APPLICATION_HOME = format!("{}/Library/Application Support/ZeroTier", std::env::var("HOME").unwrap_or(String::from("/tmp")));
         }
-        #[cfg(not(target_os = "macos"))] {
+        refresh_mac_start_on_login();
+    }
+
+    #[cfg(not(target_os = "macos"))] {
+        unsafe {
             APPLICATION_PATH = String::from(std::env::current_exe().unwrap().to_str().unwrap());
+        }
+        #[cfg(windows)] {
+            refresh_windows_start_on_login();
+            unsafe {
+                APPLICATION_HOME = format!("{}\\AppData\\Local\\ZeroTier", std::env::var("USERPROFILE").unwrap_or(std::env::var("HOMEPATH").unwrap_or(String::from("C:\\"))));
+            }
+        }
+        #[cfg(not(windows))] {
+            unsafe {
+                let _ = std::env::var("HOME").map_or_else(|_| {
+                    APPLICATION_HOME = String::from("/tmp/zerotier_ui");
+                }, |home_dir| {
+                    APPLICATION_HOME = format!("{}/.zerotier_ui", home_dir);
+                });
+            }
         }
     }
 
-    #[cfg(target_os = "macos")]
-    refresh_mac_start_on_login();
+    unsafe {
+        let _ = std::fs::create_dir_all(APPLICATION_HOME.as_str());
+        NETWORK_CACHE_PATH = String::from(Path::new(&APPLICATION_HOME).join("saved_networks.json").to_str().unwrap());
+    }
 
-    #[cfg(windows)]
-    refresh_windows_start_on_login();
+    #[cfg(target_os = "macos")] {
+        if !Path::new(unsafe { NETWORK_CACHE_PATH.as_str() }).is_file() {
+            let mut nwid: Option<u64> = None;
+            let mut name: Option<String> = None;
+            let mut networks: HashMap<String, String> = HashMap::new();
+            let _ = plist::Value::from_file(format!("{}/One/networkinfo.dat", unsafe { &APPLICATION_HOME })).map(|old_plist| {
+                old_plist.as_dictionary().map(|old_plist| {
+                    old_plist.get("$objects").map(|old_plist| {
+                        old_plist.as_array().map(|old_plist| {
+                            for v in old_plist.iter() {
+                                parse_mac_network_plist(old_plist, v, &mut networks, &mut nwid, &mut name);
+                            }
+                        });
+                    });
+                });
+            });
+            let mut networks_json: HashMap<String, HashMap<String, String>> = HashMap::new();
+            for kv in networks.iter() {
+                let mut nw: HashMap<String, String> = HashMap::new();
+                nw.insert(String::from("id"), kv.0.clone());
+                nw.insert(String::from("name"), kv.1.clone());
+                networks_json.insert(kv.0.clone(), nw);
+            }
+            let _ = std::fs::write(unsafe { NETWORK_CACHE_PATH.as_str() }, serde_json::to_vec(&networks_json).unwrap());
+        }
+    }
 
     let args: Vec<String> = std::env::args().collect();
     if args.len() >= 2 {
