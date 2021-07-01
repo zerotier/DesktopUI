@@ -4,6 +4,7 @@ use serde_json::{Map, Value};
 use std::cell::Cell;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::path::Path;
 
 const QUERY_TIMEOUT_MS: u64 = 2000;
 
@@ -24,44 +25,51 @@ pub struct ServiceClient {
     online: bool,
 }
 
-#[cfg(target_os = "macos")]
-const ZT_SERVICE_GLOBAL_ROOT: &'static str = "/Library/Application Support/ZeroTier/One/";
-
-#[cfg(windows)]
-const ZT_SERVICE_GLOBAL_ROOT: &'static str = "\\ProgramData\\ZeroTier\\One\\";
-
 pub fn get_auth_token_and_port() -> Option<(String, u16)> {
-    let port = std::fs::read_to_string(format!("{}zerotier-one.port", ZT_SERVICE_GLOBAL_ROOT).as_str()).map_or(9993_u16, |port| u16::from_str_radix(port.as_str(), 10).unwrap_or(9993_u16) );
+    let mut port = 0_u16;
+    let mut token = String::new();
 
-    #[cfg(windows)]
-    let home = std::env::var("USERPROFILE");
-    #[cfg(not(windows))]
-    let home = std::env::var("HOME");
-
-    if home.is_ok() {
-        let mut p = home.unwrap();
-
-        #[cfg(target_os = "macos")]
-        p.push_str(format!("/Library/Application Support/ZeroTier/One/authtoken.secret").as_str());
-
-        #[cfg(windows)]
-        p.push_str(format!("\\AppData\\Local\\ZeroTier\\One\\authtoken.secret").as_str());
-
-        #[cfg(all(unix, not(target_os = "macos")))]
-        p.push_str(format!("/.zeroTierOneAuthToken").as_str());
-
-        let token = std::fs::read_to_string(p);
-        if token.is_ok() {
-            return Some((token.unwrap().trim().into(), port));
+    for p in [crate::GLOBAL_SERVICE_HOME_V2, crate::GLOBAL_SERVICE_HOME_V1] {
+        let p = Path::new(p);
+        for port_path in [p.join("zerotier.port"), p.join("zerotier-one.port")] {
+            let _ = std::fs::read(port_path).map(|pp| String::from_utf8(pp).map(|pp| u16::from_str_radix(pp.trim(), 10).map(|pp| port = pp)));
+            if port != 0 {
+                break;
+            }
         }
+        let _ = std::fs::read(p.join("authtoken.secret")).map(|tok| String::from_utf8(tok).map(|tok| token = tok.trim().into()));
     }
 
-    let token = std::fs::read_to_string(format!("{}authtoken.secret", ZT_SERVICE_GLOBAL_ROOT).as_str());
-    if token.is_ok() {
-        return Some((token.unwrap().trim().into(), port));
+    if port == 0 {
+        port = 9993;
     }
 
-    None
+    if token.is_empty() {
+        #[cfg(windows)]
+        let mut home = std::env::var("USERPROFILE");
+
+        #[cfg(not(windows))]
+        let mut home = std::env::var("HOME");
+
+        let _ = home.map(|mut p| {
+            #[cfg(target_os = "macos")]
+            p.push_str("/Library/Application Support/ZeroTier/One/authtoken.secret");
+
+            #[cfg(windows)]
+            p.push_str("\\AppData\\Local\\ZeroTier\\One\\authtoken.secret");
+
+            #[cfg(all(unix, not(target_os = "macos")))]
+            p.push_str("/.zeroTierOneAuthToken");
+
+            let _ = std::fs::read(p).map(|tok| String::from_utf8(tok).map(|tok| token = tok.trim().into()));
+        });
+    }
+
+    if token.is_empty() {
+        None
+    } else {
+        (token, port)
+    }
 }
 
 impl ServiceClient {

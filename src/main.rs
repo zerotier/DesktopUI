@@ -39,6 +39,30 @@ pub(crate) static mut APPLICATION_HOME: String = String::new();
 pub(crate) static mut NETWORK_CACHE_PATH: String = String::new();
 pub(crate) static mut START_ON_LOGIN: bool = false;
 
+#[cfg(target_os = "macos")]
+pub(crate) const GLOBAL_SERVICE_HOME_V2: &'static str = "/Library/Application Support/ZeroTier";
+
+#[cfg(windows)]
+pub(crate) const GLOBAL_SERVICE_HOME_V2: &'static str = "\\ProgramData\\ZeroTier";
+
+#[cfg(any(target_os = "freebsd", target_os = "dragonfly", target_os = "openbsd", target_os = "netbsd"))]
+pub(crate) const GLOBAL_SERVICE_HOME_V2: &'static str = "/var/db/zerotier";
+
+#[cfg(target_os = "linux")]
+pub(crate) const GLOBAL_SERVICE_HOME_V2: &'static str = "/var/lib/zerotier";
+
+#[cfg(target_os = "macos")]
+pub(crate) const GLOBAL_SERVICE_HOME_V1: &'static str = "/Library/Application Support/ZeroTier/One";
+
+#[cfg(windows)]
+pub(crate) const GLOBAL_SERVICE_HOME_V1: &'static str = "\\ProgramData\\ZeroTier\\One";
+
+#[cfg(any(target_os = "freebsd", target_os = "dragonfly", target_os = "openbsd", target_os = "netbsd"))]
+pub(crate) const GLOBAL_SERVICE_HOME_V1: &'static str = "/var/db/zerotier-one";
+
+#[cfg(target_os = "linux")]
+pub(crate) const GLOBAL_SERVICE_HOME_V1: &'static str = "/var/lib/zerotier-one";
+
 #[derive(Serialize, Deserialize)]
 pub struct CommandFromWebView {
     #[serde(default)]
@@ -829,6 +853,8 @@ fn main() {
     }
 
     #[cfg(target_os = "macos")] {
+        // If saved_networks.json does not exist, see if there's an old networkinfo.dat from the old ObjC
+        // Mac GUI and if so migrate the list of networks to the new app.
         if !Path::new(unsafe { NETWORK_CACHE_PATH.as_str() }).is_file() {
             let mut nwid: Option<u64> = None;
             let mut name: Option<String> = None;
@@ -858,11 +884,16 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() >= 2 {
         match args[1].as_str() {
-            "window" => {
+            "window" => { // invoked to open webview GUI windows
                 if args.len() >= 3 {
                     window(&args);
                 } else {
                     println!("FATAL: window requires arguments: ui_mode [width hint] [height hint]");
+                }
+            },
+            "copy" => { // invoked with elevated privileges to copy authtoken.secret on some platforms
+                if args.len() >= 4 {
+                    std::process::exit(std::fs::copy(&args[2], &args[3]).is_err() as i32);
                 }
             },
             _ => println!("FATAL: unrecognized mode: {}", args[1])
