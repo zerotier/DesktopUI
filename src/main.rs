@@ -16,7 +16,7 @@ use std::os::raw::{c_int, c_char, c_uint};
 #[allow(unused)]
 use std::ffi::CString;
 #[allow(unused)]
-use std::collections::HashMap;
+use std::collections::{HashMap, LinkedList};
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -226,35 +226,6 @@ fn get_web_ui_blob(dark: bool) -> String {
 
 /*******************************************************************************************************************/
 
-fn check_window_subprocess_exit(w: &mut MutexGuard<Option<Child>>) {
-    if w.is_some() {
-        let res = w.as_mut().unwrap().try_wait();
-        if res.is_ok() && res.ok().unwrap().is_some() {
-            let _ = w.take();
-        }
-    }
-}
-
-fn kill_window_subprocess(mut w: MutexGuard<Option<Child>>) {
-    check_window_subprocess_exit(&mut w);
-    if w.is_some() {
-        let _ = w.as_mut().unwrap().kill();
-    }
-}
-
-fn open_window_subprocess(mut w: MutexGuard<Option<Child>>, ui_mode: &str, width: i32, height: i32) {
-    check_window_subprocess_exit(&mut w);
-    if w.is_none() {
-        let ch = Command::new(std::env::current_exe().unwrap()).arg("window").arg(ui_mode).arg(width.to_string()).arg(height.to_string()).stdin(Stdio::piped()).spawn();
-        if ch.is_ok() {
-            let _ = w.replace(ch.unwrap());
-        }
-    } else {
-        // Sending 'r' causes subprocess to raise the window at the first opportunity.
-        let _ = w.as_mut().unwrap().stdin.as_mut().unwrap().write_all(&['r' as u8]);
-    }
-}
-
 /// This is called once per process to start the client I/O loop.
 fn start_client(refresh_base_paths: Vec<&'static str>, tick_period_ms: u64, refresh_period_ticks: u64) -> (Arc<Mutex<ServiceClient>>, Arc<AtomicBool>) {
     let (mut client, dirty_flag) = ServiceClient::new(refresh_base_paths);
@@ -279,6 +250,50 @@ fn start_client(refresh_base_paths: Vec<&'static str>, tick_period_ms: u64, refr
     });
 
     (client, dirty_flag)
+}
+
+/*******************************************************************************************************************/
+
+// Returns true if the process has exited or is not started.
+fn check_window_subprocess_exit(w: &mut MutexGuard<Option<Child>>) -> bool {
+    if w.is_some() {
+        let res = w.as_mut().unwrap().try_wait();
+        if res.is_ok() && res.ok().unwrap().is_some() {
+            let _ = w.take();
+            true
+        } else {
+            false
+        }
+    } else {
+        true
+    }
+}
+
+fn kill_window_subprocess(mut w: MutexGuard<Option<Child>>) {
+    check_window_subprocess_exit(&mut w);
+    if w.is_some() {
+        let _ = w.as_mut().unwrap().kill();
+    }
+}
+
+fn open_window_subprocess(mut w: MutexGuard<Option<Child>>, ui_mode: &str, width: i32, height: i32, param: &str) {
+    check_window_subprocess_exit(&mut w);
+    if w.is_none() {
+        if ui_mode == "auth" {
+            let ch = Command::new(std::env::current_exe().unwrap()).arg("auth").arg(width.to_string()).arg(height.to_string()).arg(param).stdin(Stdio::piped()).spawn();
+            if ch.is_ok() {
+                let _ = w.replace(ch.unwrap());
+            }
+        } else {
+            let ch = Command::new(std::env::current_exe().unwrap()).arg("window").arg(ui_mode).arg(width.to_string()).arg(height.to_string()).arg(param).stdin(Stdio::piped()).spawn();
+            if ch.is_ok() {
+                let _ = w.replace(ch.unwrap());
+            }
+        }
+    } else {
+        // Sending 'r' causes subprocess to raise the window at the first opportunity.
+        let _ = w.as_mut().unwrap().stdin.as_mut().unwrap().write_all(&['r' as u8]);
+    }
 }
 
 fn window(args: &Vec<String>) {
@@ -400,19 +415,45 @@ fn tray() {
         std::process::exit(1);
     }
 
+    // On Apple Silicon Macs this tells the OS to use efficiency cores for the tray app. Perceptible performance is still great.
+    // Don't do it on Intel Macs because it seems to make stuff really slow with no power use benefit.
     #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
     set_thread_to_background_priority();
 
+    // Automatically populated with a path to the right icon for e.g. light/dark mode.
     let mut icon_name = tray_icon_name();
-    let mut tray: Option<Tray> = None;
+
+    // Set to true from anywhere to cause app to exit on next event loop.
     let exit_flag = Arc::new(AtomicBool::new(false));
 
     let (client, dirty_flag) = start_client(vec!["status", "network"], 500, 10);
 
     let main_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
     let about_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
+    let mut auth_windows: HashMap<String, Mutex<Option<Child>>> = HashMap::new();
 
+    let mut tray: Option<Tray> = None;
     while !exit_flag.load(std::sync::atomic::Ordering::Relaxed) {
+        let auth_needed_networks = client.lock().unwrap().sso_auth_needed_networks();
+        for network in auth_needed_networks.iter() {
+            if !auth_windows.contains_key(&(*network).0) {
+                auth_windows.insert((*network).0.clone(), Mutex::new(None));
+            }
+            open_window_subprocess(auth_windows.get_mut(&(*network).0).unwrap().lock().unwrap(), "auth", 1024, 768, (*network).1.as_str());
+        }
+        drop(auth_needed_networks);
+        let mut auth_windows_to_remove: Vec<String> = Vec::new();
+        for w in auth_windows.iter() {
+            let mut ww = w.1.lock().unwrap();
+            if check_window_subprocess_exit(&mut ww) {
+                auth_windows_to_remove.push(w.0.clone());
+            }
+        }
+        for w in auth_windows_to_remove.iter() {
+            auth_windows.remove(w);
+        }
+        drop(auth_windows_to_remove);
+
         if dirty_flag.swap(false, std::sync::atomic::Ordering::Relaxed) {
             let (main_window2, main_window3) = (main_window.clone(), main_window.clone());
             let (about_window2, about_window3) = (about_window.clone(), about_window.clone());
@@ -435,7 +476,7 @@ fn tray() {
                     checked: false,
                     disabled: false,
                     handler: Some(Box::new(move || {
-                        open_window_subprocess(main_window2.lock().unwrap(), "Main", MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT);
+                        open_window_subprocess(main_window2.lock().unwrap(), "Main", MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT, "");
                     })),
                 });
 
@@ -713,7 +754,7 @@ fn tray() {
                     checked: false,
                     disabled: false,
                     handler: Some(Box::new(move || {
-                        open_window_subprocess(about_window2.lock().unwrap(), "About", 800, 600);
+                        open_window_subprocess(about_window2.lock().unwrap(), "About", 800, 600, "");
                     }))
                 });
 
@@ -755,6 +796,8 @@ fn tray() {
             }
         }
 
+        // Execute next tray event loop, which will (as per modifications made to tray.h) return after a second or two if
+        // nothing happens. This allows periodic polling for changes to happen in this code.
         if !tray.as_ref().map_or(false, |tr| tr.poll()) {
             break;
         }
@@ -764,6 +807,8 @@ fn tray() {
         kill_window_subprocess(w.lock().unwrap());
     }
 }
+
+/*******************************************************************************************************************/
 
 /// Quick and dirty recursive parser for decoded plist files from the old GUI on Mac... this is just for transition.
 #[cfg(target_os = "macos")]
@@ -889,6 +934,23 @@ fn main() {
                     window(&args);
                 } else {
                     println!("FATAL: window requires arguments: ui_mode [width hint] [height hint]");
+                }
+            },
+            "auth" => { // invoked to open a window to an SSO login endpoint
+                if args.len() >= 5 {
+                    let _ = web_view::builder()
+                        .title("Network Login") // TODO add network ID and name
+                        .content(web_view::Content::Url(args[4].as_str()))
+                        .size(i32::from_str_radix(args[2].as_str(), 10).unwrap_or(1024), i32::from_str_radix(args[3].as_str(), 10).unwrap_or(768))
+                        .visible(true)
+                        .frameless(false)
+                        .debug(true)
+                        .user_data(())
+                        .invoke_handler(move |_, _| Ok(()))
+                        .run()
+                        .unwrap();
+                } else {
+                    println!("FATAL: window requires arguments: ui_mode [width hint] [height hint] [url]");
                 }
             },
             "copy" => { // invoked with elevated privileges to copy authtoken.secret on some platforms

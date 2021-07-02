@@ -1,10 +1,11 @@
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use std::collections::{LinkedList, HashMap};
-use serde_json::{Map, Value};
 use std::cell::Cell;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::path::Path;
+
+use serde_json::{Map, Value};
 
 const QUERY_TIMEOUT_MS: u64 = 2000;
 
@@ -25,10 +26,16 @@ pub struct ServiceClient {
     online: bool,
 }
 
+pub fn ms_since_epoch() -> i64 {
+    SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map_or(0, |t| t.as_millis() as i64)
+}
+
 pub fn get_auth_token_and_port() -> Option<(String, u16)> {
     let mut port = 0_u16;
     let mut token = String::new();
 
+    // On newer versions the auth token will have permissions set so local system 'admins' can read it.
+    // The port file also contains the current local TCP port for the service admin API.
     for p in [crate::GLOBAL_SERVICE_HOME_V2, crate::GLOBAL_SERVICE_HOME_V1] {
         let p = Path::new(p);
         for port_path in [p.join("zerotier.port"), p.join("zerotier-one.port")] {
@@ -44,12 +51,13 @@ pub fn get_auth_token_and_port() -> Option<(String, u16)> {
         port = 9993;
     }
 
+    // Try to read legacy local locations of the auth token in case we're running an older ZT version.
     if token.is_empty() {
         #[cfg(windows)]
         let mut home = std::env::var("USERPROFILE");
 
         #[cfg(not(windows))]
-        let mut home = std::env::var("HOME");
+        let home = std::env::var("HOME");
 
         let _ = home.map(|mut p| {
             #[cfg(target_os = "macos")]
@@ -68,7 +76,7 @@ pub fn get_auth_token_and_port() -> Option<(String, u16)> {
     if token.is_empty() {
         None
     } else {
-        (token, port)
+        Some((token, port))
     }
 }
 
@@ -150,6 +158,27 @@ impl ServiceClient {
                             nw.push((id.into(), network.clone()))
                         });
                     });
+                });
+            }));
+        });
+        nw.sort_by(|a, b| (*a).0.cmp(&((*b).0)) );
+        nw
+    }
+
+    pub fn sso_auth_needed_networks(&self) -> Vec<(String, String)> {
+        let mut nw: Vec<(String, String)> = Vec::new();
+        self.with(&["network"], |nws| {
+            let _ = nws.as_array().map(|a| a.iter().for_each(|network| {
+                let _ = network.as_object().map(|network| {
+                    network.get("id").map(|id| id.as_str().map(|id| network.get("ssoEnabled").map(|sso_enabled| network.get("authenticationExpiryTime").map(|auth_expiry_time| auth_expiry_time.as_i64().map(|auth_expiry_time| network.get("authenticationURL").map(|auth_url| auth_url.as_str().map(|auth_url| {
+                        let auth_url = auth_url.trim();
+                        // TODO: right now we auth if there is only 10 seconds remaining. In the future we should use some kind of field
+                        // indicating what the expiry time is or learn it from the auth_expiry_time we get after auth to calibrate this
+                        // properly to keep the user online with the least fuss.
+                        if sso_enabled.as_bool().unwrap_or(false) && !auth_url.is_empty() && auth_expiry_time < (ms_since_epoch() + 10000) {
+                            nw.push((id.into(), auth_url.into()));
+                        }
+                    })))))));
                 });
             }));
         });
