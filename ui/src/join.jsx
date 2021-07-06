@@ -50,6 +50,7 @@ export default class Join extends React.Component {
                     <EuiFlexItem>
                         <EuiButton isDisabled={((this.state.joinNetworkId||'').length !== 16)} color="text" fill onClick={() => {
                             ztPost('network/' + this.state.joinNetworkId, {});
+                            this.setState({ joinNetworkId: '' });
                         }}>Join&nbsp;Network</EuiButton>
                     </EuiFlexItem>
                 </EuiFlexGroup>

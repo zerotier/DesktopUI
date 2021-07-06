@@ -71,6 +71,8 @@ pub struct CommandFromWebView {
     pub name: String,
     #[serde(default)]
     pub data: String,
+    #[serde(default)]
+    pub data2: String,
 }
 
 /*******************************************************************************************************************/
@@ -279,16 +281,13 @@ fn kill_window_subprocess(mut w: MutexGuard<Option<Child>>) {
 fn open_window_subprocess(mut w: MutexGuard<Option<Child>>, ui_mode: &str, width: i32, height: i32, param: &str) {
     check_window_subprocess_exit(&mut w);
     if w.is_none() {
-        if ui_mode == "auth" {
-            let ch = Command::new(std::env::current_exe().unwrap()).arg("auth").arg(width.to_string()).arg(height.to_string()).arg(param).stdin(Stdio::piped()).spawn();
-            if ch.is_ok() {
-                let _ = w.replace(ch.unwrap());
-            }
+        let ch = if ui_mode == "auth" {
+            Command::new(std::env::current_exe().unwrap()).arg("auth").arg(width.to_string()).arg(height.to_string()).arg(param).stdin(Stdio::piped()).spawn()
         } else {
-            let ch = Command::new(std::env::current_exe().unwrap()).arg("window").arg(ui_mode).arg(width.to_string()).arg(height.to_string()).arg(param).stdin(Stdio::piped()).spawn();
-            if ch.is_ok() {
-                let _ = w.replace(ch.unwrap());
-            }
+            Command::new(std::env::current_exe().unwrap()).arg("window").arg(ui_mode).arg(width.to_string()).arg(height.to_string()).arg(param).stdin(Stdio::piped()).spawn()
+        };
+        if ch.is_ok() {
+            let _ = w.replace(ch.unwrap());
         }
     } else {
         // Sending 'r' causes subprocess to raise the window at the first opportunity.
@@ -364,6 +363,9 @@ fn window(args: &Vec<String>) {
                     "delete" => {
                         let _ = ui_client.lock().map(|mut c| c.enqueue_delete(cmd.name));
                     },
+                    "remember_network" => {
+                        let _ = ui_client.lock().map(|mut c| c.remember_network(cmd.data, cmd.data2));
+                    },
                     "copy_to_clipboard" => {
                         copy_to_clipboard(cmd.data.as_str());
                     },
@@ -416,7 +418,8 @@ fn tray() {
     }
 
     // On Apple Silicon Macs this tells the OS to use efficiency cores for the tray app. Perceptible performance is still great.
-    // Don't do it on Intel Macs because it seems to make stuff really slow with no power use benefit.
+    // Don't do it on Intel Macs because it seems to make stuff really slow with little power use benefit. For the genuine background
+    // threads we always do it because if those a bit slow it's fine.
     #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
     set_thread_to_background_priority();
 
@@ -430,21 +433,36 @@ fn tray() {
 
     let main_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
     let about_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
-    let mut auth_windows: HashMap<String, Mutex<Option<Child>>> = HashMap::new();
+    let mut auth_windows: HashMap<String, (String, Mutex<Option<Child>>)> = HashMap::new();
 
     let mut tray: Option<Tray> = None;
-    while !exit_flag.load(std::sync::atomic::Ordering::Relaxed) {
+    loop {
+        // Open auth windows for any networks that need authentication.
         let auth_needed_networks = client.lock().unwrap().sso_auth_needed_networks();
-        for network in auth_needed_networks.iter() {
-            if !auth_windows.contains_key(&(*network).0) {
-                auth_windows.insert((*network).0.clone(), Mutex::new(None));
+        for network in auth_needed_networks.iter() { // network is a tuple of (ID, URL)
+            let nwid = &(*network).0;
+            let auth_url = &(*network).1;
+            let mut had_key = auth_windows.contains_key(nwid);
+            if had_key {
+                // If there was a key, check if URLs match and if not kill and re-open.
+                auth_windows.get(nwid).map(|w| {
+                    if !(*w).0.eq(auth_url) {
+                        kill_window_subprocess((*w).1.lock().unwrap());
+                        had_key = false;
+                    }
+                });
             }
-            open_window_subprocess(auth_windows.get_mut(&(*network).0).unwrap().lock().unwrap(), "auth", 1024, 768, (*network).1.as_str());
+            if !had_key {
+                let _ = auth_windows.insert(nwid.clone(), (auth_url.clone(), Mutex::new(None))); // KEY -> (URL, WINDOW)
+            }
+            open_window_subprocess((*auth_windows.get(nwid).unwrap()).1.lock().unwrap(), "auth", 1024, 768, (*network).1.as_str());
         }
         drop(auth_needed_networks);
+
+        // Garbage collect entries in auth_windows for closed or killed windows.
         let mut auth_windows_to_remove: Vec<String> = Vec::new();
         for w in auth_windows.iter() {
-            let mut ww = w.1.lock().unwrap();
+            let mut ww = (*w.1).1.lock().unwrap();
             if check_window_subprocess_exit(&mut ww) {
                 auth_windows_to_remove.push(w.0.clone());
             }
@@ -483,7 +501,7 @@ fn tray() {
                 let networks = client.lock().unwrap().networks();
                 if !networks.is_empty() {
                     menu.push(TrayMenuItem::Separator);
-                    networks.iter().for_each(|network| {
+                    for network in networks.iter() {
                         let nw_obj = &((*network).1);
 
                         let assigned_addrs = nw_obj.get("assignedAddresses").unwrap_or(&Value::Null);
@@ -493,8 +511,15 @@ fn tray() {
                         let allow_global_ips = nw_obj.get("allowGlobal").map_or(false, |b| b.as_bool().unwrap_or(false));
                         let allow_default = nw_obj.get("allowDefault").map_or(false, |b| b.as_bool().unwrap_or(false));
                         let allow_dns = nw_obj.get("allowDNS").map_or(false, |b| b.as_bool().unwrap_or(false));
+                        let status = nw_obj.get("status").map_or("REQUESTING_CONFIGURATION", |s| s.as_str().unwrap_or("REQUESTING_CONFIGURATION"));
+
+                        // Kill any authentication windows for networks that are now authenticated.
+                        if status == "OK" {
+                            let _ = auth_windows.get(&(*network).0).map(|w| kill_window_subprocess((*w).1.lock().unwrap()));
+                        }
 
                         let mut network_menu: Vec<TrayMenuItem> = Vec::new();
+
                         let nwid = (*network).0.clone();
                         network_menu.push(TrayMenuItem::Text {
                             text: format!("Network ID:\t  {}", (*network).0),
@@ -502,7 +527,9 @@ fn tray() {
                             disabled: false,
                             handler: Some(Box::new(move || copy_to_clipboard(nwid.as_str()) )),
                         });
+
                         network_menu.push(TrayMenuItem::Separator);
+
                         let (nwid, client2) = ((*network).0.clone(), client.clone());
                         network_menu.push(TrayMenuItem::Text {
                             text: format!("Allow Managed Addresses"),
@@ -531,7 +558,9 @@ fn tray() {
                             disabled: false,
                             handler: Some(Box::new(move || client2.lock().unwrap().enqueue_post(format!("network/{}", nwid), format!("{{ \"allowDNS\": {} }}", !allow_dns)))),
                         });
+
                         network_menu.push(TrayMenuItem::Separator);
+
                         nw_obj.get("mac").map(|a| a.as_str().map(|a| {
                             network_menu.push(TrayMenuItem::Text {
                                 text: format!("Ethernet:\t\t  {}", a),
@@ -556,14 +585,13 @@ fn tray() {
                                 handler: None,
                             });
                         }));
-                        nw_obj.get("status").map(|a| a.as_str().map(|a| {
-                            network_menu.push(TrayMenuItem::Text {
-                                text: format!("Status:\t\t  {}", a),
-                                checked: false,
-                                disabled: true,
-                                handler: None,
-                            });
-                        }));
+                        network_menu.push(TrayMenuItem::Text {
+                            text: format!("Status:\t\t  {}", status),
+                            checked: false,
+                            disabled: true,
+                            handler: None,
+                        });
+
                         let mut added_managed_separator = false;
                         assigned_addrs.as_array().map(|assigned_addrs| {
                             if !assigned_addrs.is_empty() {
@@ -590,6 +618,7 @@ fn tray() {
                                 });
                             }
                         });
+
                         let mut managed_routes2: Vec<(String, String)> = Vec::new();
                         managed_routes.as_array().map(|managed_routes| {
                             if !managed_routes.is_empty() {
@@ -641,13 +670,20 @@ fn tray() {
                                 items: managed_routes_menu,
                             });
                         }
+
                         network_menu.push(TrayMenuItem::Separator);
+
                         let (nwid, client2) = ((*network).0.clone(), client.clone());
+                        let network_name = nw_obj.get("name").map_or("", |v| v.as_str().unwrap_or(""));
                         network_menu.push(TrayMenuItem::Text {
                             text: "Disconnect ".into(),
                             checked: false,
                             disabled: false,
-                            handler: Some(Box::new(move || client2.lock().unwrap().enqueue_delete(format!("network/{}", nwid)))),
+                            handler: Some(Box::new(move || {
+                                let mut c = client2.lock().unwrap();
+                                c.enqueue_delete(format!("network/{}", nwid));
+                                c.remember_network(nwid, network_name.into());
+                            })),
                         });
 
                         menu.push(TrayMenuItem::Submenu {
@@ -655,7 +691,7 @@ fn tray() {
                             checked: true,
                             items: network_menu,
                         });
-                    });
+                    }
                 }
 
                 menu.push(TrayMenuItem::Separator);
@@ -793,18 +829,25 @@ fn tray() {
                 for w in [&main_window, &about_window].iter() {
                     check_window_subprocess_exit(w.lock().as_mut().unwrap());
                 }
+                for w in auth_windows.iter() {
+                    let mut ww = (*w.1).1.lock().unwrap();
+                    check_window_subprocess_exit(&mut ww);
+                }
             }
         }
 
         // Execute next tray event loop, which will (as per modifications made to tray.h) return after a second or two if
         // nothing happens. This allows periodic polling for changes to happen in this code.
-        if !tray.as_ref().map_or(false, |tr| tr.poll()) {
+        if !tray.as_ref().map_or(false, |tr| tr.poll()) || !exit_flag.load(std::sync::atomic::Ordering::Relaxed) {
             break;
         }
     }
 
     for w in [&main_window, &about_window].iter() {
         kill_window_subprocess(w.lock().unwrap());
+    }
+    for w in auth_windows.iter() {
+        kill_window_subprocess((*w.1).1.lock().unwrap());
     }
 }
 
@@ -944,7 +987,7 @@ fn main() {
                         .size(i32::from_str_radix(args[2].as_str(), 10).unwrap_or(1024), i32::from_str_radix(args[3].as_str(), 10).unwrap_or(768))
                         .visible(true)
                         .frameless(false)
-                        .debug(true)
+                        .debug(false)
                         .user_data(())
                         .invoke_handler(move |_, _| Ok(()))
                         .run()
