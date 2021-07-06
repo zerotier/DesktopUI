@@ -115,10 +115,7 @@ fn refresh_windows_start_on_login() {
 
 #[cfg(target_os = "macos")]
 fn is_dark_mode() -> bool {
-    let out = Command::new("/usr/bin/defaults").arg("read").arg("-g").arg("AppleInterfaceStyle").output();
-    out.map_or(false, |mode| {
-        String::from_utf8(mode.stdout.to_ascii_lowercase()).map_or(false, |mode| mode.contains("dark"))
-    })
+    Command::new("/usr/bin/defaults").arg("read").arg("-g").arg("AppleInterfaceStyle").output().map_or(false, |mode| String::from_utf8(mode.stdout.to_ascii_lowercase()).map_or(false, |mode| mode.contains("dark")))
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]
