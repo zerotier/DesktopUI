@@ -205,7 +205,7 @@ int tray_loop(int blocking) {
 }
 
 void tray_update(struct tray *tray) {
-    printf("tray_update()\n"); fflush(stdout);
+    //printf("tray_update()\n"); fflush(stdout);
     if (tray->icon) {
         ((void(*)(id, SEL, id))objc_msgSend)(statusBarButton, sel_registerName("setImage:"),
             ((id(*)(id, SEL, id))objc_msgSend)((id)objc_getClass("NSImage"), sel_registerName("imageNamed:"),
