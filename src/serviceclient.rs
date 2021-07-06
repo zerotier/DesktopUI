@@ -1,5 +1,5 @@
 use std::time::{Duration, SystemTime};
-use std::collections::LinkedList;
+use std::collections::{LinkedList, HashMap};
 use std::cell::Cell;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -18,6 +18,7 @@ pub struct ServiceClient {
     port: u16,
     base_url: String,
     saved_networks: Map<String, Value>,
+    state_hash: HashMap<String, u64>,
     state: Map<String, Value>,
     post_queue: LinkedList<(String, String)>,
     delete_queue: LinkedList<String>,
@@ -79,17 +80,36 @@ pub fn get_auth_token_and_port() -> Option<(String, u16)> {
     }
 }
 
+const SEP_BYTE: [u8; 1] = [0_u8];
+
 // Remove fields from service API objects that change in ways that are not meaningful to us.
-fn strip_ephemeral_fields(v: &mut Value) {
-    v.as_array_mut().map(|a| {
-        for x in a.iter_mut() {
-            strip_ephemeral_fields(x);
+fn hash_result(v: &Value, h: &mut crc64fast::Digest) {
+    h.write(&SEP_BYTE);
+    match v {
+        Value::Array(a) => {
+            for x in a.iter() {
+                hash_result(x, h);
+            }
+        },
+        Value::Object(o) => {
+            for x in o.iter() {
+                h.write(x.0.as_bytes());
+                if !x.0.eq("clock") && !x.0.eq("netconfRevision") { // omit fields that change meaninglessly
+                    hash_result(x.1, h);
+                }
+            }
+        },
+        Value::Bool(b) => {
+            h.write(&[*b as u8]);
+        },
+        Value::Number(n) => {
+            h.write(n.to_string().as_bytes());
+        },
+        Value::String(s) => {
+            h.write(s.as_bytes());
         }
-    });
-    v.as_object_mut().map(|o| {
-        o.remove("clock".into());
-        o.remove("netconfRevision".into());
-    });
+        _ => {}
+    }
 }
 
 impl ServiceClient {
@@ -106,6 +126,7 @@ impl ServiceClient {
             }, |j| {
                 serde_json::from_slice(j.as_slice()).map_or_else(|_| serde_json::Map::new(), |r| r)
             }),
+            state_hash: HashMap::new(),
             state: Map::new(),
             post_queue: LinkedList::new(),
             delete_queue: LinkedList::new(),
@@ -366,11 +387,14 @@ impl ServiceClient {
                 let endpoint = *endpoint;
                 let data = self.http_get(endpoint);
                 if data.0 == 200 {
-                    let mut data = serde_json::from_str::<Value>(data.1.as_str()).unwrap_or(Value::Null);
-                    strip_ephemeral_fields(&mut data);
                     let endpoint = String::from(endpoint);
-                    let current = self.state.get(&endpoint).unwrap_or(&Value::Null);
-                    if !current.eq(&data) {
+                    let data = serde_json::from_str::<Value>(data.1.as_str()).unwrap_or(Value::Null);
+
+                    let mut c64 = crc64fast::Digest::new();
+                    hash_result(&data, &mut c64);
+                    let c64 = c64.sum64();
+
+                    if self.state_hash.insert(endpoint.clone(), c64).unwrap_or(0) != c64 {
                         self.state.insert(endpoint, data);
                         self.dirty.store(true, Ordering::Relaxed);
                         self.online = true;
