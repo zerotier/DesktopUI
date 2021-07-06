@@ -1,5 +1,5 @@
 use std::time::{Duration, SystemTime};
-use std::collections::{LinkedList, HashMap};
+use std::collections::LinkedList;
 use std::cell::Cell;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -17,9 +17,8 @@ pub struct ServiceClient {
     auth_token: String,
     port: u16,
     base_url: String,
-    saved_networks: serde_json::Map<String, Value>,
+    saved_networks: Map<String, Value>,
     state: Map<String, Value>,
-    state_crc64: HashMap<String, u64>,
     post_queue: LinkedList<(String, String)>,
     delete_queue: LinkedList<String>,
     dirty: Arc<AtomicBool>,
@@ -80,6 +79,19 @@ pub fn get_auth_token_and_port() -> Option<(String, u16)> {
     }
 }
 
+// Remove fields from service API objects that change in ways that are not meaningful to us.
+fn strip_ephemeral_fields(v: &mut Value) {
+    v.as_array_mut().map(|a| {
+        for x in a.iter_mut() {
+            strip_ephemeral_fields(x);
+        }
+    });
+    v.as_object_mut().map(|o| {
+        o.remove("clock".into());
+        o.remove("netconfRevision".into());
+    });
+}
+
 impl ServiceClient {
     /// Create a new service client and return the client and a flag that can be atomically checked to indicate changes.
     pub fn new(refresh_base_paths: Vec<&'static str>) -> (ServiceClient, Arc<AtomicBool>) {
@@ -95,7 +107,6 @@ impl ServiceClient {
                 serde_json::from_slice(j.as_slice()).map_or_else(|_| serde_json::Map::new(), |r| r)
             }),
             state: Map::new(),
-            state_crc64: HashMap::new(),
             post_queue: LinkedList::new(),
             delete_queue: LinkedList::new(),
             dirty: dirty_flag.clone(),
@@ -355,11 +366,12 @@ impl ServiceClient {
                 let endpoint = *endpoint;
                 let data = self.http_get(endpoint);
                 if data.0 == 200 {
-                    let mut c64 = crc64fast::Digest::new();
-                    c64.write(data.1.as_bytes());
-                    let c64 = c64.sum64();
-                    if self.state_crc64.insert(endpoint.into(), c64).map_or(true, |s| s != c64) {
-                        self.state.insert((*endpoint).into(), serde_json::from_str::<Value>(data.1.as_str()).unwrap_or(Value::Null));
+                    let mut data = serde_json::from_str::<Value>(data.1.as_str()).unwrap_or(Value::Null);
+                    strip_ephemeral_fields(&mut data);
+                    let endpoint = String::from(endpoint);
+                    let current = self.state.get(&endpoint).unwrap_or(&Value::Null);
+                    if !current.eq(&data) {
+                        self.state.insert(endpoint, data);
                         self.dirty.store(true, Ordering::Relaxed);
                         self.online = true;
                     }

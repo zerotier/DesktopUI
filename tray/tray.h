@@ -1,6 +1,9 @@
 #ifndef TRAY_H
 #define TRAY_H
 
+/* Max time to block in tray_loop() */
+#define MAX_WAIT_SECONDS 5
+
 struct tray_menu;
 
 struct tray
@@ -181,26 +184,20 @@ int tray_init(struct tray *tray) {
 }
 
 int tray_loop(int blocking) {
-    id pool = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSAutoreleasePool"),
-                          sel_registerName("new"));
+    id pool = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSAutoreleasePool"), sel_registerName("new"));
 
-    id until = (blocking ?
-      ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSDate"), sel_registerName("now")) :
-      ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSDate"), sel_registerName("distantPast")));
+    id until;
     if (blocking) {
-        until = ((id(*)(id, SEL, double))objc_msgSend)(until, sel_registerName("dateByAddingTimeInterval:"), 2.0);
+        until = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSDate"), sel_registerName("now"));
+        until = ((id(*)(id, SEL, double))objc_msgSend)(until, sel_registerName("dateByAddingTimeInterval:"), (double)MAX_WAIT_SECONDS);
+        until = ((id(*)(id, SEL))objc_msgSend)(until, sel_registerName("autorelease"));
+    } else {
+        until = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSDate"), sel_registerName("distantPast"));
     }
 
-    id event = ((id(*)(id, SEL, unsigned long, id, id, bool))objc_msgSend)(app, sel_registerName("nextEventMatchingMask:untilDate:inMode:dequeue:"),
-                ULONG_MAX,
-                until,
-                kCFRunLoopDefaultMode,
-                true);
+    id event = ((id(*)(id, SEL, unsigned long, id, id, bool))objc_msgSend)(app, sel_registerName("nextEventMatchingMask:untilDate:inMode:dequeue:"), ULONG_MAX, until, kCFRunLoopDefaultMode, true);
     if (event) {
       ((void(*)(id, SEL, id))objc_msgSend)(app, sel_registerName("sendEvent:"), event);
-    }
-    if (blocking) {
-        ((id(*)(id, SEL))objc_msgSend)(until, sel_registerName("release"));
     }
 
     ((void(*)(id, SEL))objc_msgSend)(pool, sel_registerName("drain"));
@@ -208,12 +205,15 @@ int tray_loop(int blocking) {
 }
 
 void tray_update(struct tray *tray) {
+    printf("tray_update()\n"); fflush(stdout);
     if (tray->icon) {
         ((void(*)(id, SEL, id))objc_msgSend)(statusBarButton, sel_registerName("setImage:"),
             ((id(*)(id, SEL, id))objc_msgSend)((id)objc_getClass("NSImage"), sel_registerName("imageNamed:"),
             ((id(*)(id, SEL, char *))objc_msgSend)((id)objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), tray->icon)));
     }
-    ((void(*)(id, SEL, id))objc_msgSend)(statusItem, sel_registerName("setMenu:"), _tray_menu(tray->menu));
+    id menu = _tray_menu(tray->menu);
+    ((void(*)(id, SEL, id))objc_msgSend)(statusItem, sel_registerName("setMenu:"), menu);
+    ((void(*)(id, SEL))objc_msgSend)(menu, sel_registerName("release"));
 }
 
 void tray_exit() { ((void(*)(id, SEL, id))objc_msgSend)(app, sel_registerName("terminate:"), app); }
@@ -332,7 +332,7 @@ int tray_init(struct tray *tray) {
 
   tray_update(tray);
 
-  window_timer = SetTimer(NULL, 0, 1000, NULL);
+  window_timer = SetTimer(NULL, 0, (MAX_WAIT_SECONDS * 1000), NULL);
 
   return 0;
 }

@@ -15,7 +15,6 @@ web-view = { path = "web-view", features = ["edge"] }
 serde = { version = "*", features = ["derive"] }
 serde_json = "*"
 ureq = { version = "*", features = [] }
-crc64fast = "*"
 single-instance = "*"
 
 [target.'cfg(target_os = "macos")'.dependencies]

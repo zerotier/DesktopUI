@@ -239,9 +239,12 @@ fn start_client(refresh_base_paths: Vec<&'static str>, tick_period_ms: u64, refr
         loop {
             let _ = thread_client.lock().map(|mut c| {
                 k += 1;
-                if c.do_posts() || k >= refresh_period_ticks {
+                if k >= refresh_period_ticks {
                     k = 0;
                     c.sync();
+                }
+                if c.do_posts() {
+                    k = refresh_period_ticks - 1;
                 }
             });
             std::thread::sleep(Duration::from_millis(tick_period_ms));
@@ -426,13 +429,363 @@ fn tray() {
     // Set to true from anywhere to cause app to exit on next event loop.
     let exit_flag = Arc::new(AtomicBool::new(false));
 
-    let (client, dirty_flag) = start_client(vec!["status", "network"], 500, 10);
+    let (client, dirty_flag) = start_client(vec!["status", "network"], 250, 10);
 
     let main_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
     let about_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
     let mut auth_windows: HashMap<String, (String, Mutex<Option<Child>>)> = HashMap::new();
 
-    let mut tray: Option<Tray> = None;
+    let make_menu = |auth_windows: &mut HashMap<String, (String, Mutex<Option<Child>>)>| {
+        let mut menu: Vec<TrayMenuItem> = Vec::new();
+        if client.lock().unwrap().is_online() {
+            let address = client.lock().unwrap().get_str(&["status", "address"]);
+            let address2 = address.clone();
+            menu.push(TrayMenuItem::Text {
+                text: format!("Node ID:  {} ", address),
+                checked: false,
+                disabled: false,
+                handler: Some(Box::new(move || copy_to_clipboard(address2.as_str()) )),
+            });
+
+            menu.push(TrayMenuItem::Separator);
+
+            let main_window2 = main_window.clone();
+            menu.push(TrayMenuItem::Text {
+                text: "Open Control Panel... ".into(),
+                checked: false,
+                disabled: false,
+                handler: Some(Box::new(move || open_window_subprocess(main_window2.lock().unwrap(), "Main", MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT, "")))
+            });
+
+            let networks = client.lock().unwrap().networks();
+
+            for w in auth_windows.iter() {
+                let mut have_network = false;
+                for network in networks.iter() {
+                    if (*network).0.eq(w.0) {
+                        have_network = true;
+                        break;
+                    }
+                }
+                if !have_network {
+                    kill_window_subprocess((*w.1).1.lock().unwrap());
+                }
+            }
+
+            if !networks.is_empty() {
+                menu.push(TrayMenuItem::Separator);
+                for network in networks.iter() {
+                    let nw_obj = &((*network).1);
+
+                    let assigned_addrs = nw_obj.get("assignedAddresses").unwrap_or(&Value::Null);
+                    let managed_routes = nw_obj.get("routes").unwrap_or(&Value::Null);
+                    let device_name = nw_obj.get("portDeviceName").map_or("", |s| s.as_str().unwrap_or(""));
+                    let allow_managed_addresses = nw_obj.get("allowManaged").map_or(false, |b| b.as_bool().unwrap_or(false));
+                    let allow_global_ips = nw_obj.get("allowGlobal").map_or(false, |b| b.as_bool().unwrap_or(false));
+                    let allow_default = nw_obj.get("allowDefault").map_or(false, |b| b.as_bool().unwrap_or(false));
+                    let allow_dns = nw_obj.get("allowDNS").map_or(false, |b| b.as_bool().unwrap_or(false));
+                    let status = nw_obj.get("status").map_or("REQUESTING_CONFIGURATION", |s| s.as_str().unwrap_or("REQUESTING_CONFIGURATION"));
+
+                    // Kill any authentication windows for networks that are now authenticated.
+                    if status == "OK" {
+                        let _ = auth_windows.get(&(*network).0).map(|w| kill_window_subprocess((*w).1.lock().unwrap()));
+                    }
+
+                    let mut network_menu: Vec<TrayMenuItem> = Vec::new();
+
+                    let nwid = (*network).0.clone();
+                    network_menu.push(TrayMenuItem::Text {
+                        text: format!("Network ID:\t  {}", (*network).0),
+                        checked: false,
+                        disabled: false,
+                        handler: Some(Box::new(move || copy_to_clipboard(nwid.as_str()) )),
+                    });
+
+                    network_menu.push(TrayMenuItem::Separator);
+
+                    let (nwid, client2) = ((*network).0.clone(), client.clone());
+                    network_menu.push(TrayMenuItem::Text {
+                        text: format!("Allow Managed Addresses"),
+                        checked: allow_managed_addresses,
+                        disabled: false,
+                        handler: Some(Box::new(move || client2.lock().unwrap().enqueue_post(format!("network/{}", nwid), format!("{{ \"allowManaged\": {} }}", !allow_managed_addresses)))),
+                    });
+                    let (nwid, client2) = ((*network).0.clone(), client.clone());
+                    network_menu.push(TrayMenuItem::Text {
+                        text: format!("Allow Assignment of Global IPs"),
+                        checked: allow_global_ips,
+                        disabled: false,
+                        handler: Some(Box::new(move || client2.lock().unwrap().enqueue_post(format!("network/{}", nwid), format!("{{ \"allowGlobal\": {} }}", !allow_global_ips)))),
+                    });
+                    let (nwid, client2) = ((*network).0.clone(), client.clone());
+                    network_menu.push(TrayMenuItem::Text {
+                        text: format!("Allow Default Router Override"),
+                        checked: allow_default,
+                        disabled: false,
+                        handler: Some(Box::new(move || client2.lock().unwrap().enqueue_post(format!("network/{}", nwid), format!("{{ \"allowDefault\": {} }}", !allow_default)))),
+                    });
+                    let (nwid, client2) = ((*network).0.clone(), client.clone());
+                    network_menu.push(TrayMenuItem::Text {
+                        text: format!("Allow DNS Configuration"),
+                        checked: allow_dns,
+                        disabled: false,
+                        handler: Some(Box::new(move || client2.lock().unwrap().enqueue_post(format!("network/{}", nwid), format!("{{ \"allowDNS\": {} }}", !allow_dns)))),
+                    });
+
+                    network_menu.push(TrayMenuItem::Separator);
+
+                    nw_obj.get("mac").map(|a| a.as_str().map(|a| {
+                        network_menu.push(TrayMenuItem::Text {
+                            text: format!("Ethernet:\t\t  {}", a),
+                            checked: false,
+                            disabled: true,
+                            handler: None,
+                        });
+                    }));
+                    if !device_name.is_empty() {
+                        network_menu.push(TrayMenuItem::Text {
+                            text: format!("Device:\t\t  {}", device_name),
+                            checked: false,
+                            disabled: true,
+                            handler: None,
+                        });
+                    }
+                    nw_obj.get("type").map(|a| a.as_str().map(|a| {
+                        network_menu.push(TrayMenuItem::Text {
+                            text: format!("Type:\t\t  {}", a),
+                            checked: false,
+                            disabled: true,
+                            handler: None,
+                        });
+                    }));
+                    network_menu.push(TrayMenuItem::Text {
+                        text: format!("Status:\t\t  {}", status),
+                        checked: false,
+                        disabled: true,
+                        handler: None,
+                    });
+
+                    let mut added_managed_separator = false;
+                    assigned_addrs.as_array().map(|assigned_addrs| {
+                        if !assigned_addrs.is_empty() {
+                            if !added_managed_separator {
+                                added_managed_separator = true;
+                                network_menu.push(TrayMenuItem::Separator);
+                            }
+                            let mut assigned_addrs_menu: Vec<TrayMenuItem> = Vec::new();
+                            for a in assigned_addrs.iter() {
+                                a.as_str().map(|a| {
+                                    let a_copy = String::from(a);
+                                    assigned_addrs_menu.push(TrayMenuItem::Text {
+                                        text: String::from(a),
+                                        checked: false,
+                                        disabled: false,
+                                        handler: Some(Box::new(move || copy_to_clipboard(a_copy.split_once('/').map_or(a_copy.as_str(), |a| a.0)) )),
+                                    });
+                                });
+                            }
+                            network_menu.push(TrayMenuItem::Submenu {
+                                text: "Managed Addresses ".into(),
+                                checked: false,
+                                items: assigned_addrs_menu,
+                            });
+                        }
+                    });
+
+                    let mut managed_routes2: Vec<(String, String)> = Vec::new();
+                    managed_routes.as_array().map(|managed_routes| {
+                        if !managed_routes.is_empty() {
+                            if !added_managed_separator {
+                                added_managed_separator = true;
+                                network_menu.push(TrayMenuItem::Separator);
+                            }
+                            for r in managed_routes.iter() {
+                                r.as_object().map(|r| {
+                                    let via = r.get("via").map_or("", |s| s.as_str().unwrap_or(""));
+                                    r.get("target").map(|target| target.as_str().map(|target| {
+                                        managed_routes2.push((target.into(), (if via.is_empty() { device_name } else { via }).into()));
+                                    }));
+                                });
+                            }
+                        }
+                    });
+                    if !managed_routes2.is_empty() {
+                        managed_routes2.sort_by(|a, b| {
+                            let aa = &((*a).1);
+                            let bb = &((*b).1);
+                            if aa.contains('.') || aa.contains(':') {
+                                if bb.contains('.') || bb.contains(':') {
+                                    aa.cmp(bb)
+                                } else {
+                                    Ordering::Greater
+                                }
+                            } else {
+                                if bb.contains('.') || bb.contains(':') {
+                                    Ordering::Less
+                                } else {
+                                    aa.cmp(bb)
+                                }
+                            }
+                        });
+                        let mut managed_routes_menu: Vec<TrayMenuItem> = Vec::new();
+                        for r in managed_routes2.iter() {
+                            let s = format!("{} via {}", (*r).0, (*r).1);
+                            managed_routes_menu.push(TrayMenuItem::Text {
+                                text: s.clone(),
+                                checked: false,
+                                disabled: false,
+                                handler: Some(Box::new(move || copy_to_clipboard(s.as_str()))),
+                            });
+                        }
+                        network_menu.push(TrayMenuItem::Submenu {
+                            text: "Managed Routes ".into(),
+                            checked: false,
+                            items: managed_routes_menu,
+                        });
+                    }
+
+                    network_menu.push(TrayMenuItem::Separator);
+
+                    let (nwid, client2) = ((*network).0.clone(), client.clone());
+                    let network_name: String = nw_obj.get("name").map_or("", |v| v.as_str().unwrap_or("")).into();
+                    network_menu.push(TrayMenuItem::Text {
+                        text: "Disconnect ".into(),
+                        checked: false,
+                        disabled: false,
+                        handler: Some(Box::new(move || {
+                            let mut c = client2.lock().unwrap();
+                            c.enqueue_delete(format!("network/{}", nwid));
+                            c.remember_network(nwid.clone(), network_name.clone());
+                        })),
+                    });
+
+                    menu.push(TrayMenuItem::Submenu {
+                        text: format!("{}\t{}  ", (*network).0, nw_obj.get("name").map_or("", |n| n.as_str().unwrap_or(""))),
+                        checked: true,
+                        items: network_menu,
+                    });
+                }
+            }
+
+            menu.push(TrayMenuItem::Separator);
+
+            let saved_networks = client.lock().unwrap().saved_networks();
+            if !saved_networks.is_empty() {
+                let mut saved_networks_empty = true;
+                for nw in saved_networks.iter() {
+                    if !networks.iter().any(|x| (*x).0.eq(&(*nw).0)) {
+                        let (client2, client3) = (client.clone(), client.clone());
+                        let (nwid2, nwid3) = ((*nw).0.clone(), (*nw).0.clone());
+                        menu.push(TrayMenuItem::Submenu {
+                            text: format!("{}\t{}  ", (*nw).0, (*nw).1),
+                            checked: false,
+                            items: vec![
+                                TrayMenuItem::Text {
+                                    text: "Reconnect".into(),
+                                    checked: false,
+                                    disabled: false,
+                                    handler: Some(Box::new(move || client2.lock().unwrap().enqueue_post(format!("network/{}", nwid2), "{}".into()))),
+                                },
+                                TrayMenuItem::Text {
+                                    text: "Forget".into(),
+                                    checked: false,
+                                    disabled: false,
+                                    handler: Some(Box::new(move || client3.lock().unwrap().forget_network(&nwid3))),
+                                }
+                            ],
+                        });
+                        saved_networks_empty = false;
+                    }
+                }
+                if !saved_networks_empty {
+                    menu.push(TrayMenuItem::Separator);
+                }
+            }
+
+            #[cfg(target_os = "macos")] {
+                let dirty_flag2 = dirty_flag.clone();
+                menu.push(TrayMenuItem::Text {
+                    text: "Start UI at Login ".into(),
+                    checked: unsafe { START_ON_LOGIN },
+                    disabled: false,
+                    handler: Some(Box::new(move || {
+                        refresh_mac_start_on_login();
+                        if unsafe { START_ON_LOGIN } {
+                            // osascript -e 'tell application "System Events" to get the name of every login item'
+                            let out = Command::new("/usr/bin/osascript").arg("-e").arg("tell application \"System Events\" to get the name of every login item").output();
+                            let _ = out.map(|app_list| {
+                                String::from_utf8(app_list.stdout).map(|app_list| {
+                                    app_list.split('\n').for_each(|app| {
+                                        if app.to_ascii_lowercase().contains("zerotier") {
+                                            // osascript -e 'tell application "System Events" to delete login item "itemname"'
+                                            let _ = Command::new("/usr/bin/osascript").arg("-e").arg(format!("tell application \"System Events\" to delete login item \"{}\"", app.trim())).output();
+                                        }
+                                    });
+                                })
+                            });
+                        } else {
+                            // osascript -e 'tell application "System Events" to make login item at end with properties {path:"PATH_TO_APP", hidden:false}'
+                            let _ = Command::new("/usr/bin/osascript").arg("-e").arg(format!("tell application \"System Events\" to make login item at end with properties {{path:\"{}\", hidden:false}}", unsafe { &APPLICATION_PATH })).output();
+                        }
+                        refresh_mac_start_on_login();
+                        dirty_flag2.store(true, std::sync::atomic::Ordering::Relaxed);
+                    }))
+                });
+            }
+
+            #[cfg(windows)] {
+                let dirty_flag2 = dirty_flag.clone();
+                menu.push(TrayMenuItem::Text {
+                    text: "Start UI at Login ".into(),
+                    checked: unsafe { START_ON_LOGIN },
+                    disabled: false,
+                    handler: Some(Box::new(move || {
+                        refresh_windows_start_on_login();
+                        let hkcu = winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER);
+                        let startup = hkcu.create_subkey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"); // opens read/write if exists
+                        if startup.is_ok() {
+                            let startup = startup.unwrap().0;
+                            if unsafe { START_ON_LOGIN } {
+                                let _ = startup.delete_value("ZeroTierUI");
+                            } else {
+                                let exe = String::from(std::env::current_exe().unwrap().to_str().unwrap());
+                                let _ = startup.set_value("ZeroTierUI", &exe);
+                            }
+                        }
+                        refresh_windows_start_on_login();
+                        dirty_flag2.store(true, std::sync::atomic::Ordering::Relaxed);
+                    }))
+                });
+            }
+
+            let about_window2 = about_window.clone();
+            menu.push(TrayMenuItem::Text {
+                text: "About ".into(),
+                checked: false,
+                disabled: false,
+                handler: Some(Box::new(move || open_window_subprocess(about_window2.lock().unwrap(), "About", 800, 600, "")))
+            });
+
+            let exit_flag2 = exit_flag.clone();
+            menu.push(TrayMenuItem::Text {
+                text: "Quit ZeroTier UI ".into(),
+                checked: false,
+                disabled: false,
+                handler: Some(Box::new(move || exit_flag2.store(true, std::sync::atomic::Ordering::SeqCst)))
+            });
+        } else {
+            menu.push(TrayMenuItem::Text {
+                text: "Service unreachable...".into(),
+                checked: false,
+                disabled: true,
+                handler: None,
+            });
+        }
+
+        menu
+    };
+
+    let tray = Tray::init(icon_name.as_ref(), make_menu(&mut auth_windows));
     loop {
         // Open auth windows for any networks that need authentication.
         let auth_needed_networks = client.lock().unwrap().sso_auth_needed_networks();
@@ -469,373 +822,28 @@ fn tray() {
         }
         drop(auth_windows_to_remove);
 
+        // Refresh menu if data has changed.
         if dirty_flag.swap(false, std::sync::atomic::Ordering::Relaxed) {
-            let (main_window2, main_window3) = (main_window.clone(), main_window.clone());
-            let (about_window2, about_window3) = (about_window.clone(), about_window.clone());
-
-            let mut menu: Vec<TrayMenuItem> = Vec::new();
-            if client.lock().unwrap().is_online() {
-                let address = client.lock().unwrap().get_str(&["status", "address"]);
-                let address2 = address.clone();
-                menu.push(TrayMenuItem::Text {
-                    text: format!("Node ID:  {} ", address),
-                    checked: false,
-                    disabled: false,
-                    handler: Some(Box::new(move || copy_to_clipboard(address2.as_str()) )),
-                });
-
-                menu.push(TrayMenuItem::Separator);
-
-                menu.push(TrayMenuItem::Text {
-                    text: "Open Control Panel... ".into(),
-                    checked: false,
-                    disabled: false,
-                    handler: Some(Box::new(move || {
-                        open_window_subprocess(main_window2.lock().unwrap(), "Main", MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT, "");
-                    })),
-                });
-
-                let networks = client.lock().unwrap().networks();
-                if !networks.is_empty() {
-                    menu.push(TrayMenuItem::Separator);
-                    for network in networks.iter() {
-                        let nw_obj = &((*network).1);
-
-                        let assigned_addrs = nw_obj.get("assignedAddresses").unwrap_or(&Value::Null);
-                        let managed_routes = nw_obj.get("routes").unwrap_or(&Value::Null);
-                        let device_name = nw_obj.get("portDeviceName").map_or("", |s| s.as_str().unwrap_or(""));
-                        let allow_managed_addresses = nw_obj.get("allowManaged").map_or(false, |b| b.as_bool().unwrap_or(false));
-                        let allow_global_ips = nw_obj.get("allowGlobal").map_or(false, |b| b.as_bool().unwrap_or(false));
-                        let allow_default = nw_obj.get("allowDefault").map_or(false, |b| b.as_bool().unwrap_or(false));
-                        let allow_dns = nw_obj.get("allowDNS").map_or(false, |b| b.as_bool().unwrap_or(false));
-                        let status = nw_obj.get("status").map_or("REQUESTING_CONFIGURATION", |s| s.as_str().unwrap_or("REQUESTING_CONFIGURATION"));
-
-                        // Kill any authentication windows for networks that are now authenticated.
-                        if status == "OK" {
-                            let _ = auth_windows.get(&(*network).0).map(|w| kill_window_subprocess((*w).1.lock().unwrap()));
-                        }
-
-                        let mut network_menu: Vec<TrayMenuItem> = Vec::new();
-
-                        let nwid = (*network).0.clone();
-                        network_menu.push(TrayMenuItem::Text {
-                            text: format!("Network ID:\t  {}", (*network).0),
-                            checked: false,
-                            disabled: false,
-                            handler: Some(Box::new(move || copy_to_clipboard(nwid.as_str()) )),
-                        });
-
-                        network_menu.push(TrayMenuItem::Separator);
-
-                        let (nwid, client2) = ((*network).0.clone(), client.clone());
-                        network_menu.push(TrayMenuItem::Text {
-                            text: format!("Allow Managed Addresses"),
-                            checked: allow_managed_addresses,
-                            disabled: false,
-                            handler: Some(Box::new(move || client2.lock().unwrap().enqueue_post(format!("network/{}", nwid), format!("{{ \"allowManaged\": {} }}", !allow_managed_addresses)))),
-                        });
-                        let (nwid, client2) = ((*network).0.clone(), client.clone());
-                        network_menu.push(TrayMenuItem::Text {
-                            text: format!("Allow Assignment of Global IPs"),
-                            checked: allow_global_ips,
-                            disabled: false,
-                            handler: Some(Box::new(move || client2.lock().unwrap().enqueue_post(format!("network/{}", nwid), format!("{{ \"allowGlobal\": {} }}", !allow_global_ips)))),
-                        });
-                        let (nwid, client2) = ((*network).0.clone(), client.clone());
-                        network_menu.push(TrayMenuItem::Text {
-                            text: format!("Allow Default Router Override"),
-                            checked: allow_default,
-                            disabled: false,
-                            handler: Some(Box::new(move || client2.lock().unwrap().enqueue_post(format!("network/{}", nwid), format!("{{ \"allowDefault\": {} }}", !allow_default)))),
-                        });
-                        let (nwid, client2) = ((*network).0.clone(), client.clone());
-                        network_menu.push(TrayMenuItem::Text {
-                            text: format!("Allow DNS Configuration"),
-                            checked: allow_dns,
-                            disabled: false,
-                            handler: Some(Box::new(move || client2.lock().unwrap().enqueue_post(format!("network/{}", nwid), format!("{{ \"allowDNS\": {} }}", !allow_dns)))),
-                        });
-
-                        network_menu.push(TrayMenuItem::Separator);
-
-                        nw_obj.get("mac").map(|a| a.as_str().map(|a| {
-                            network_menu.push(TrayMenuItem::Text {
-                                text: format!("Ethernet:\t\t  {}", a),
-                                checked: false,
-                                disabled: true,
-                                handler: None,
-                            });
-                        }));
-                        if !device_name.is_empty() {
-                            network_menu.push(TrayMenuItem::Text {
-                                text: format!("Device:\t\t  {}", device_name),
-                                checked: false,
-                                disabled: true,
-                                handler: None,
-                            });
-                        }
-                        nw_obj.get("type").map(|a| a.as_str().map(|a| {
-                            network_menu.push(TrayMenuItem::Text {
-                                text: format!("Type:\t\t  {}", a),
-                                checked: false,
-                                disabled: true,
-                                handler: None,
-                            });
-                        }));
-                        network_menu.push(TrayMenuItem::Text {
-                            text: format!("Status:\t\t  {}", status),
-                            checked: false,
-                            disabled: true,
-                            handler: None,
-                        });
-
-                        let mut added_managed_separator = false;
-                        assigned_addrs.as_array().map(|assigned_addrs| {
-                            if !assigned_addrs.is_empty() {
-                                if !added_managed_separator {
-                                    added_managed_separator = true;
-                                    network_menu.push(TrayMenuItem::Separator);
-                                }
-                                let mut assigned_addrs_menu: Vec<TrayMenuItem> = Vec::new();
-                                for a in assigned_addrs.iter() {
-                                    a.as_str().map(|a| {
-                                        let a_copy = String::from(a);
-                                        assigned_addrs_menu.push(TrayMenuItem::Text {
-                                            text: String::from(a),
-                                            checked: false,
-                                            disabled: false,
-                                            handler: Some(Box::new(move || copy_to_clipboard(a_copy.split_once('/').map_or(a_copy.as_str(), |a| a.0)) )),
-                                        });
-                                    });
-                                }
-                                network_menu.push(TrayMenuItem::Submenu {
-                                    text: "Managed Addresses ".into(),
-                                    checked: false,
-                                    items: assigned_addrs_menu,
-                                });
-                            }
-                        });
-
-                        let mut managed_routes2: Vec<(String, String)> = Vec::new();
-                        managed_routes.as_array().map(|managed_routes| {
-                            if !managed_routes.is_empty() {
-                                if !added_managed_separator {
-                                    added_managed_separator = true;
-                                    network_menu.push(TrayMenuItem::Separator);
-                                }
-                                for r in managed_routes.iter() {
-                                    r.as_object().map(|r| {
-                                        let via = r.get("via").map_or("", |s| s.as_str().unwrap_or(""));
-                                        r.get("target").map(|target| target.as_str().map(|target| {
-                                            managed_routes2.push((target.into(), (if via.is_empty() { device_name } else { via }).into()));
-                                        }));
-                                    });
-                                }
-                            }
-                        });
-                        if !managed_routes2.is_empty() {
-                            managed_routes2.sort_by(|a, b| {
-                                let aa = &((*a).1);
-                                let bb = &((*b).1);
-                                if aa.contains('.') || aa.contains(':') {
-                                    if bb.contains('.') || bb.contains(':') {
-                                        aa.cmp(bb)
-                                    } else {
-                                        Ordering::Greater
-                                    }
-                                } else {
-                                    if bb.contains('.') || bb.contains(':') {
-                                        Ordering::Less
-                                    } else {
-                                        aa.cmp(bb)
-                                    }
-                                }
-                            });
-                            let mut managed_routes_menu: Vec<TrayMenuItem> = Vec::new();
-                            for r in managed_routes2.iter() {
-                                let s = format!("{} via {}", (*r).0, (*r).1);
-                                managed_routes_menu.push(TrayMenuItem::Text {
-                                    text: s.clone(),
-                                    checked: false,
-                                    disabled: false,
-                                    handler: Some(Box::new(move || copy_to_clipboard(s.as_str()))),
-                                });
-                            }
-                            network_menu.push(TrayMenuItem::Submenu {
-                                text: "Managed Routes ".into(),
-                                checked: false,
-                                items: managed_routes_menu,
-                            });
-                        }
-
-                        network_menu.push(TrayMenuItem::Separator);
-
-                        let (nwid, client2) = ((*network).0.clone(), client.clone());
-                        let network_name = nw_obj.get("name").map_or("", |v| v.as_str().unwrap_or(""));
-                        network_menu.push(TrayMenuItem::Text {
-                            text: "Disconnect ".into(),
-                            checked: false,
-                            disabled: false,
-                            handler: Some(Box::new(move || {
-                                let mut c = client2.lock().unwrap();
-                                c.enqueue_delete(format!("network/{}", nwid));
-                                c.remember_network(nwid, network_name.into());
-                            })),
-                        });
-
-                        menu.push(TrayMenuItem::Submenu {
-                            text: format!("{}\t{}  ", (*network).0, nw_obj.get("name").map_or("", |n| n.as_str().unwrap_or(""))),
-                            checked: true,
-                            items: network_menu,
-                        });
-                    }
-                }
-
-                menu.push(TrayMenuItem::Separator);
-
-                let saved_networks = client.lock().unwrap().saved_networks();
-                if !saved_networks.is_empty() {
-                    let mut saved_networks_empty = true;
-                    for nw in saved_networks.iter() {
-                        if !networks.iter().any(|x| (*x).0.eq(&(*nw).0)) {
-                            let (client2, client3) = (client.clone(), client.clone());
-                            let (nwid2, nwid3) = ((*nw).0.clone(), (*nw).0.clone());
-                            menu.push(TrayMenuItem::Submenu {
-                                text: format!("{}\t{}  ", (*nw).0, (*nw).1),
-                                checked: false,
-                                items: vec![
-                                    TrayMenuItem::Text {
-                                        text: "Reconnect".into(),
-                                        checked: false,
-                                        disabled: false,
-                                        handler: Some(Box::new(move || client2.lock().unwrap().enqueue_post(format!("network/{}", nwid2), "{}".into()))),
-                                    },
-                                    TrayMenuItem::Text {
-                                        text: "Forget".into(),
-                                        checked: false,
-                                        disabled: false,
-                                        handler: Some(Box::new(move || client3.lock().unwrap().forget_network(&nwid3))),
-                                    }
-                                ],
-                            });
-                            saved_networks_empty = false;
-                        }
-                    }
-                    if !saved_networks_empty {
-                        menu.push(TrayMenuItem::Separator);
-                    }
-                }
-
-                #[cfg(target_os = "macos")] {
-                    let dirty_flag2 = dirty_flag.clone();
-                    menu.push(TrayMenuItem::Text {
-                        text: "Start UI at Login ".into(),
-                        checked: unsafe { START_ON_LOGIN },
-                        disabled: false,
-                        handler: Some(Box::new(move || {
-                            refresh_mac_start_on_login();
-                            if unsafe { START_ON_LOGIN } {
-                                // osascript -e 'tell application "System Events" to get the name of every login item'
-                                let out = Command::new("/usr/bin/osascript").arg("-e").arg("tell application \"System Events\" to get the name of every login item").output();
-                                let _ = out.map(|app_list| {
-                                    String::from_utf8(app_list.stdout).map(|app_list| {
-                                        app_list.split('\n').for_each(|app| {
-                                            if app.to_ascii_lowercase().contains("zerotier") {
-                                                // osascript -e 'tell application "System Events" to delete login item "itemname"'
-                                                let _ = Command::new("/usr/bin/osascript").arg("-e").arg(format!("tell application \"System Events\" to delete login item \"{}\"", app.trim())).output();
-                                            }
-                                        });
-                                    })
-                                });
-                            } else {
-                                // osascript -e 'tell application "System Events" to make login item at end with properties {path:"PATH_TO_APP", hidden:false}'
-                                let _ = Command::new("/usr/bin/osascript").arg("-e").arg(format!("tell application \"System Events\" to make login item at end with properties {{path:\"{}\", hidden:false}}", unsafe { &APPLICATION_PATH })).output();
-                            }
-                            refresh_mac_start_on_login();
-                            dirty_flag2.store(true, std::sync::atomic::Ordering::Relaxed);
-                        }))
-                    });
-                }
-
-                #[cfg(windows)] {
-                    let dirty_flag2 = dirty_flag.clone();
-                    menu.push(TrayMenuItem::Text {
-                        text: "Start UI at Login ".into(),
-                        checked: unsafe { START_ON_LOGIN },
-                        disabled: false,
-                        handler: Some(Box::new(move || {
-                            refresh_windows_start_on_login();
-                            let hkcu = winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER);
-                            let startup = hkcu.create_subkey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"); // opens read/write if exists
-                            if startup.is_ok() {
-                                let startup = startup.unwrap().0;
-                                if unsafe { START_ON_LOGIN } {
-                                    let _ = startup.delete_value("ZeroTierUI");
-                                } else {
-                                    let exe = String::from(std::env::current_exe().unwrap().to_str().unwrap());
-                                    let _ = startup.set_value("ZeroTierUI", &exe);
-                                }
-                            }
-                            refresh_windows_start_on_login();
-                            dirty_flag2.store(true, std::sync::atomic::Ordering::Relaxed);
-                        }))
-                    });
-                }
-
-                menu.push(TrayMenuItem::Text {
-                    text: "About ".into(),
-                    checked: false,
-                    disabled: false,
-                    handler: Some(Box::new(move || {
-                        open_window_subprocess(about_window2.lock().unwrap(), "About", 800, 600, "");
-                    }))
-                });
-
-                let exit_flag2 = exit_flag.clone();
-                menu.push(TrayMenuItem::Text {
-                    text: "Quit ZeroTier UI ".into(),
-                    checked: false,
-                    disabled: false,
-                    handler: Some(Box::new(move || {
-                        for w in [&main_window3, &about_window3].iter() {
-                            kill_window_subprocess(w.lock().unwrap());
-                        }
-                        exit_flag2.store(true, std::sync::atomic::Ordering::SeqCst);
-                    }))
-                });
+            let new_icon = tray_icon_name();
+            if new_icon != icon_name {
+                icon_name = new_icon;
+                tray.update(Some(icon_name.as_ref()), make_menu(&mut auth_windows));
             } else {
-                menu.push(TrayMenuItem::Text {
-                    text: "Service unreachable...".into(),
-                    checked: false,
-                    disabled: true,
-                    handler: None,
-                });
+                tray.update(None, make_menu(&mut auth_windows));
             }
 
-            if tray.is_none() {
-                tray.replace(Tray::init(icon_name.as_ref(), menu));
-            } else {
-                let new_icon = tray_icon_name();
-                if new_icon != icon_name {
-                    icon_name = new_icon;
-                    tray.as_ref().unwrap().update(Some(icon_name.as_ref()), menu);
-                } else {
-                    tray.as_ref().unwrap().update(None, menu);
-                }
-
-                for w in [&main_window, &about_window].iter() {
-                    check_window_subprocess_exit(w.lock().as_mut().unwrap());
-                }
-                for w in auth_windows.iter() {
-                    let mut ww = (*w.1).1.lock().unwrap();
-                    check_window_subprocess_exit(&mut ww);
-                }
+            for w in [&main_window, &about_window].iter() {
+                check_window_subprocess_exit(w.lock().as_mut().unwrap());
+            }
+            for w in auth_windows.iter() {
+                let mut ww = (*w.1).1.lock().unwrap();
+                check_window_subprocess_exit(&mut ww);
             }
         }
 
         // Execute next tray event loop, which will (as per modifications made to tray.h) return after a second or two if
         // nothing happens. This allows periodic polling for changes to happen in this code.
-        if !tray.as_ref().map_or(false, |tr| tr.poll()) || !exit_flag.load(std::sync::atomic::Ordering::Relaxed) {
+        if !tray.poll() || exit_flag.load(std::sync::atomic::Ordering::Relaxed) {
             break;
         }
     }
