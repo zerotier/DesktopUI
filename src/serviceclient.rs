@@ -82,7 +82,6 @@ pub fn get_auth_token_and_port() -> Option<(String, u16)> {
 
 const SEP_BYTE: [u8; 1] = [0_u8];
 
-// Remove fields from service API objects that change in ways that are not meaningful to us.
 fn hash_result(v: &Value, h: &mut crc64fast::Digest) {
     h.write(&SEP_BYTE);
     match v {
@@ -195,6 +194,21 @@ impl ServiceClient {
         });
         nw.sort_by(|a, b| (*a).0.cmp(&((*b).0)) );
         nw
+    }
+
+    pub fn network_has_error(&self, nwid: &str) -> bool {
+        self.state.get("network").map_or(true, |network| network.as_array().map_or(true, |network| {
+            let mut has_error = true;
+            for n in network.iter() {
+                if n.as_object().map_or(false, |n| {
+                    n.get("id").map_or(false, |id| id.as_str().map_or(false, |id| id == nwid)) && n.get("status").map_or(false, |status| status.as_str().map_or(false, |status| status == "OK"))
+                }) {
+                    has_error = false;
+                    break;
+                }
+            }
+            has_error
+        }))
     }
 
     pub fn sso_auth_needed_networks(&self) -> Vec<(String, String)> {

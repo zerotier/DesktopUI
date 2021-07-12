@@ -67,6 +67,13 @@ window.ztDelete = (path) => {
     }));
 };
 
+window.ztRememberNetwork = (networkId, networkName) => {
+    external.invoke(JSON.stringify({
+        cmd: "remember_network",
+        data: networkId,
+        data2: networkName
+    }));
+};
 
 // NOTE: window.zt_ui_update is set by primary React controls like Main. It's
 // called from Rust code during polling if things have changed. This is a dummy

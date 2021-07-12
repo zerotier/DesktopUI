@@ -93,7 +93,7 @@ export default class Network extends React.Component {
                                         try {
                                             adi = parseInt(ms.adi);
                                         } catch (e) {}
-                                        adi = (adi > 0) ? ((ms.mac == 'ff:ff:ff:ff:ff:ff') ? ' (ARP ADI: '+this.adiToIp(adi)+')' : ' (non-ARP ADI: '+adi.toString(16)+')') : '';
+                                        adi = (adi > 0) ? ((ms.mac === 'ff:ff:ff:ff:ff:ff') ? ' (ARP ADI: '+this.adiToIp(adi)+')' : ' (non-ARP ADI: '+adi.toString(16)+')') : '';
                                         return <div className="font-monospaced" key={(ms.mac+adi)}>{ms.mac}{adi}</div>;
                                     })}
                                 </EuiText>
@@ -103,7 +103,10 @@ export default class Network extends React.Component {
                     <EuiSpacer size="m"/>
                     <div className="eui-textRight">
                         <EuiButton color="danger" size="s" onClick={() => {
-                            ztDelete('network/' + config.id);
+                            if (typeof config.id === 'string' && config.id.length === 16) {
+                                ztRememberNetwork(config.id, config.name||'');
+                                ztDelete('network/' + config.id);
+                            }
                         }}>Disconnect</EuiButton>
                     </div>
                 </EuiFlexItem>

@@ -278,13 +278,13 @@ fn kill_window_subprocess(mut w: MutexGuard<Option<Child>>) {
     }
 }
 
-fn open_window_subprocess(mut w: MutexGuard<Option<Child>>, ui_mode: &str, width: i32, height: i32, param: &str) {
+fn open_window_subprocess(mut w: MutexGuard<Option<Child>>, ui_mode: &str, width: i32, height: i32, param: &[&str]) {
     check_window_subprocess_exit(&mut w);
     if w.is_none() {
         let ch = if ui_mode == "auth" {
-            Command::new(std::env::current_exe().unwrap()).arg("auth").arg(width.to_string()).arg(height.to_string()).arg(param).stdin(Stdio::piped()).spawn()
+            Command::new(std::env::current_exe().unwrap()).arg("auth").arg(width.to_string()).arg(height.to_string()).args(param).stdin(Stdio::piped()).spawn()
         } else {
-            Command::new(std::env::current_exe().unwrap()).arg("window").arg(ui_mode).arg(width.to_string()).arg(height.to_string()).arg(param).stdin(Stdio::piped()).spawn()
+            Command::new(std::env::current_exe().unwrap()).arg("window").arg(ui_mode).arg(width.to_string()).arg(height.to_string()).args(param).stdin(Stdio::piped()).spawn()
         };
         if ch.is_ok() {
             let _ = w.replace(ch.unwrap());
@@ -295,7 +295,23 @@ fn open_window_subprocess(mut w: MutexGuard<Option<Child>>, ui_mode: &str, width
     }
 }
 
-fn window(args: &Vec<String>) {
+fn sso_auth_window(args: &Vec<String>) {
+    let title = format!("{} Network Login", args[4].as_str());
+    let _ = web_view::builder()
+        .title(title.as_str())
+        .content(web_view::Content::Url(args[5].as_str()))
+        .size(i32::from_str_radix(args[2].as_str(), 10).unwrap_or(1024), i32::from_str_radix(args[3].as_str(), 10).unwrap_or(768))
+        .visible(true)
+        .frameless(false)
+        .hide_instead_of_close(false)
+        .debug(false)
+        .user_data(())
+        .invoke_handler(move |_, _| Ok(()))
+        .run()
+        .unwrap();
+}
+
+fn control_panel_window(args: &Vec<String>) {
     /*
      * Web UI subprocess
      *
@@ -454,24 +470,10 @@ fn tray() {
                 text: "Open Control Panel... ".into(),
                 checked: false,
                 disabled: false,
-                handler: Some(Box::new(move || open_window_subprocess(main_window2.lock().unwrap(), "Main", MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT, "")))
+                handler: Some(Box::new(move || open_window_subprocess(main_window2.lock().unwrap(), "Main", MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT, &[])))
             });
 
             let networks = client.lock().unwrap().networks();
-
-            for w in auth_windows.iter() {
-                let mut have_network = false;
-                for network in networks.iter() {
-                    if (*network).0.eq(w.0) {
-                        have_network = true;
-                        break;
-                    }
-                }
-                if !have_network {
-                    kill_window_subprocess((*w.1).1.lock().unwrap());
-                }
-            }
-
             if !networks.is_empty() {
                 menu.push(TrayMenuItem::Separator);
                 for network in networks.iter() {
@@ -763,7 +765,7 @@ fn tray() {
                 text: "About ".into(),
                 checked: false,
                 disabled: false,
-                handler: Some(Box::new(move || open_window_subprocess(about_window2.lock().unwrap(), "About", 800, 600, "")))
+                handler: Some(Box::new(move || open_window_subprocess(about_window2.lock().unwrap(), "About", 800, 600, &[])))
             });
 
             let exit_flag2 = exit_flag.clone();
@@ -787,7 +789,6 @@ fn tray() {
 
     let tray = Tray::init(icon_name.as_ref(), make_menu(&mut auth_windows));
     loop {
-        // Open auth windows for any networks that need authentication.
         let auth_needed_networks = client.lock().unwrap().sso_auth_needed_networks();
         for network in auth_needed_networks.iter() { // network is a tuple of (ID, URL)
             let nwid = &(*network).0;
@@ -805,21 +806,19 @@ fn tray() {
             if !had_key {
                 let _ = auth_windows.insert(nwid.clone(), (auth_url.clone(), Mutex::new(None))); // KEY -> (URL, WINDOW)
             }
-            open_window_subprocess((*auth_windows.get(nwid).unwrap()).1.lock().unwrap(), "auth", 1024, 768, (*network).1.as_str());
+            open_window_subprocess((*auth_windows.get(nwid).unwrap()).1.lock().unwrap(), "auth", 1024, 768, &[nwid.as_str(), (*network).1.as_str()]);
         }
-        drop(auth_needed_networks);
-
-        // Garbage collect entries in auth_windows for closed or killed windows.
         let mut auth_windows_to_remove: Vec<String> = Vec::new();
         for w in auth_windows.iter() {
             let mut ww = (*w.1).1.lock().unwrap();
-            if check_window_subprocess_exit(&mut ww) {
+            if check_window_subprocess_exit(&mut ww) || (!auth_needed_networks.iter().any(|x| (*x).0.eq(w.0)) && !client.lock().unwrap().network_has_error(w.0.as_str())) {
                 auth_windows_to_remove.push(w.0.clone());
             }
         }
         for w in auth_windows_to_remove.iter() {
             auth_windows.remove(w);
         }
+        drop(auth_needed_networks);
         drop(auth_windows_to_remove);
 
         // Refresh menu if data has changed.
@@ -979,24 +978,14 @@ fn main() {
         match args[1].as_str() {
             "window" => { // invoked to open webview GUI windows
                 if args.len() >= 3 {
-                    window(&args);
+                    control_panel_window(&args);
                 } else {
                     println!("FATAL: window requires arguments: ui_mode [width hint] [height hint]");
                 }
             },
             "auth" => { // invoked to open a window to an SSO login endpoint
                 if args.len() >= 5 {
-                    let _ = web_view::builder()
-                        .title("Network Login") // TODO add network ID and name
-                        .content(web_view::Content::Url(args[4].as_str()))
-                        .size(i32::from_str_radix(args[2].as_str(), 10).unwrap_or(1024), i32::from_str_radix(args[3].as_str(), 10).unwrap_or(768))
-                        .visible(true)
-                        .frameless(false)
-                        .debug(false)
-                        .user_data(())
-                        .invoke_handler(move |_, _| Ok(()))
-                        .run()
-                        .unwrap();
+                    sso_auth_window(&args);
                 } else {
                     println!("FATAL: window requires arguments: ui_mode [width hint] [height hint] [url]");
                 }
