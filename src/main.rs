@@ -789,6 +789,7 @@ fn tray() {
 
     let tray = Tray::init(icon_name.as_ref(), make_menu(&mut auth_windows));
     loop {
+        // Create and destroy authentication windows in response to networks that need authentication.
         let auth_needed_networks = client.lock().unwrap().sso_auth_needed_networks();
         for network in auth_needed_networks.iter() { // network is a tuple of (ID, URL)
             let nwid = &(*network).0;
