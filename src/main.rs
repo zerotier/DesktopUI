@@ -6,7 +6,7 @@ mod serviceclient;
 #[allow(unused)]
 use std::process::{Child, Command, Stdio};
 use std::sync::{Mutex, Arc, MutexGuard};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 #[allow(unused)]
 use std::io::{Read, Write};
 use std::cmp::Ordering;
@@ -23,11 +23,14 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::tray::*;
-use crate::serviceclient::ServiceClient;
+use crate::serviceclient::{ServiceClient, ms_since_epoch};
 
 /// The string in the HTML blob to replace with the right CSS for this platform and light/dark mode.
 /// It's a bit weird so web app bundlers don't optimize it out.
 const CSS_PLACEHOLDER: &'static str = ".XXXthis_is_replaced_by_css_in_the_rust_codeXXX{border:0}";
+
+/// Default URL to which client will be directed on successful auth.
+const DEFAULT_AUTH_SUCCESS_URL: &'static str = "https://my-dev.zerotier.com/api/network/sso-auth";
 
 const MAIN_WINDOW_WIDTH: i32 = 1300;
 const MAIN_WINDOW_HEIGHT: i32 = 500;
@@ -297,18 +300,35 @@ fn open_window_subprocess(mut w: MutexGuard<Option<Child>>, ui_mode: &str, width
 
 fn sso_auth_window(args: &Vec<String>) {
     let title = format!("{} Network Login", args[4].as_str());
-    let _ = web_view::builder()
+    let start_time = ms_since_epoch();
+    let mut wv = web_view::builder()
         .title(title.as_str())
         .content(web_view::Content::Url(args[5].as_str()))
         .size(i32::from_str_radix(args[2].as_str(), 10).unwrap_or(1024), i32::from_str_radix(args[3].as_str(), 10).unwrap_or(768))
-        .visible(true)
+        .visible(false)
         .frameless(false)
         .hide_instead_of_close(false)
         .debug(false)
         .user_data(())
-        .invoke_handler(move |_, _| Ok(()))
-        .run()
+        .invoke_handler(move |wv, arg| {
+            if !arg.is_empty() {
+                if arg.starts_with(DEFAULT_AUTH_SUCCESS_URL) {
+                    wv.exit();
+                } else if (ms_since_epoch() - start_time) > 2000 {
+                    wv.set_visible(true);
+                }
+            }
+            Ok(())
+        })
+        .build()
         .unwrap();
+    loop {
+        let r = wv.step();
+        if r.is_none() {
+            break;
+        }
+        let _ = wv.eval("external.invoke(window.location.href||'')");
+    }
 }
 
 fn control_panel_window(args: &Vec<String>) {
@@ -451,7 +471,7 @@ fn tray() {
     let about_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
     let mut auth_windows: HashMap<String, (String, Mutex<Option<Child>>)> = HashMap::new();
 
-    let make_menu = |auth_windows: &mut HashMap<String, (String, Mutex<Option<Child>>)>| {
+    let make_menu = || {
         let mut menu: Vec<TrayMenuItem> = Vec::new();
         if client.lock().unwrap().is_online() {
             let address = client.lock().unwrap().get_str(&["status", "address"]);
@@ -533,7 +553,7 @@ fn tray() {
 
                     nw_obj.get("mac").map(|a| a.as_str().map(|a| {
                         network_menu.push(TrayMenuItem::Text {
-                            text: format!("Ethernet:\t\t  {}", a),
+                            text: format!("Ethernet:\t\t\t  {}", a),
                             checked: false,
                             disabled: true,
                             handler: None,
@@ -541,7 +561,7 @@ fn tray() {
                     }));
                     if !device_name.is_empty() {
                         network_menu.push(TrayMenuItem::Text {
-                            text: format!("Device:\t\t  {}", device_name),
+                            text: format!("Device:\t\t\t  {}", device_name),
                             checked: false,
                             disabled: true,
                             handler: None,
@@ -549,18 +569,35 @@ fn tray() {
                     }
                     nw_obj.get("type").map(|a| a.as_str().map(|a| {
                         network_menu.push(TrayMenuItem::Text {
-                            text: format!("Type:\t\t  {}", a),
+                            text: format!("Type:\t\t\t  {}", a),
                             checked: false,
                             disabled: true,
                             handler: None,
                         });
                     }));
                     network_menu.push(TrayMenuItem::Text {
-                        text: format!("Status:\t\t  {}", status),
+                        text: format!("Status:\t\t\t  {}", status),
                         checked: false,
                         disabled: true,
                         handler: None,
                     });
+                    if status == "OK" {
+                        nw_obj.get("authenticationExpiryTime").map(|auth_exp_time| {
+                            auth_exp_time.as_i64().map(|auth_exp_time| {
+                                let auth_exp_time = auth_exp_time;
+                                if auth_exp_time > 0 {
+                                    let auth_exp_time = SystemTime::UNIX_EPOCH.checked_add(std::time::Duration::from_millis(auth_exp_time as u64)).unwrap();
+                                    let auth_exp_time = chrono::DateTime::<chrono::Local>::from(auth_exp_time);
+                                    network_menu.push(TrayMenuItem::Text {
+                                        text: format!("Auth Expire:\t\t  {}", auth_exp_time.format("%Y-%m-%d %H:%M:%S").to_string()),
+                                        checked: false,
+                                        disabled: true,
+                                        handler: None,
+                                    });
+                                }
+                            })
+                        });
+                    }
 
                     let mut added_managed_separator = false;
                     assigned_addrs.as_array().map(|assigned_addrs| {
@@ -782,10 +819,10 @@ fn tray() {
         menu
     };
 
-    let tray = Tray::init(icon_name.as_ref(), make_menu(&mut auth_windows));
+    let tray = Tray::init(icon_name.as_ref(), make_menu());
     loop {
         // Create and destroy authentication windows in response to networks that need authentication.
-        let auth_needed_networks = client.lock().unwrap().sso_auth_needed_networks();
+        let auth_needed_networks = client.lock().unwrap().sso_auth_needed_networks(20000);
         for network in auth_needed_networks.iter() { // network is a tuple of (ID, URL)
             let nwid = &(*network).0;
             let auth_url = &(*network).1;
@@ -822,9 +859,9 @@ fn tray() {
             let new_icon = tray_icon_name();
             if new_icon != icon_name {
                 icon_name = new_icon;
-                tray.update(Some(icon_name.as_ref()), make_menu(&mut auth_windows));
+                tray.update(Some(icon_name.as_ref()), make_menu());
             } else {
-                tray.update(None, make_menu(&mut auth_windows));
+                tray.update(None, make_menu());
             }
 
             for w in [&main_window, &about_window].iter() {

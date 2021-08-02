@@ -211,7 +211,7 @@ impl ServiceClient {
         }))
     }
 
-    pub fn sso_auth_needed_networks(&self) -> Vec<(String, String)> {
+    pub fn sso_auth_needed_networks(&self, reauth_ms_before_timeout: i64) -> Vec<(String, String)> {
         let mut nw: Vec<(String, String)> = Vec::new();
         self.with(&["network"], |nws| {
             let _ = nws.as_array().map(|a| a.iter().for_each(|network| {
@@ -221,7 +221,7 @@ impl ServiceClient {
                         // TODO: right now we auth if there is only 10 seconds remaining. In the future we should use some kind of field
                         // indicating what the expiry time is or learn it from the auth_expiry_time we get after auth to calibrate this
                         // properly to keep the user online with the least fuss.
-                        if sso_enabled.as_bool().unwrap_or(false) && !auth_url.is_empty() && auth_expiry_time < (ms_since_epoch() + 10000) {
+                        if sso_enabled.as_bool().unwrap_or(false) && !auth_url.is_empty() && auth_expiry_time < (ms_since_epoch() + reauth_ms_before_timeout) {
                             nw.push((id.into(), auth_url.into()));
                         }
                     })))))));
