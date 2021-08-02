@@ -488,11 +488,6 @@ fn tray() {
                     let allow_dns = nw_obj.get("allowDNS").map_or(false, |b| b.as_bool().unwrap_or(false));
                     let status = nw_obj.get("status").map_or("REQUESTING_CONFIGURATION", |s| s.as_str().unwrap_or("REQUESTING_CONFIGURATION"));
 
-                    // Kill any authentication windows for networks that are now authenticated.
-                    if status == "OK" {
-                        let _ = auth_windows.get(&(*network).0).map(|w| kill_window_subprocess((*w).1.lock().unwrap()));
-                    }
-
                     let mut network_menu: Vec<TrayMenuItem> = Vec::new();
 
                     let nwid = (*network).0.clone();
