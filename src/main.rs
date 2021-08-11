@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::tray::*;
-use crate::serviceclient::{ServiceClient, ms_since_epoch};
+use crate::serviceclient::*;
 
 /// The string in the HTML blob to replace with the right CSS for this platform and light/dark mode.
 /// It's a bit weird so web app bundlers don't optimize it out.
@@ -281,26 +281,51 @@ fn kill_window_subprocess(mut w: MutexGuard<Option<Child>>) {
     }
 }
 
-fn open_window_subprocess(mut w: MutexGuard<Option<Child>>, ui_mode: &str, width: i32, height: i32, param: &[&str]) {
+fn open_auth_window_subprocess(mut w: MutexGuard<Option<Child>>, width: i32, height: i32, param: &[&str]) {
     check_window_subprocess_exit(&mut w);
     if w.is_none() {
-        let ch = if ui_mode == "auth" {
-            Command::new(std::env::current_exe().unwrap()).arg("auth").arg(width.to_string()).arg(height.to_string()).args(param).stdin(Stdio::piped()).spawn()
-        } else {
-            Command::new(std::env::current_exe().unwrap()).arg("window").arg(ui_mode).arg(width.to_string()).arg(height.to_string()).args(param).stdin(Stdio::piped()).spawn()
-        };
+        let ch = Command::new(std::env::current_exe().unwrap()).arg("auth").arg(width.to_string()).arg(height.to_string()).args(param).stdin(Stdio::piped()).spawn();
+        if ch.is_ok() {
+            let _ = w.replace(ch.unwrap());
+        }
+    }
+}
+
+fn open_ui_window_subprocess(mut w: MutexGuard<Option<Child>>, ui_mode: &str, width: i32, height: i32) {
+    check_window_subprocess_exit(&mut w);
+    if w.is_none() {
+        let ch = Command::new(std::env::current_exe().unwrap()).arg("window").arg(ui_mode).arg(width.to_string()).arg(height.to_string()).stdin(Stdio::piped()).spawn();
         if ch.is_ok() {
             let _ = w.replace(ch.unwrap());
         }
     } else {
         // Sending 'r' causes subprocess to raise the window at the first opportunity.
-        let _ = w.as_mut().unwrap().stdin.as_mut().unwrap().write_all(&['r' as u8]);
+        let _ = w.as_mut().unwrap().stdin.as_mut().unwrap().write_all(&[b'r']);
     }
 }
 
+// Create a thread that listens for 'r' on STDIN in subprocesses and sets a flag.
+// This is used by webview window subprocesses.
+fn create_raise_window_listener_thread() -> Arc<AtomicBool> {
+    let raise_window = Arc::new(AtomicBool::new(false));
+    let raise_window2 = raise_window.clone();
+    let _ = std::thread::spawn(move || {
+        set_thread_to_background_priority();
+        loop {
+            let mut buf: [u8; 1] = [0_u8];
+            let _ = std::io::stdin().read_exact(&mut buf);
+            if buf[0] == ('r' as u8) {
+                raise_window2.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
+    });
+    raise_window
+}
+
 fn sso_auth_window(args: &Vec<String>) {
+    let raise_window = create_raise_window_listener_thread();
+
     let title = format!("{} Network Login", args[4].as_str());
-    let start_time = ms_since_epoch();
     let mut wv = web_view::builder()
         .title(title.as_str())
         .content(web_view::Content::Url(args[5].as_str()))
@@ -311,21 +336,21 @@ fn sso_auth_window(args: &Vec<String>) {
         .debug(false)
         .user_data(())
         .invoke_handler(move |wv, arg| {
-            if !arg.is_empty() {
-                if arg.starts_with(DEFAULT_AUTH_SUCCESS_URL) {
-                    wv.exit();
-                } else if (ms_since_epoch() - start_time) > 2000 {
-                    wv.set_visible(true);
-                }
+            if arg.starts_with(DEFAULT_AUTH_SUCCESS_URL) {
+                wv.exit();
             }
             Ok(())
         })
         .build()
         .unwrap();
+
     loop {
         let r = wv.step();
         if r.is_none() {
             break;
+        }
+        if raise_window.swap(false, std::sync::atomic::Ordering::Relaxed) {
+            wv.set_visible(true);
         }
         let _ = wv.eval("external.invoke(window.location.href||'')");
     }
@@ -354,18 +379,7 @@ fn control_panel_window(args: &Vec<String>) {
 
     let (client, dirty_flag) = start_client(vec!["status", "network", "peer"], 100, 5);
 
-    let raise_window = Arc::new(AtomicBool::new(false));
-    let raise_window2 = raise_window.clone();
-    let _ = std::thread::spawn(move || {
-        set_thread_to_background_priority();
-        loop {
-            let mut buf: [u8; 1] = [0_u8];
-            let _ = std::io::stdin().read_exact(&mut buf);
-            if buf[0] == ('r' as u8) {
-                raise_window2.store(true, std::sync::atomic::Ordering::Relaxed);
-            }
-        }
-    });
+    let raise_window = create_raise_window_listener_thread();
 
     set_thread_to_foreground_priority();
 
@@ -469,7 +483,7 @@ fn tray() {
 
     let main_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
     let about_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
-    let mut auth_windows: HashMap<String, (String, Mutex<Option<Child>>)> = HashMap::new();
+    let auth_windows: Arc<Mutex<HashMap<String, (String, Mutex<Option<Child>>)>>> = Arc::new(Mutex::new(HashMap::new()));
 
     let make_menu = || {
         let mut menu: Vec<TrayMenuItem> = Vec::new();
@@ -490,7 +504,7 @@ fn tray() {
                 text: "Open Control Panel... ".into(),
                 checked: false,
                 disabled: false,
-                handler: Some(Box::new(move || open_window_subprocess(main_window2.lock().unwrap(), "Main", MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT, &[])))
+                handler: Some(Box::new(move || open_ui_window_subprocess(main_window2.lock().unwrap(), "Main", MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT)))
             });
 
             let networks = client.lock().unwrap().networks();
@@ -507,6 +521,16 @@ fn tray() {
                     let allow_default = nw_obj.get("allowDefault").map_or(false, |b| b.as_bool().unwrap_or(false));
                     let allow_dns = nw_obj.get("allowDNS").map_or(false, |b| b.as_bool().unwrap_or(false));
                     let status = nw_obj.get("status").map_or("REQUESTING_CONFIGURATION", |s| s.as_str().unwrap_or("REQUESTING_CONFIGURATION"));
+
+                    if status == "AUTHENTICATION_REQUIRED" {
+                        auth_windows.lock().as_ref().unwrap().get((*network).0.as_str()).map(|auth_window| {
+                            (*auth_window).1.lock().as_mut().unwrap().as_mut().map(|auth_window_process| {
+                                auth_window_process.stdin.as_mut().map(|stdin| {
+                                    let _ = stdin.write_all(&[b'r']);
+                                });
+                            });
+                        });
+                    }
 
                     let mut network_menu: Vec<TrayMenuItem> = Vec::new();
 
@@ -797,7 +821,7 @@ fn tray() {
                 text: "About ".into(),
                 checked: false,
                 disabled: false,
-                handler: Some(Box::new(move || open_window_subprocess(about_window2.lock().unwrap(), "About", 800, 600, &[])))
+                handler: Some(Box::new(move || open_ui_window_subprocess(about_window2.lock().unwrap(), "About", 800, 600)))
             });
 
             let exit_flag2 = exit_flag.clone();
@@ -822,37 +846,41 @@ fn tray() {
     let tray = Tray::init(icon_name.as_ref(), make_menu());
     loop {
         // Create and destroy authentication windows in response to networks that need authentication.
-        let auth_needed_networks = client.lock().unwrap().sso_auth_needed_networks(20000);
-        for network in auth_needed_networks.iter() { // network is a tuple of (ID, URL)
-            let nwid = &(*network).0;
-            let auth_url = &(*network).1;
-            let mut had_key = auth_windows.contains_key(nwid);
-            if had_key {
-                // If there was a key, check if URLs match and if not kill and re-open.
-                auth_windows.get(nwid).map(|w| {
-                    if !(*w).0.eq(auth_url) {
-                        kill_window_subprocess((*w).1.lock().unwrap());
-                        had_key = false;
-                    }
-                });
+        {
+            let mut auth_windows_l = auth_windows.lock();
+            let auth_windows = auth_windows_l.as_mut().unwrap();
+
+            let auth_needed_networks = client.lock().unwrap().sso_auth_needed_networks(20000);
+            for network in auth_needed_networks.iter() { // network is a tuple of (ID, URL)
+                let nwid = &(*network).0;
+                let auth_url = &(*network).1;
+                let mut had_key = auth_windows.contains_key(nwid);
+                if had_key {
+                    // If there was a key, check if URLs match and if not kill and re-open.
+                    auth_windows.get(nwid).map(|w| {
+                        if !(*w).0.eq(auth_url) {
+                            kill_window_subprocess((*w).1.lock().unwrap());
+                            had_key = false;
+                        }
+                    });
+                }
+                if !had_key {
+                    let _ = auth_windows.insert(nwid.clone(), (auth_url.clone(), Mutex::new(None))); // KEY -> (URL, WINDOW)
+                }
+                open_auth_window_subprocess((*auth_windows.get(nwid).unwrap()).1.lock().unwrap(), 1024, 768, &[nwid.as_str(), (*network).1.as_str()]);
             }
-            if !had_key {
-                let _ = auth_windows.insert(nwid.clone(), (auth_url.clone(), Mutex::new(None))); // KEY -> (URL, WINDOW)
+
+            let mut auth_windows_to_remove: Vec<String> = Vec::new();
+            for w in auth_windows.iter() {
+                let mut ww = (*w.1).1.lock().unwrap();
+                if check_window_subprocess_exit(&mut ww) || (!auth_needed_networks.iter().any(|x| (*x).0.eq(w.0)) && !client.lock().unwrap().network_has_error(w.0.as_str())) {
+                    auth_windows_to_remove.push(w.0.clone());
+                }
             }
-            open_window_subprocess((*auth_windows.get(nwid).unwrap()).1.lock().unwrap(), "auth", 1024, 768, &[nwid.as_str(), (*network).1.as_str()]);
-        }
-        let mut auth_windows_to_remove: Vec<String> = Vec::new();
-        for w in auth_windows.iter() {
-            let mut ww = (*w.1).1.lock().unwrap();
-            if check_window_subprocess_exit(&mut ww) || (!auth_needed_networks.iter().any(|x| (*x).0.eq(w.0)) && !client.lock().unwrap().network_has_error(w.0.as_str())) {
-                auth_windows_to_remove.push(w.0.clone());
+            for w in auth_windows_to_remove.iter() {
+                auth_windows.remove(w);
             }
         }
-        for w in auth_windows_to_remove.iter() {
-            auth_windows.remove(w);
-        }
-        drop(auth_needed_networks);
-        drop(auth_windows_to_remove);
 
         // Refresh menu if data has changed.
         if dirty_flag.swap(false, std::sync::atomic::Ordering::Relaxed) {
@@ -867,7 +895,8 @@ fn tray() {
             for w in [&main_window, &about_window].iter() {
                 check_window_subprocess_exit(w.lock().as_mut().unwrap());
             }
-            for w in auth_windows.iter() {
+
+            for w in auth_windows.lock().as_ref().unwrap().iter() {
                 let mut ww = (*w.1).1.lock().unwrap();
                 check_window_subprocess_exit(&mut ww);
             }
@@ -883,7 +912,7 @@ fn tray() {
     for w in [&main_window, &about_window].iter() {
         kill_window_subprocess(w.lock().unwrap());
     }
-    for w in auth_windows.iter() {
+    for w in auth_windows.lock().as_ref().unwrap().iter() {
         kill_window_subprocess((*w.1).1.lock().unwrap());
     }
 }
