@@ -495,9 +495,11 @@ WEBVIEW_API int webview_init(webview_t w) {
                             sel_registerName("sharedApplication")),
                sel_registerName("finishLaunching"));
 
-  ((id(*)(id, SEL, id))objc_msgSend)(((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSApplication"),
-                            sel_registerName("sharedApplication")),
-               sel_registerName("activateIgnoringOtherApps:"), 1);
+  if (wv->visible) {
+      ((id(*)(id, SEL, id))objc_msgSend)(((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSApplication"),
+        sel_registerName("sharedApplication")),
+          sel_registerName("activateIgnoringOtherApps:"), 1);
+  }
 
   id menubar =
       ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSMenu"), sel_registerName("alloc"));
