@@ -1,29 +1,30 @@
 // (c)2021 ZeroTier, Inc.
 
-mod tray;
-mod serviceclient;
-
-#[allow(unused)]
-use std::process::{Child, Command, Stdio};
-use std::sync::{Mutex, Arc, MutexGuard};
-use std::time::{Duration, SystemTime};
-#[allow(unused)]
-use std::io::{Read, Write};
 use std::cmp::Ordering;
-use std::sync::atomic::AtomicBool;
 #[allow(unused)]
-use std::os::raw::{c_int, c_char, c_uint};
+use std::collections::{HashMap, LinkedList};
 #[allow(unused)]
 use std::ffi::CString;
 #[allow(unused)]
-use std::collections::{HashMap, LinkedList};
+use std::io::{Read, Write};
+#[allow(unused)]
+use std::os::raw::{c_char, c_int, c_uint};
 use std::path::Path;
+#[allow(unused)]
+use std::process::{Child, Command, Stdio};
+use std::sync::Arc;
+use std::sync::atomic::*;
+use std::time::{Duration, SystemTime};
 
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::tray::*;
 use crate::serviceclient::*;
+use crate::tray::*;
+
+mod tray;
+mod serviceclient;
 
 /// The string in the HTML blob to replace with the right CSS for this platform and light/dark mode.
 /// It's a bit weird so web app bundlers don't optimize it out.
@@ -240,16 +241,16 @@ fn start_client(refresh_base_paths: Vec<&'static str>, tick_period_ms: u64, refr
         set_thread_to_background_priority();
         let mut k = 0_u64;
         loop {
-            let _ = thread_client.lock().map(|mut c| {
-                k += 1;
-                if k >= refresh_period_ticks {
-                    k = 0;
-                    c.sync();
-                }
-                if c.do_posts() {
-                    k = refresh_period_ticks - 1;
-                }
-            });
+            let mut c = thread_client.lock();
+            k += 1;
+            if k >= refresh_period_ticks {
+                k = 0;
+                c.sync();
+            }
+            if c.do_posts() {
+                k = refresh_period_ticks - 1;
+            }
+            drop(c);
             std::thread::sleep(Duration::from_millis(tick_period_ms));
         }
     });
@@ -260,7 +261,7 @@ fn start_client(refresh_base_paths: Vec<&'static str>, tick_period_ms: u64, refr
 /*******************************************************************************************************************/
 
 // Returns true if the process has exited or is not started.
-fn check_window_subprocess_exit(w: &mut MutexGuard<Option<Child>>) -> bool {
+fn check_window_subprocess_exit(w: &mut Option<Child>) -> bool {
     if w.is_some() {
         let res = w.as_mut().unwrap().try_wait();
         if res.is_ok() && res.ok().unwrap().is_some() {
@@ -274,15 +275,15 @@ fn check_window_subprocess_exit(w: &mut MutexGuard<Option<Child>>) -> bool {
     }
 }
 
-fn kill_window_subprocess(mut w: MutexGuard<Option<Child>>) {
-    check_window_subprocess_exit(&mut w);
+fn kill_window_subprocess(w: &mut Option<Child>) {
+    check_window_subprocess_exit(w);
     if w.is_some() {
         let _ = w.as_mut().unwrap().kill();
     }
 }
 
-fn open_auth_window_subprocess(mut w: MutexGuard<Option<Child>>, width: i32, height: i32, param: &[&str]) {
-    check_window_subprocess_exit(&mut w);
+fn open_auth_window_subprocess(w: &mut Option<Child>, width: i32, height: i32, param: &[&str]) {
+    check_window_subprocess_exit(w);
     if w.is_none() {
         let ch = Command::new(std::env::current_exe().unwrap()).arg("auth").arg(width.to_string()).arg(height.to_string()).args(param).stdin(Stdio::piped()).spawn();
         if ch.is_ok() {
@@ -291,8 +292,8 @@ fn open_auth_window_subprocess(mut w: MutexGuard<Option<Child>>, width: i32, hei
     }
 }
 
-fn open_ui_window_subprocess(mut w: MutexGuard<Option<Child>>, ui_mode: &str, width: i32, height: i32) {
-    check_window_subprocess_exit(&mut w);
+fn open_ui_window_subprocess(w: &mut Option<Child>, ui_mode: &str, width: i32, height: i32) {
+    check_window_subprocess_exit(w);
     if w.is_none() {
         let ch = Command::new(std::env::current_exe().unwrap()).arg("window").arg(ui_mode).arg(width.to_string()).arg(height.to_string()).stdin(Stdio::piped()).spawn();
         if ch.is_ok() {
@@ -323,8 +324,9 @@ fn create_raise_window_listener_thread() -> Arc<AtomicBool> {
 }
 
 fn sso_auth_window(args: &Vec<String>) {
-    let raise_window = create_raise_window_listener_thread();
-
+    println!("sso auth window opened");
+    //let raise_window = create_raise_window_listener_thread();
+    let start_time = ms_since_epoch();
     let title = format!("{} Network Login", args[4].as_str());
     let mut wv = web_view::builder()
         .title(title.as_str())
@@ -336,8 +338,13 @@ fn sso_auth_window(args: &Vec<String>) {
         .debug(false)
         .user_data(())
         .invoke_handler(move |wv, arg| {
+            println!("sso auth URL: {}", arg);
+            let now = ms_since_epoch();
             if arg.starts_with(DEFAULT_AUTH_SUCCESS_URL) {
-                wv.exit();
+                std::process::exit(0);
+            }
+            if (now - start_time) > 5000 {
+                wv.set_visible(true);
             }
             Ok(())
         })
@@ -349,9 +356,7 @@ fn sso_auth_window(args: &Vec<String>) {
         if r.is_none() {
             break;
         }
-        if raise_window.swap(false, std::sync::atomic::Ordering::Relaxed) {
-            wv.set_visible(true);
-        }
+        println!("sso auth loop");
         let _ = wv.eval("external.invoke(window.location.href||'')");
     }
 }
@@ -384,7 +389,7 @@ fn control_panel_window(args: &Vec<String>) {
     set_thread_to_foreground_priority();
 
     let ui_client = client.clone();
-    let _ = ui_client.lock().map(|mut c| c.sync());
+    let _ = ui_client.lock().sync();
     let _ = web_view::builder()
         .title("ZeroTier")
         .content(web_view::Content::Html(get_web_ui_blob(is_dark_mode())))
@@ -408,13 +413,13 @@ fn control_panel_window(args: &Vec<String>) {
                         let _ = wv.eval(format!("zt_ui_render('{}', {});", args[2], WEBVIEW_WINDOW_FRAMELESS).as_str());
                     },
                     "post" => {
-                        let _ = ui_client.lock().map(|mut c| c.enqueue_post(cmd.name, cmd.data));
+                        let _ = ui_client.lock().enqueue_post(cmd.name, cmd.data);
                     },
                     "delete" => {
-                        let _ = ui_client.lock().map(|mut c| c.enqueue_delete(cmd.name));
+                        let _ = ui_client.lock().enqueue_delete(cmd.name);
                     },
                     "remember_network" => {
-                        let _ = ui_client.lock().map(|mut c| c.remember_network(cmd.data, cmd.data2));
+                        let _ = ui_client.lock().remember_network(cmd.data, cmd.data2);
                     },
                     "copy_to_clipboard" => {
                         copy_to_clipboard(cmd.data.as_str());
@@ -430,9 +435,7 @@ fn control_panel_window(args: &Vec<String>) {
                     },
                     "poll" => {
                         if dirty_flag.swap(false, std::sync::atomic::Ordering::Relaxed) {
-                            let _ = ui_client.lock().map(|ui_client| {
-                                let _ = wv.eval(format!("zt_ui_update({});", ui_client.get_all_json()).as_str());
-                            });
+                            let _ = wv.eval(format!("zt_ui_update({});", ui_client.lock().get_all_json()).as_str());
                         }
                     },
                     "log" => {
@@ -485,10 +488,11 @@ fn tray() {
     let about_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
     let auth_windows: Arc<Mutex<HashMap<String, (String, Mutex<Option<Child>>)>>> = Arc::new(Mutex::new(HashMap::new()));
 
-    let make_menu = || {
+    // This closure builds a new menu for display in the app icon.
+    let refresh = || {
         let mut menu: Vec<TrayMenuItem> = Vec::new();
-        if client.lock().unwrap().is_online() {
-            let address = client.lock().unwrap().get_str(&["status", "address"]);
+        if client.lock().is_online() {
+            let address = client.lock().get_str(&["status", "address"]);
             let address2 = address.clone();
             menu.push(TrayMenuItem::Text {
                 text: format!("Node ID:  {} ", address),
@@ -504,10 +508,10 @@ fn tray() {
                 text: "Open Control Panel... ".into(),
                 checked: false,
                 disabled: false,
-                handler: Some(Box::new(move || open_ui_window_subprocess(main_window2.lock().unwrap(), "Main", MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT)))
+                handler: Some(Box::new(move || open_ui_window_subprocess(&mut *main_window2.lock(), "Main", MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT)))
             });
 
-            let networks = client.lock().unwrap().networks();
+            let networks = client.lock().networks();
             if !networks.is_empty() {
                 menu.push(TrayMenuItem::Separator);
                 for network in networks.iter() {
@@ -521,16 +525,6 @@ fn tray() {
                     let allow_default = nw_obj.get("allowDefault").map_or(false, |b| b.as_bool().unwrap_or(false));
                     let allow_dns = nw_obj.get("allowDNS").map_or(false, |b| b.as_bool().unwrap_or(false));
                     let status = nw_obj.get("status").map_or("REQUESTING_CONFIGURATION", |s| s.as_str().unwrap_or("REQUESTING_CONFIGURATION"));
-
-                    if status == "AUTHENTICATION_REQUIRED" {
-                        auth_windows.lock().as_ref().unwrap().get((*network).0.as_str()).map(|auth_window| {
-                            (*auth_window).1.lock().as_mut().unwrap().as_mut().map(|auth_window_process| {
-                                auth_window_process.stdin.as_mut().map(|stdin| {
-                                    let _ = stdin.write_all(&[b'r']);
-                                });
-                            });
-                        });
-                    }
 
                     let mut network_menu: Vec<TrayMenuItem> = Vec::new();
 
@@ -549,28 +543,28 @@ fn tray() {
                         text: format!("Allow Managed Addresses"),
                         checked: allow_managed_addresses,
                         disabled: false,
-                        handler: Some(Box::new(move || client2.lock().unwrap().enqueue_post(format!("network/{}", nwid), format!("{{ \"allowManaged\": {} }}", !allow_managed_addresses)))),
+                        handler: Some(Box::new(move || client2.lock().enqueue_post(format!("network/{}", nwid), format!("{{ \"allowManaged\": {} }}", !allow_managed_addresses)))),
                     });
                     let (nwid, client2) = ((*network).0.clone(), client.clone());
                     network_menu.push(TrayMenuItem::Text {
                         text: format!("Allow Assignment of Global IPs"),
                         checked: allow_global_ips,
                         disabled: false,
-                        handler: Some(Box::new(move || client2.lock().unwrap().enqueue_post(format!("network/{}", nwid), format!("{{ \"allowGlobal\": {} }}", !allow_global_ips)))),
+                        handler: Some(Box::new(move || client2.lock().enqueue_post(format!("network/{}", nwid), format!("{{ \"allowGlobal\": {} }}", !allow_global_ips)))),
                     });
                     let (nwid, client2) = ((*network).0.clone(), client.clone());
                     network_menu.push(TrayMenuItem::Text {
                         text: format!("Allow Default Router Override"),
                         checked: allow_default,
                         disabled: false,
-                        handler: Some(Box::new(move || client2.lock().unwrap().enqueue_post(format!("network/{}", nwid), format!("{{ \"allowDefault\": {} }}", !allow_default)))),
+                        handler: Some(Box::new(move || client2.lock().enqueue_post(format!("network/{}", nwid), format!("{{ \"allowDefault\": {} }}", !allow_default)))),
                     });
                     let (nwid, client2) = ((*network).0.clone(), client.clone());
                     network_menu.push(TrayMenuItem::Text {
                         text: format!("Allow DNS Configuration"),
                         checked: allow_dns,
                         disabled: false,
-                        handler: Some(Box::new(move || client2.lock().unwrap().enqueue_post(format!("network/{}", nwid), format!("{{ \"allowDNS\": {} }}", !allow_dns)))),
+                        handler: Some(Box::new(move || client2.lock().enqueue_post(format!("network/{}", nwid), format!("{{ \"allowDNS\": {} }}", !allow_dns)))),
                     });
 
                     network_menu.push(TrayMenuItem::Separator);
@@ -711,7 +705,7 @@ fn tray() {
                         checked: false,
                         disabled: false,
                         handler: Some(Box::new(move || {
-                            let mut c = client2.lock().unwrap();
+                            let mut c = client2.lock();
                             c.enqueue_delete(format!("network/{}", nwid));
                             c.remember_network(nwid.clone(), network_name.clone());
                         })),
@@ -727,7 +721,7 @@ fn tray() {
 
             menu.push(TrayMenuItem::Separator);
 
-            let saved_networks = client.lock().unwrap().saved_networks();
+            let saved_networks = client.lock().saved_networks();
             if !saved_networks.is_empty() {
                 let mut saved_networks_empty = true;
                 for nw in saved_networks.iter() {
@@ -742,13 +736,13 @@ fn tray() {
                                     text: "Reconnect".into(),
                                     checked: false,
                                     disabled: false,
-                                    handler: Some(Box::new(move || client2.lock().unwrap().enqueue_post(format!("network/{}", nwid2), "{}".into()))),
+                                    handler: Some(Box::new(move || client2.lock().enqueue_post(format!("network/{}", nwid2), "{}".into()))),
                                 },
                                 TrayMenuItem::Text {
                                     text: "Forget".into(),
                                     checked: false,
                                     disabled: false,
-                                    handler: Some(Box::new(move || client3.lock().unwrap().forget_network(&nwid3))),
+                                    handler: Some(Box::new(move || client3.lock().forget_network(&nwid3))),
                                 }
                             ],
                         });
@@ -821,7 +815,7 @@ fn tray() {
                 text: "About ".into(),
                 checked: false,
                 disabled: false,
-                handler: Some(Box::new(move || open_ui_window_subprocess(about_window2.lock().unwrap(), "About", 800, 600)))
+                handler: Some(Box::new(move || open_ui_window_subprocess(&mut *about_window2.lock(), "About", 800, 600)))
             });
 
             let exit_flag2 = exit_flag.clone();
@@ -843,14 +837,13 @@ fn tray() {
         menu
     };
 
-    let tray = Tray::init(icon_name.as_ref(), make_menu());
+    let tray = Tray::init(icon_name.as_ref(), refresh());
     loop {
         // Create and destroy authentication windows in response to networks that need authentication.
         {
-            let mut auth_windows_l = auth_windows.lock();
-            let auth_windows = auth_windows_l.as_mut().unwrap();
+            let mut auth_windows = auth_windows.lock();
 
-            let auth_needed_networks = client.lock().unwrap().sso_auth_needed_networks(20000);
+            let auth_needed_networks = client.lock().sso_auth_needed_networks(20000);
             for network in auth_needed_networks.iter() { // network is a tuple of (ID, URL)
                 let nwid = &(*network).0;
                 let auth_url = &(*network).1;
@@ -859,7 +852,7 @@ fn tray() {
                     // If there was a key, check if URLs match and if not kill and re-open.
                     auth_windows.get(nwid).map(|w| {
                         if !(*w).0.eq(auth_url) {
-                            kill_window_subprocess((*w).1.lock().unwrap());
+                            kill_window_subprocess(&mut *(*w).1.lock());
                             had_key = false;
                         }
                     });
@@ -867,14 +860,21 @@ fn tray() {
                 if !had_key {
                     let _ = auth_windows.insert(nwid.clone(), (auth_url.clone(), Mutex::new(None))); // KEY -> (URL, WINDOW)
                 }
-                open_auth_window_subprocess((*auth_windows.get(nwid).unwrap()).1.lock().unwrap(), 1024, 768, &[nwid.as_str(), (*network).1.as_str()]);
+                open_auth_window_subprocess(&mut *(*auth_windows.get(nwid).unwrap()).1.lock(), 1024, 768, &[nwid.as_str(), (*network).1.as_str()]);
             }
 
             let mut auth_windows_to_remove: Vec<String> = Vec::new();
             for w in auth_windows.iter() {
-                let mut ww = (*w.1).1.lock().unwrap();
-                if check_window_subprocess_exit(&mut ww) || (!auth_needed_networks.iter().any(|x| (*x).0.eq(w.0)) && !client.lock().unwrap().network_has_error(w.0.as_str())) {
+                let mut ww = (*w.1).1.lock();
+                if check_window_subprocess_exit(&mut ww) || (!auth_needed_networks.iter().any(|x| (*x).0.eq(w.0)) && !client.lock().network_has_error(w.0.as_str())) {
                     auth_windows_to_remove.push(w.0.clone());
+                    if ww.is_some() {
+                        let c = ww.as_mut().unwrap();
+                        if c.try_wait().is_err() {
+                            let _ = c.kill();
+                            let _ = c.try_wait();
+                        }
+                    }
                 }
             }
             for w in auth_windows_to_remove.iter() {
@@ -887,19 +887,17 @@ fn tray() {
             let new_icon = tray_icon_name();
             if new_icon != icon_name {
                 icon_name = new_icon;
-                tray.update(Some(icon_name.as_ref()), make_menu());
+                tray.update(Some(icon_name.as_ref()), refresh());
             } else {
-                tray.update(None, make_menu());
+                tray.update(None, refresh());
             }
+        }
 
-            for w in [&main_window, &about_window].iter() {
-                check_window_subprocess_exit(w.lock().as_mut().unwrap());
-            }
-
-            for w in auth_windows.lock().as_ref().unwrap().iter() {
-                let mut ww = (*w.1).1.lock().unwrap();
-                check_window_subprocess_exit(&mut ww);
-            }
+        for w in [&main_window, &about_window].iter() {
+            check_window_subprocess_exit(&mut *w.lock());
+        }
+        for w in auth_windows.lock().iter() {
+            check_window_subprocess_exit(&mut *(*w.1).1.lock());
         }
 
         // Execute next tray event loop, which will (as per modifications made to tray.h) return after a second or two if
@@ -910,10 +908,10 @@ fn tray() {
     }
 
     for w in [&main_window, &about_window].iter() {
-        kill_window_subprocess(w.lock().unwrap());
+        kill_window_subprocess(&mut *w.lock());
     }
-    for w in auth_windows.lock().as_ref().unwrap().iter() {
-        kill_window_subprocess((*w.1).1.lock().unwrap());
+    for w in auth_windows.lock().iter() {
+        kill_window_subprocess(&mut *(*w.1).1.lock());
     }
 }
 
