@@ -196,6 +196,7 @@ impl ServiceClient {
         nw
     }
 
+    /*
     pub fn network_has_error(&self, nwid: &str) -> bool {
         self.state.get("network").map_or(true, |network| network.as_array().map_or(true, |network| {
             let mut has_error = true;
@@ -210,21 +211,25 @@ impl ServiceClient {
             has_error
         }))
     }
+    */
 
-    pub fn sso_auth_needed_networks(&self, reauth_ms_before_timeout: i64) -> Vec<(String, String)> {
-        let mut nw: Vec<(String, String)> = Vec::new();
+    pub fn sso_auth_needed_networks(&self, reauth_ms_before_timeout: i64) -> Vec<(String, String, String)> {
+        let mut nw: Vec<(String, String, String)> = Vec::new();
+        let now = ms_since_epoch();
         self.with(&["network"], |nws| {
             let _ = nws.as_array().map(|a| a.iter().for_each(|network| {
                 let _ = network.as_object().map(|network| {
-                    network.get("id").map(|id| id.as_str().map(|id| network.get("ssoEnabled").map(|sso_enabled| network.get("authenticationExpiryTime").map(|auth_expiry_time| auth_expiry_time.as_i64().map(|auth_expiry_time| network.get("authenticationURL").map(|auth_url| auth_url.as_str().map(|auth_url| {
-                        let auth_url = auth_url.trim();
-                        // TODO: right now we auth if there is only 10 seconds remaining. In the future we should use some kind of field
-                        // indicating what the expiry time is or learn it from the auth_expiry_time we get after auth to calibrate this
-                        // properly to keep the user online with the least fuss.
-                        if sso_enabled.as_bool().unwrap_or(false) && !auth_url.is_empty() && auth_expiry_time < (ms_since_epoch() + reauth_ms_before_timeout) {
-                            nw.push((id.into(), auth_url.into()));
+                    let id = network.get("id").map_or("", |id| id.as_str().unwrap_or(""));
+                    let sso_enabled = network.get("ssoEnabled").map_or(false, |sso_enabled| sso_enabled.as_bool().unwrap_or(false));
+                    let auth_expiry_time = network.get("authenticationExpiryTime").map_or(-1, |auth_expiry_time| auth_expiry_time.as_i64().unwrap_or(-1));
+                    let auth_url = network.get("authenticationURL").map_or("", |auth_url| auth_url.as_str().unwrap_or(""));
+                    let status = network.get("status").map_or("", |status| status.as_str().unwrap_or(""));
+                    if sso_enabled && !auth_url.is_empty() {
+                        let remaining = auth_expiry_time - now;
+                        if status == "AUTHENTICATION_REQUIRED" || remaining <= reauth_ms_before_timeout {
+                            nw.push((id.into(), auth_url.into(), status.into()));
                         }
-                    })))))));
+                    }
                 });
             }));
         });

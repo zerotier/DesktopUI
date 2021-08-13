@@ -30,9 +30,6 @@ mod serviceclient;
 /// It's a bit weird so web app bundlers don't optimize it out.
 const CSS_PLACEHOLDER: &'static str = ".XXXthis_is_replaced_by_css_in_the_rust_codeXXX{border:0}";
 
-/// Default URL to which client will be directed on successful auth.
-const DEFAULT_AUTH_SUCCESS_URL: &'static str = "https://my-dev.zerotier.com/api/network/sso-auth";
-
 const MAIN_WINDOW_WIDTH: i32 = 1300;
 const MAIN_WINDOW_HEIGHT: i32 = 500;
 
@@ -324,9 +321,7 @@ fn create_raise_window_listener_thread() -> Arc<AtomicBool> {
 }
 
 fn sso_auth_window(args: &Vec<String>) {
-    println!("sso auth window opened");
-    //let raise_window = create_raise_window_listener_thread();
-    let start_time = ms_since_epoch();
+    let raise_window = create_raise_window_listener_thread();
     let title = format!("{} Network Login", args[4].as_str());
     let mut wv = web_view::builder()
         .title(title.as_str())
@@ -337,27 +332,17 @@ fn sso_auth_window(args: &Vec<String>) {
         .hide_instead_of_close(false)
         .debug(false)
         .user_data(())
-        .invoke_handler(move |wv, arg| {
-            println!("sso auth URL: {}", arg);
-            let now = ms_since_epoch();
-            if arg.starts_with(DEFAULT_AUTH_SUCCESS_URL) {
-                std::process::exit(0);
-            }
-            if (now - start_time) > 5000 {
-                wv.set_visible(true);
-            }
-            Ok(())
-        })
+        .invoke_handler(move |_, _| Ok(()))
         .build()
         .unwrap();
-
     loop {
         let r = wv.step();
         if r.is_none() {
             break;
         }
-        println!("sso auth loop");
-        let _ = wv.eval("external.invoke(window.location.href||'')");
+        if raise_window.swap(false, std::sync::atomic::Ordering::Relaxed) {
+            wv.set_visible(true);
+        }
     }
 }
 
@@ -842,44 +827,54 @@ fn tray() {
         // Create and destroy authentication windows in response to networks that need authentication.
         {
             let mut auth_windows = auth_windows.lock();
+            let auth_needed_networks = client.lock().sso_auth_needed_networks(15000);
 
-            let auth_needed_networks = client.lock().sso_auth_needed_networks(20000);
-            for network in auth_needed_networks.iter() { // network is a tuple of (ID, URL)
+            for network in auth_needed_networks.iter() { // network is a tuple of (ID, URL, remaining ms)
                 let nwid = &(*network).0;
                 let auth_url = &(*network).1;
-                let mut had_key = auth_windows.contains_key(nwid);
-                if had_key {
-                    // If there was a key, check if URLs match and if not kill and re-open.
-                    auth_windows.get(nwid).map(|w| {
-                        if !(*w).0.eq(auth_url) {
-                            kill_window_subprocess(&mut *(*w).1.lock());
-                            had_key = false;
-                        }
-                    });
+                let status = (*network).2.as_str();
+
+                if auth_windows.get(nwid).map_or(false, |w| {
+                    if (*w).0 != *auth_url {
+                        kill_window_subprocess(&mut *(*w).1.lock());
+                        true
+                    } else {
+                        false
+                    }
+                }) {
+                    auth_windows.remove(nwid);
                 }
-                if !had_key {
+
+                let mut auth_window = auth_windows.get(nwid);
+                if auth_window.is_some() {
+                    if status == "AUTHENTICATION_REQUIRED" {
+                        auth_window.map(|w| {
+                            (*w).1.lock().as_mut().map(|c| {
+                                c.stdin.as_mut().map(|c| {
+                                    let _ = c.write_all(&[b'r']);
+                                });
+                            });
+                        });
+                    }
+                } else {
                     let _ = auth_windows.insert(nwid.clone(), (auth_url.clone(), Mutex::new(None))); // KEY -> (URL, WINDOW)
+                    auth_window = auth_windows.get(nwid);
                 }
-                open_auth_window_subprocess(&mut *(*auth_windows.get(nwid).unwrap()).1.lock(), 1024, 768, &[nwid.as_str(), (*network).1.as_str()]);
+
+                open_auth_window_subprocess(&mut *(*auth_window.unwrap()).1.lock(), 1024, 768, &[nwid.as_str(), (*network).1.as_str()]);
             }
 
-            let mut auth_windows_to_remove: Vec<String> = Vec::new();
-            for w in auth_windows.iter() {
-                let mut ww = (*w.1).1.lock();
-                if check_window_subprocess_exit(&mut ww) || (!auth_needed_networks.iter().any(|x| (*x).0.eq(w.0)) && !client.lock().network_has_error(w.0.as_str())) {
-                    auth_windows_to_remove.push(w.0.clone());
-                    if ww.is_some() {
-                        let c = ww.as_mut().unwrap();
-                        if c.try_wait().is_err() {
-                            let _ = c.kill();
-                            let _ = c.try_wait();
-                        }
-                    }
+            auth_windows.retain(|nwid, window| {
+                let w = &mut *(*window).1.lock();
+                if check_window_subprocess_exit(w) {
+                    false
+                } else if !auth_needed_networks.iter().any(|network| (*network).0.eq(nwid)) {
+                    kill_window_subprocess(w);
+                    false
+                } else {
+                    true
                 }
-            }
-            for w in auth_windows_to_remove.iter() {
-                auth_windows.remove(w);
-            }
+            });
         }
 
         // Refresh menu if data has changed.
@@ -896,9 +891,9 @@ fn tray() {
         for w in [&main_window, &about_window].iter() {
             check_window_subprocess_exit(&mut *w.lock());
         }
-        for w in auth_windows.lock().iter() {
-            check_window_subprocess_exit(&mut *(*w.1).1.lock());
-        }
+        auth_windows.lock().retain(|_, window| {
+            !check_window_subprocess_exit(&mut *(*window).1.lock())
+        });
 
         // Execute next tray event loop, which will (as per modifications made to tray.h) return after a second or two if
         // nothing happens. This allows periodic polling for changes to happen in this code.
