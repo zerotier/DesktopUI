@@ -54,7 +54,7 @@ pub fn get_auth_token_and_port() -> Option<(String, u16)> {
     // Try to read legacy local locations of the auth token in case we're running an older ZT version.
     if token.is_empty() {
         #[cfg(windows)]
-        let mut home = std::env::var("USERPROFILE");
+        let home = std::env::var("USERPROFILE");
 
         #[cfg(not(windows))]
         let home = std::env::var("HOME");
@@ -413,11 +413,13 @@ impl ServiceClient {
                     hash_result(&data, &mut c64);
                     let c64 = c64.sum64();
 
+                    self.online = true;
                     if self.state_hash.insert(endpoint.clone(), c64).unwrap_or(0) != c64 {
                         self.state.insert(endpoint, data);
                         self.dirty.store(true, Ordering::Relaxed);
-                        self.online = true;
                     }
+                } else {
+                    self.online = false;
                 }
             }
         }

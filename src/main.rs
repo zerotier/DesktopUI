@@ -257,8 +257,7 @@ fn start_client(refresh_base_paths: Vec<&'static str>, tick_period_ms: u64, refr
 
 /*******************************************************************************************************************/
 
-// Returns true if the process has exited or is not started.
-fn check_window_subprocess_exit(w: &mut Option<Child>) -> bool {
+fn did_process_exit(w: &mut Option<Child>) -> bool {
     if w.is_some() {
         let res = w.as_mut().unwrap().try_wait();
         if res.is_ok() && res.ok().unwrap().is_some() {
@@ -272,8 +271,8 @@ fn check_window_subprocess_exit(w: &mut Option<Child>) -> bool {
     }
 }
 
-fn kill_window_subprocess(w: &mut Option<Child>) {
-    check_window_subprocess_exit(w);
+fn kill_process(w: &mut Option<Child>) {
+    did_process_exit(w);
     w.as_mut().map(|w| {
         let _ = w.kill();
         let _ = w.wait();
@@ -281,7 +280,7 @@ fn kill_window_subprocess(w: &mut Option<Child>) {
 }
 
 fn open_auth_window_subprocess(w: &mut Option<Child>, width: i32, height: i32, param: &[&str]) {
-    check_window_subprocess_exit(w);
+    did_process_exit(w);
     if w.is_none() {
         let ch = Command::new(std::env::current_exe().unwrap()).arg("auth").arg(width.to_string()).arg(height.to_string()).args(param).stdin(Stdio::piped()).spawn();
         if ch.is_ok() {
@@ -291,7 +290,7 @@ fn open_auth_window_subprocess(w: &mut Option<Child>, width: i32, height: i32, p
 }
 
 fn open_ui_window_subprocess(w: &mut Option<Child>, ui_mode: &str, width: i32, height: i32) {
-    check_window_subprocess_exit(w);
+    did_process_exit(w);
     if w.is_none() {
         let ch = Command::new(std::env::current_exe().unwrap()).arg("window").arg(ui_mode).arg(width.to_string()).arg(height.to_string()).stdin(Stdio::piped()).spawn();
         if ch.is_ok() {
@@ -303,8 +302,6 @@ fn open_ui_window_subprocess(w: &mut Option<Child>, ui_mode: &str, width: i32, h
     }
 }
 
-// Create a thread that listens for 'r' on STDIN in subprocesses and sets a flag.
-// This is used by webview window subprocesses.
 fn create_raise_window_listener_thread() -> Arc<AtomicBool> {
     let raise_window = Arc::new(AtomicBool::new(false));
     let raise_window2 = raise_window.clone();
@@ -813,10 +810,18 @@ fn tray() {
             });
         } else {
             menu.push(TrayMenuItem::Text {
-                text: "Service unreachable...".into(),
+                text: "Waiting for ZeroTier system service...".into(),
                 checked: false,
                 disabled: true,
                 handler: None,
+            });
+
+            let exit_flag2 = exit_flag.clone();
+            menu.push(TrayMenuItem::Text {
+                text: "Quit ZeroTier UI ".into(),
+                checked: false,
+                disabled: false,
+                handler: Some(Box::new(move || exit_flag2.store(true, std::sync::atomic::Ordering::SeqCst)))
             });
         }
 
@@ -837,7 +842,7 @@ fn tray() {
 
                 if auth_windows.get(nwid).map_or(false, |w| {
                     if (*w).0 != *auth_url {
-                        kill_window_subprocess(&mut *(*w).1.lock());
+                        kill_process(&mut *(*w).1.lock());
                         true
                     } else {
                         false
@@ -865,10 +870,10 @@ fn tray() {
 
             auth_windows.retain(|nwid, window| {
                 let w = &mut *(*window).1.lock();
-                if check_window_subprocess_exit(w) {
+                if did_process_exit(w) {
                     false
                 } else if !auth_needed_networks.iter().any(|network| (*network).0.eq(nwid)) {
-                    kill_window_subprocess(w);
+                    kill_process(w);
                     false
                 } else {
                     true
@@ -888,10 +893,10 @@ fn tray() {
         }
 
         for w in [&main_window, &about_window].iter() {
-            check_window_subprocess_exit(&mut *w.lock());
+            did_process_exit(&mut *w.lock());
         }
         auth_windows.lock().retain(|_, window| {
-            !check_window_subprocess_exit(&mut *(*window).1.lock())
+            !did_process_exit(&mut *(*window).1.lock())
         });
 
         // Execute next tray event loop, which will (as per modifications made to tray.h) return after a second or two if
@@ -902,10 +907,10 @@ fn tray() {
     }
 
     for w in [&main_window, &about_window].iter() {
-        kill_window_subprocess(&mut *w.lock());
+        kill_process(&mut *w.lock());
     }
     for w in auth_windows.lock().iter() {
-        kill_window_subprocess(&mut *(*w.1).1.lock());
+        kill_process(&mut *(*w.1).1.lock());
     }
 }
 
@@ -1037,6 +1042,7 @@ fn main() {
                     println!("FATAL: window requires arguments: ui_mode [width hint] [height hint]");
                 }
             },
+
             "auth" => { // invoked to open a window to an SSO login endpoint
                 if args.len() >= 5 {
                     sso_auth_window(&args);
@@ -1044,11 +1050,13 @@ fn main() {
                     println!("FATAL: window requires arguments: ui_mode [width hint] [height hint] [url]");
                 }
             },
+
             "copy" => { // invoked with elevated privileges to copy authtoken.secret on some platforms
                 if args.len() >= 4 {
                     std::process::exit(std::fs::copy(&args[2], &args[3]).is_err() as i32);
                 }
             },
+
             _ => println!("FATAL: unrecognized mode: {}", args[1])
         }
     } else {
