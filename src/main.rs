@@ -274,9 +274,10 @@ fn check_window_subprocess_exit(w: &mut Option<Child>) -> bool {
 
 fn kill_window_subprocess(w: &mut Option<Child>) {
     check_window_subprocess_exit(w);
-    if w.is_some() {
-        let _ = w.as_mut().unwrap().kill();
-    }
+    w.as_mut().map(|w| {
+        let _ = w.kill();
+        let _ = w.wait();
+    });
 }
 
 fn open_auth_window_subprocess(w: &mut Option<Child>, width: i32, height: i32, param: &[&str]) {
@@ -845,7 +846,7 @@ fn tray() {
                     auth_windows.remove(nwid);
                 }
 
-                let mut auth_window = auth_windows.get(nwid);
+                let auth_window = auth_windows.get(nwid);
                 if auth_window.is_some() {
                     if status == "AUTHENTICATION_REQUIRED" {
                         auth_window.map(|w| {
@@ -858,10 +859,8 @@ fn tray() {
                     }
                 } else {
                     let _ = auth_windows.insert(nwid.clone(), (auth_url.clone(), Mutex::new(None))); // KEY -> (URL, WINDOW)
-                    auth_window = auth_windows.get(nwid);
+                    open_auth_window_subprocess(&mut *(*auth_windows.get(nwid).unwrap()).1.lock(), 1024, 768, &[nwid.as_str(), (*network).1.as_str()]);
                 }
-
-                open_auth_window_subprocess(&mut *(*auth_window.unwrap()).1.lock(), 1024, 768, &[nwid.as_str(), (*network).1.as_str()]);
             }
 
             auth_windows.retain(|nwid, window| {
