@@ -77,6 +77,7 @@ pub struct CommandFromWebView {
 }
 
 /*******************************************************************************************************************/
+/* OS-specific functions and C externs */
 
 #[cfg(windows)]
 extern "C" {
@@ -91,7 +92,64 @@ extern "C" {
     pub fn c_set_this_thread_to_foreground_priority();
 }
 
+#[cfg(target_os = "macos")]
+fn set_thread_to_background_priority() {
+    unsafe { c_set_this_thread_to_background_priority(); }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn set_thread_to_background_priority() {}
+
+#[cfg(target_os = "macos")]
+fn set_thread_to_foreground_priority() {
+    unsafe { c_set_this_thread_to_foreground_priority(); }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn set_thread_to_foreground_priority() {}
+
+/// Quick and dirty recursive parser for decoded plist files from the old GUI on Mac... this is just for transition.
+#[cfg(target_os = "macos")]
+fn parse_mac_network_plist(base_array: &Vec<plist::Value>, data: &plist::Value, networks: &mut HashMap<String, String>, nwid: &mut Option<u64>, name: &mut Option<String>) {
+    if nwid.as_ref().map_or(false, |x| *x != 0) && name.as_ref().map_or(false, |x| !x.eq("\0\0\0\0")) {
+        networks.insert(format!("{:0>16x}", nwid.take().unwrap()), name.take().unwrap());
+    }
+    match data {
+        plist::Value::Array(arr) => {
+            for v in arr.iter() {
+                parse_mac_network_plist(base_array, v, networks, nwid, name);
+            }
+        },
+        plist::Value::Dictionary(dict) => {
+            for kv in dict.iter() {
+                if kv.0.eq("nwid") {
+                    nwid.replace(0);
+                    parse_mac_network_plist(base_array, kv.1, networks, nwid, name);
+                } else if kv.0.eq("name") {
+                    name.replace("\0\0\0\0".into());
+                    parse_mac_network_plist(base_array, kv.1, networks, nwid, name);
+                }
+            }
+        },
+        plist::Value::String(s) => {
+            if name.as_ref().map_or(false, |x| x.eq("\0\0\0\0")) {
+                name.replace(s.clone());
+            }
+        },
+        plist::Value::Integer(i) => {
+            if nwid.as_ref().map_or(false, |x| *x == 0) {
+                nwid.replace(i.as_unsigned().unwrap_or(0));
+            }
+        },
+        plist::Value::Uid(uid) => {
+            let _ = base_array.get(uid.get() as usize).map(|v| parse_mac_network_plist(base_array, v, networks, nwid, name));
+        },
+        _ => {}
+    }
+}
+
 /*******************************************************************************************************************/
+/* Refresh the state of START_ON_LOGIN */
 
 #[cfg(target_os = "macos")]
 fn refresh_mac_start_on_login() {
@@ -113,6 +171,7 @@ fn refresh_windows_start_on_login() {
 }
 
 /*******************************************************************************************************************/
+/* Check if we are in dark mode */
 
 #[cfg(target_os = "macos")]
 fn is_dark_mode() -> bool {
@@ -130,6 +189,7 @@ fn is_dark_mode() -> bool {
 }
 
 /*******************************************************************************************************************/
+/* Get the tray icon path for the current theme / color scheme / OS */
 
 #[cfg(target_os = "macos")]
 fn tray_icon_name() -> &'static str {
@@ -151,24 +211,7 @@ fn tray_icon_name() -> String {
 }
 
 /*******************************************************************************************************************/
-
-#[cfg(target_os = "macos")]
-fn set_thread_to_background_priority() {
-    unsafe { c_set_this_thread_to_background_priority(); }
-}
-
-#[cfg(not(target_os = "macos"))]
-fn set_thread_to_background_priority() {}
-
-#[cfg(target_os = "macos")]
-fn set_thread_to_foreground_priority() {
-    unsafe { c_set_this_thread_to_foreground_priority(); }
-}
-
-#[cfg(not(target_os = "macos"))]
-fn set_thread_to_foreground_priority() {}
-
-/*******************************************************************************************************************/
+/* Clipboard functions for different OSes */
 
 #[cfg(target_os = "macos")]
 fn copy_to_clipboard(s: &str) {
@@ -204,6 +247,7 @@ fn read_from_clipboard() -> String {
 }
 
 /*******************************************************************************************************************/
+/* Get the web UI HTML/CSS/JS blob for the right color scheme */
 
 #[cfg(target_os = "macos")]
 #[inline(always)]
@@ -226,7 +270,7 @@ fn get_web_ui_blob(dark: bool) -> String {
 
 /*******************************************************************************************************************/
 
-/// This is called once per process to start the client I/O loop.
+/// Start the service client background thread, returning the client and a flag set when the data changes.
 fn start_client(refresh_base_paths: Vec<&'static str>, tick_period_ms: u64, refresh_period_ticks: u64) -> (Arc<Mutex<ServiceClient>>, Arc<AtomicBool>) {
     let (mut client, dirty_flag) = ServiceClient::new(refresh_base_paths);
     client.sync();
@@ -255,8 +299,7 @@ fn start_client(refresh_base_paths: Vec<&'static str>, tick_period_ms: u64, refr
     (client, dirty_flag)
 }
 
-/*******************************************************************************************************************/
-
+/// Returns true if a process has exited, and also replaces the supplied Option with None.
 fn did_process_exit(w: &mut Option<Child>) -> bool {
     if w.is_some() {
         let res = w.as_mut().unwrap().try_wait();
@@ -271,6 +314,7 @@ fn did_process_exit(w: &mut Option<Child>) -> bool {
     }
 }
 
+/// Kill a subproces and wait for zombie to be collected (on Unix systems).
 fn kill_process(w: &mut Option<Child>) {
     did_process_exit(w);
     w.as_mut().map(|w| {
@@ -279,29 +323,7 @@ fn kill_process(w: &mut Option<Child>) {
     });
 }
 
-fn open_auth_window_subprocess(w: &mut Option<Child>, width: i32, height: i32, param: &[&str]) {
-    did_process_exit(w);
-    if w.is_none() {
-        let ch = Command::new(std::env::current_exe().unwrap()).arg("auth").arg(width.to_string()).arg(height.to_string()).args(param).stdin(Stdio::piped()).spawn();
-        if ch.is_ok() {
-            let _ = w.replace(ch.unwrap());
-        }
-    }
-}
-
-fn open_ui_window_subprocess(w: &mut Option<Child>, ui_mode: &str, width: i32, height: i32) {
-    did_process_exit(w);
-    if w.is_none() {
-        let ch = Command::new(std::env::current_exe().unwrap()).arg("window").arg(ui_mode).arg(width.to_string()).arg(height.to_string()).stdin(Stdio::piped()).spawn();
-        if ch.is_ok() {
-            let _ = w.replace(ch.unwrap());
-        }
-    } else {
-        // Sending 'r' causes subprocess to raise the window at the first opportunity.
-        let _ = w.as_mut().unwrap().stdin.as_mut().unwrap().write_all(&[b'r']);
-    }
-}
-
+/// Create a background thread that listens for 'r' from STDIN and sets a boolean flag if received.
 fn create_raise_window_listener_thread() -> Arc<AtomicBool> {
     let raise_window = Arc::new(AtomicBool::new(false));
     let raise_window2 = raise_window.clone();
@@ -318,7 +340,19 @@ fn create_raise_window_listener_thread() -> Arc<AtomicBool> {
     raise_window
 }
 
-fn sso_auth_window(args: &Vec<String>) {
+/// Opens SSO authentication window, which in turn runs sso_auth_window_main().
+fn open_sso_auth_window_subprocess(w: &mut Option<Child>, width: i32, height: i32, param: &[&str]) {
+    did_process_exit(w);
+    if w.is_none() {
+        let ch = Command::new(std::env::current_exe().unwrap()).arg("auth").arg(width.to_string()).arg(height.to_string()).args(param).stdin(Stdio::piped()).spawn();
+        if ch.is_ok() {
+            let _ = w.replace(ch.unwrap());
+        }
+    }
+}
+
+/// Main function for SSO authentication webview popup windows.
+fn sso_auth_window_main(args: &Vec<String>) {
     let raise_window = create_raise_window_listener_thread();
     let title = format!("{} Network Login", args[4].as_str());
     let mut wv = web_view::builder()
@@ -344,7 +378,22 @@ fn sso_auth_window(args: &Vec<String>) {
     }
 }
 
-fn control_panel_window(args: &Vec<String>) {
+/// Opens a UI window subprocess, which in turn runs control_panel_window_main().
+fn open_ui_window_subprocess(w: &mut Option<Child>, ui_mode: &str, width: i32, height: i32) {
+    did_process_exit(w);
+    if w.is_none() {
+        let ch = Command::new(std::env::current_exe().unwrap()).arg("window").arg(ui_mode).arg(width.to_string()).arg(height.to_string()).stdin(Stdio::piped()).spawn();
+        if ch.is_ok() {
+            let _ = w.replace(ch.unwrap());
+        }
+    } else {
+        // Sending 'r' causes subprocess to raise the window at the first opportunity.
+        let _ = w.as_mut().unwrap().stdin.as_mut().unwrap().write_all(&[b'r']);
+    }
+}
+
+/// Main function for control panel webview windows.
+fn control_panel_window_main(args: &Vec<String>) {
     /*
      * Web UI subprocess
      *
@@ -437,7 +486,8 @@ fn control_panel_window(args: &Vec<String>) {
         .unwrap();
 }
 
-fn tray() {
+/// System tray main function.
+fn tray_main() {
     /*
      * System tray process
      *
@@ -800,14 +850,6 @@ fn tray() {
                 disabled: false,
                 handler: Some(Box::new(move || open_ui_window_subprocess(&mut *about_window2.lock(), "About", 800, 600)))
             });
-
-            let exit_flag2 = exit_flag.clone();
-            menu.push(TrayMenuItem::Text {
-                text: "Quit ZeroTier UI ".into(),
-                checked: false,
-                disabled: false,
-                handler: Some(Box::new(move || exit_flag2.store(true, std::sync::atomic::Ordering::SeqCst)))
-            });
         } else {
             menu.push(TrayMenuItem::Text {
                 text: "Waiting for ZeroTier system service...".into(),
@@ -815,15 +857,15 @@ fn tray() {
                 disabled: true,
                 handler: None,
             });
-
-            let exit_flag2 = exit_flag.clone();
-            menu.push(TrayMenuItem::Text {
-                text: "Quit ZeroTier UI ".into(),
-                checked: false,
-                disabled: false,
-                handler: Some(Box::new(move || exit_flag2.store(true, std::sync::atomic::Ordering::SeqCst)))
-            });
         }
+
+        let exit_flag2 = exit_flag.clone();
+        menu.push(TrayMenuItem::Text {
+            text: "Quit ZeroTier UI ".into(),
+            checked: false,
+            disabled: false,
+            handler: Some(Box::new(move || exit_flag2.store(true, std::sync::atomic::Ordering::SeqCst)))
+        });
 
         menu
     };
@@ -864,7 +906,7 @@ fn tray() {
                     }
                 } else {
                     let _ = auth_windows.insert(nwid.clone(), (auth_url.clone(), Mutex::new(None))); // KEY -> (URL, WINDOW)
-                    open_auth_window_subprocess(&mut *(*auth_windows.get(nwid).unwrap()).1.lock(), 1024, 768, &[nwid.as_str(), (*network).1.as_str()]);
+                    open_sso_auth_window_subprocess(&mut *(*auth_windows.get(nwid).unwrap()).1.lock(), 1024, 768, &[nwid.as_str(), (*network).1.as_str()]);
                 }
             }
 
@@ -911,48 +953,6 @@ fn tray() {
     }
     for w in auth_windows.lock().iter() {
         kill_process(&mut *(*w.1).1.lock());
-    }
-}
-
-/*******************************************************************************************************************/
-
-/// Quick and dirty recursive parser for decoded plist files from the old GUI on Mac... this is just for transition.
-#[cfg(target_os = "macos")]
-fn parse_mac_network_plist(base_array: &Vec<plist::Value>, data: &plist::Value, networks: &mut HashMap<String, String>, nwid: &mut Option<u64>, name: &mut Option<String>) {
-    if nwid.as_ref().map_or(false, |x| *x != 0) && name.as_ref().map_or(false, |x| !x.eq("\0\0\0\0")) {
-        networks.insert(format!("{:0>16x}", nwid.take().unwrap()), name.take().unwrap());
-    }
-    match data {
-        plist::Value::Array(arr) => {
-            for v in arr.iter() {
-                parse_mac_network_plist(base_array, v, networks, nwid, name);
-            }
-        },
-        plist::Value::Dictionary(dict) => {
-            for kv in dict.iter() {
-                if kv.0.eq("nwid") {
-                    nwid.replace(0);
-                    parse_mac_network_plist(base_array, kv.1, networks, nwid, name);
-                } else if kv.0.eq("name") {
-                    name.replace("\0\0\0\0".into());
-                    parse_mac_network_plist(base_array, kv.1, networks, nwid, name);
-                }
-            }
-        },
-        plist::Value::String(s) => {
-            if name.as_ref().map_or(false, |x| x.eq("\0\0\0\0")) {
-                name.replace(s.clone());
-            }
-        },
-        plist::Value::Integer(i) => {
-            if nwid.as_ref().map_or(false, |x| *x == 0) {
-                nwid.replace(i.as_unsigned().unwrap_or(0));
-            }
-        },
-        plist::Value::Uid(uid) => {
-            let _ = base_array.get(uid.get() as usize).map(|v| parse_mac_network_plist(base_array, v, networks, nwid, name));
-        },
-        _ => {}
     }
 }
 
@@ -1037,7 +1037,7 @@ fn main() {
         match args[1].as_str() {
             "window" => { // invoked to open webview GUI windows
                 if args.len() >= 3 {
-                    control_panel_window(&args);
+                    control_panel_window_main(&args);
                 } else {
                     println!("FATAL: window requires arguments: ui_mode [width hint] [height hint]");
                 }
@@ -1045,7 +1045,7 @@ fn main() {
 
             "auth" => { // invoked to open a window to an SSO login endpoint
                 if args.len() >= 5 {
-                    sso_auth_window(&args);
+                    sso_auth_window_main(&args);
                 } else {
                     println!("FATAL: window requires arguments: ui_mode [width hint] [height hint] [url]");
                 }
@@ -1060,7 +1060,7 @@ fn main() {
             _ => println!("FATAL: unrecognized mode: {}", args[1])
         }
     } else {
-        tray();
+        tray_main();
     }
     std::process::exit(0);
 }

@@ -110,76 +110,58 @@ static id _tray_menu(struct tray_menu *m) {
     id menu = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSMenu"), sel_registerName("new"));
     menu = ((id(*)(id, SEL))objc_msgSend)(menu, sel_registerName("autorelease"));
     ((void(*)(id, SEL, bool))objc_msgSend)(menu, sel_registerName("setAutoenablesItems:"), false);
-
     for (; m != NULL && m->text != NULL; m++) {
-      if (strcmp(m->text, "-") == 0) {
-          id menuItem = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSMenuItem"), sel_registerName("separatorItem"));
-          menuItem = ((id(*)(id, SEL))objc_msgSend)(menuItem, sel_registerName("autorelease"));
-          ((void(*)(id, SEL, id))objc_msgSend)(menu, sel_registerName("addItem:"), menuItem);
-      } else {
-        id menuItem = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSMenuItem"), sel_registerName("alloc"));
-        ((void(*)(id, SEL))objc_msgSend)(menuItem, sel_registerName("autorelease"));
-        ((void(*)(id, SEL, id, SEL, id))objc_msgSend)(menuItem, sel_registerName("initWithTitle:action:keyEquivalent:"),
-                  ((id(*)(id, SEL, char *))objc_msgSend)((id)objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), m->text),
-                  sel_registerName("menuCallback:"),
-                  ((id(*)(id, SEL, char *))objc_msgSend)((id)objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), ""));
-
-        ((void(*)(id, SEL, bool))objc_msgSend)(menuItem, sel_registerName("setEnabled:"), (m->disabled ? false : true));
-          ((void(*)(id, SEL, int))objc_msgSend)(menuItem, sel_registerName("setState:"), (m->checked ? 1 : 0));
-          ((void(*)(id, SEL, id))objc_msgSend)(menuItem, sel_registerName("setRepresentedObject:"),
-            ((id(*)(id, SEL, struct tray_menu*))objc_msgSend)((id)objc_getClass("NSValue"), sel_registerName("valueWithPointer:"), m));
-
-          ((void(*)(id, SEL, id))objc_msgSend)(menu, sel_registerName("addItem:"), menuItem);
-
-          if (m->submenu != NULL) {
-            ((void(*)(id, SEL, id, id))objc_msgSend)(menu, sel_registerName("setSubmenu:forItem:"), _tray_menu(m->submenu), menuItem);
-      }
+        if (strcmp(m->text, "-") == 0) {
+            id menuItem = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSMenuItem"), sel_registerName("separatorItem"));
+            menuItem = ((id(*)(id, SEL))objc_msgSend)(menuItem, sel_registerName("autorelease"));
+            ((void(*)(id, SEL, id))objc_msgSend)(menu, sel_registerName("addItem:"), menuItem);
+        } else {
+            id menuItem = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSMenuItem"), sel_registerName("alloc"));
+            ((void(*)(id, SEL))objc_msgSend)(menuItem, sel_registerName("autorelease"));
+            ((void(*)(id, SEL, id, SEL, id))objc_msgSend)(
+              menuItem,
+              sel_registerName("initWithTitle:action:keyEquivalent:"),
+              ((id(*)(id, SEL, char *))objc_msgSend)((id)objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), m->text),
+              sel_registerName("menuCallback:"),
+              ((id(*)(id, SEL, char *))objc_msgSend)((id)objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), ""));
+            ((void(*)(id, SEL, bool))objc_msgSend)(menuItem, sel_registerName("setEnabled:"), (m->disabled ? false : true));
+            ((void(*)(id, SEL, int))objc_msgSend)(menuItem, sel_registerName("setState:"), (m->checked ? 1 : 0));
+            ((void(*)(id, SEL, id))objc_msgSend)(menuItem, sel_registerName("setRepresentedObject:"),
+              ((id(*)(id, SEL, struct tray_menu*))objc_msgSend)((id)objc_getClass("NSValue"), sel_registerName("valueWithPointer:"), m));
+            ((void(*)(id, SEL, id))objc_msgSend)(menu, sel_registerName("addItem:"), menuItem);
+            if (m->submenu != NULL) {
+                ((void(*)(id, SEL, id, id))objc_msgSend)(menu, sel_registerName("setSubmenu:forItem:"), _tray_menu(m->submenu), menuItem);
+            }
+        }
     }
-  }
-
-  return menu;
+    return menu;
 }
 
 static void menu_callback(id self, SEL cmd, id sender) {
     id asdf = ((id(*)(id, SEL))objc_msgSend)(sender, sel_registerName("representedObject"));
     struct tray_menu *m = ((struct tray_menu*(*)(id, SEL))objc_msgSend)(asdf,sel_registerName("pointerValue"));
     if (m != NULL && m->cb != NULL) {
-      m->cb(m);
+        m->cb(m);
     }
 }
 
 int tray_init(struct tray *tray) {
-    kCFRunLoopDefaultMode = ((id(*)(id, SEL, char*))objc_msgSend)((id)objc_getClass("NSString"),
-                  sel_registerName("stringWithUTF8String:"),
-                  "kCFRunLoopDefaultMode");
-
-    ((void(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSApplication"),
-                          sel_registerName("sharedApplication"));
-
+    kCFRunLoopDefaultMode = ((id(*)(id, SEL, char*))objc_msgSend)((id)objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), "kCFRunLoopDefaultMode");
+    ((void(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSApplication"), sel_registerName("sharedApplication"));
     Class trayDelegateClass = objc_allocateClassPair(objc_getClass("NSObject"), "Tray", 0);
     class_addProtocol(trayDelegateClass, objc_getProtocol("NSApplicationDelegate"));
     class_addMethod(trayDelegateClass, sel_registerName("menuCallback:"), (IMP)menu_callback, "v@:@");
     objc_registerClassPair(trayDelegateClass);
-
-    id trayDelegate = ((id(*)(id, SEL))objc_msgSend)((id)trayDelegateClass,
-                          sel_registerName("new"));
-
-    app = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSApplication"),
-                          sel_registerName("sharedApplication"));
-
+    id trayDelegate = ((id(*)(id, SEL))objc_msgSend)((id)trayDelegateClass, sel_registerName("new"));
+    app = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSApplication"), sel_registerName("sharedApplication"));
     ((void(*)(id, SEL,id))objc_msgSend)(app, sel_registerName("setDelegate:"), trayDelegate);
-
-    statusBar = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSStatusBar"),
-                          sel_registerName("systemStatusBar"));
-
+    statusBar = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSStatusBar"), sel_registerName("systemStatusBar"));
     statusItem = ((id(*)(id, SEL, double))objc_msgSend)(statusBar, sel_registerName("statusItemWithLength:"), -1.0);
-
-    /*((void(*)(id, SEL))objc_msgSend)(statusItem, sel_registerName("retain"));*/
+    ((void(*)(id, SEL))objc_msgSend)(statusItem, sel_registerName("retain"));
     ((void(*)(id, SEL, bool))objc_msgSend)(statusItem, sel_registerName("setHighlightMode:"), true);
     statusBarButton = ((id(*)(id, SEL))objc_msgSend)(statusItem, sel_registerName("button"));
     tray_update(tray);
     /*((void(*)(id, SEL, bool))objc_msgSend)(app, sel_registerName("activateIgnoringOtherApps:"), true);*/
-
     return 0;
 }
 
@@ -197,26 +179,26 @@ int tray_loop(int blocking) {
 
     id event = ((id(*)(id, SEL, unsigned long, id, id, bool))objc_msgSend)(app, sel_registerName("nextEventMatchingMask:untilDate:inMode:dequeue:"), ULONG_MAX, until, kCFRunLoopDefaultMode, true);
     if (event) {
-      ((void(*)(id, SEL, id))objc_msgSend)(app, sel_registerName("sendEvent:"), event);
+        ((void(*)(id, SEL, id))objc_msgSend)(app, sel_registerName("sendEvent:"), event);
     }
 
     ((void(*)(id, SEL))objc_msgSend)(pool, sel_registerName("drain"));
+
     return 0;
 }
 
 void tray_update(struct tray *tray) {
-    //printf("tray_update()\n"); fflush(stdout);
     if (tray->icon) {
-        ((void(*)(id, SEL, id))objc_msgSend)(statusBarButton, sel_registerName("setImage:"),
-            ((id(*)(id, SEL, id))objc_msgSend)((id)objc_getClass("NSImage"), sel_registerName("imageNamed:"),
-            ((id(*)(id, SEL, char *))objc_msgSend)((id)objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), tray->icon)));
+        ((void(*)(id, SEL, id))objc_msgSend)(statusBarButton, sel_registerName("setImage:"), ((id(*)(id, SEL, id))objc_msgSend)((id)objc_getClass("NSImage"), sel_registerName("imageNamed:"), ((id(*)(id, SEL, char *))objc_msgSend)((id)objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), tray->icon)));
     }
     id menu = _tray_menu(tray->menu);
     ((void(*)(id, SEL, id))objc_msgSend)(statusItem, sel_registerName("setMenu:"), menu);
-    ((void(*)(id, SEL))objc_msgSend)(menu, sel_registerName("release"));
+    /*((void(*)(id, SEL))objc_msgSend)(menu, sel_registerName("release"));*/
 }
 
-void tray_exit() { ((void(*)(id, SEL, id))objc_msgSend)(app, sel_registerName("terminate:"), app); }
+void tray_exit() {
+    ((void(*)(id, SEL, id))objc_msgSend)(app, sel_registerName("terminate:"), app);
+}
 
 #elif defined(TRAY_WINAPI)
 
