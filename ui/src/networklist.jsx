@@ -1,5 +1,5 @@
 import React, { Fragment } from 'react';
-import { EuiPanel, EuiEmptyPrompt, EuiBasicTable, EuiText, EuiLink } from '@elastic/eui';
+import { EuiPanel, EuiEmptyPrompt, EuiBasicTable, EuiText, EuiLink, EuiButtonEmpty } from '@elastic/eui';
 import equal from 'fast-deep-equal';
 
 import Network from './network';
@@ -10,12 +10,14 @@ export default class NetworkList extends React.Component {
         super(props);
         this.state = {
             networks: [],
+            savedNetworks: {},
             selectedRowNetworkId: '',
             initialized: false
         };
         this.itemIdToExpandedRowMap = {};
         this.toggleExpand = this.toggleExpand.bind(this);
         this.getRowProps = this.getRowProps.bind(this);
+
         this.networkTableColumns = [
             {
                 field: 'id',
@@ -26,37 +28,48 @@ export default class NetworkList extends React.Component {
                 )
             },
             {
-                field: 'name',
                 name: 'Name',
-                textOnly: true,
-                truncateText: true
-            },
-            {
-                width: '3rem',
                 isExpander: true,
                 render: (item) => {
-                    return (
-                        <EuiText size="xs">
-                            <EuiLink style={{fontSize: '16pt'}} aria-label={(!!this.itemIdToExpandedRowMap[item.id]) ? 'Collapse' : 'Expand'}>{(!!this.itemIdToExpandedRowMap[item.id]) ? '↑' : '↓'}</EuiLink>
-                        </EuiText>
-                    );
+                    if (item.status) {
+                        return (
+                            <div style={{width: '100%'}}>
+                                <span>{item.name}</span>
+                                <span style={{float: 'right'}}>
+                                    <EuiLink style={{fontSize: '16pt', paddingRight: '0.5rem'}} aria-label={(!!this.itemIdToExpandedRowMap[item.id]) ? 'Collapse' : 'Expand'}>{(!!this.itemIdToExpandedRowMap[item.id]) ? '↑' : '↓'}</EuiLink>
+                                </span>
+                            </div>
+                        );
+                    } else {
+                        return (
+                            <div style={{width: '100%'}}>
+                                <span>{item.name}</span>
+                                <span style={{float: 'right'}}>
+                                    <EuiButtonEmpty size="s" aria-label='Reconnect to Network' color='primary'>Reconnect</EuiButtonEmpty>
+                                    &nbsp;&nbsp;
+                                    <EuiButtonEmpty size="s" aria-label='Forget Network' color='danger'>Forget</EuiButtonEmpty>
+                                </span>
+                            </div>
+                        );
+                    }
                 },
-            },
+            }
         ];
     }
 
     componentWillReceiveProps(nextProps) {
         if (!equal(this.props, nextProps)) {
             let n = nextProps.networks;
+            let sn = nextProps.savedNetworks;
             if (Array.isArray(n)) {
                 // If networks change, ensure that expanded network panels also change.
                 for(let i=0;i<n.length;++i) {
                     if (this.itemIdToExpandedRowMap[n[i].id])
                         this.itemIdToExpandedRowMap[n[i].id] = <Network config={n[i]}/>;
                 }
-                this.setState({ networks: n, initialized: true });
+                this.setState({ networks: n, initialized: true, savedNetworks: sn||{} });
             } else {
-                this.setState({ networks: [], initialized: true });
+                this.setState({ networks: [], initialized: true, savedNetworks: sn||{} });
             }
         }
     }
@@ -66,12 +79,14 @@ export default class NetworkList extends React.Component {
     }
 
     toggleExpand(item) {
-        if (!this.itemIdToExpandedRowMap[item.id]) {
-            this.itemIdToExpandedRowMap[item.id] = <Network config={item}/>;
-        } else {
-            delete this.itemIdToExpandedRowMap[item.id];
+        if (item.status) {
+            if (!this.itemIdToExpandedRowMap[item.id]) {
+                this.itemIdToExpandedRowMap[item.id] = <Network config={item}/>;
+            } else {
+                delete this.itemIdToExpandedRowMap[item.id];
+            }
+            this.forceUpdate();
         }
-        this.forceUpdate();
     }
 
     getRowProps(item) {
@@ -82,22 +97,39 @@ export default class NetworkList extends React.Component {
 
     render() {
         let networks = this.state.networks;
+        let savedNetworks = this.state.savedNetworks;
 
         let content = null;
         if (this.state.initialized) {
             if ((Array.isArray(networks))&&(networks.length > 0)) {
-                content = <EuiBasicTable
-                    items={networks}
-                    itemId='id'
-                    itemIdToExpandedRowMap={this.itemIdToExpandedRowMap}
-                    isExpandable={true}
-                    isSelectable={false}
-                    responsive={false}
-                    rowHeader="id"
-                    rowProps={this.getRowProps}
-                    columns={this.networkTableColumns}
-                    tableLayout="custom"
-                />;
+                let merged = [];
+
+                let joined = {};
+                for(let i=0;i<networks.length;++i) {
+                    merged.push(networks[i]);
+                    joined[networks[i].id] = true;
+                }
+                let savedIds = Object.keys(savedNetworks);
+                for(let i=0;i<savedIds.length;++i) {
+                    let o = savedNetworks[savedIds[i]];
+                    if ((o.id)&&(!joined[o.id]))
+                        merged.push(o);
+                }
+
+                content = (
+                    <EuiBasicTable
+                        items={merged}
+                        itemId='id'
+                        itemIdToExpandedRowMap={this.itemIdToExpandedRowMap}
+                        isExpandable={true}
+                        isSelectable={false}
+                        responsive={false}
+                        rowHeader="id"
+                        rowProps={this.getRowProps}
+                        columns={this.networkTableColumns}
+                        tableLayout="custom"
+                    />
+                );
             } else {
                 content = (
                     <EuiEmptyPrompt title={<h3>You have not joined any networks.</h3>} body={

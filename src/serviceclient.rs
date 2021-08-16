@@ -402,6 +402,7 @@ impl ServiceClient {
             self.state.insert("saved_networks".into(), serde_json::Value::from(self.saved_networks.clone()));
         }
         if self.is_initialized() {
+            let mut dirty = false;
             for endpoint in self.refresh_base_paths.iter() {
                 let endpoint = *endpoint;
                 let data = self.http_get(endpoint);
@@ -417,10 +418,14 @@ impl ServiceClient {
                     if self.state_hash.insert(endpoint.clone(), c64).unwrap_or(0) != c64 {
                         self.state.insert(endpoint, data);
                         self.dirty.store(true, Ordering::Relaxed);
+                        dirty = true;
                     }
                 } else {
                     self.online = false;
                 }
+            }
+            if dirty {
+                self.state.insert("saved_networks".into(), serde_json::Value::from(self.saved_networks.clone()));
             }
         }
     }

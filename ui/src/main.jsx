@@ -27,7 +27,7 @@ export default class Main extends React.Component {
         return (
             <EuiFlexGroup className="eui-fullHeight" gutterSize="none" responsive={false}>
                 <EuiFlexItem className="eui-fullHeight" grow={1} responsive={false}><ConfigPanel status={zt.status}/></EuiFlexItem>
-                <EuiFlexItem className="eui-fullHeight" grow={2} responsive={false}><NetworkList networks={zt.network}/></EuiFlexItem>
+                <EuiFlexItem className="eui-fullHeight" grow={2} responsive={false}><NetworkList networks={zt.network} savedNetworks={zt.saved_networks}/></EuiFlexItem>
             </EuiFlexGroup>
         );
     }
