@@ -499,13 +499,11 @@ WEBVIEW_API int webview_init(webview_t w) {
   id item = create_menu_item(title, "hide:", "h");
   ((id(*)(id, SEL, id))objc_msgSend)(appMenu, sel_registerName("addItem:"), item);
 
-  item = create_menu_item(get_nsstring("Hide Others"),
-                          "hideOtherApplications:", "h");
+  item = create_menu_item(get_nsstring("Hide Others"), "hideOtherApplications:", "h");
   ((id(*)(id, SEL, id))objc_msgSend)(item, sel_registerName("setKeyEquivalentModifierMask:"), (id)(NSEventModifierFlagOption | NSEventModifierFlagCommand));
   ((id(*)(id, SEL, id))objc_msgSend)(appMenu, sel_registerName("addItem:"), item);
 
-  item =
-      create_menu_item(get_nsstring("Show All"), "unhideAllApplications:", "");
+  item = create_menu_item(get_nsstring("Show All"), "unhideAllApplications:", "");
   ((id(*)(id, SEL, id))objc_msgSend)(appMenu, sel_registerName("addItem:"), item);
 
   ((id(*)(id, SEL, id))objc_msgSend)(appMenu, sel_registerName("addItem:"), ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSMenuItem"), sel_registerName("separatorItem")));
