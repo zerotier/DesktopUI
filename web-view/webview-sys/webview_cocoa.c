@@ -413,14 +413,10 @@ WEBVIEW_API int webview_init(webview_t w) {
   }
 
   wv->priv.window = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSWindow"), sel_registerName("alloc"));
-  ((id(*)(id, SEL, CGRect, id, id, id))objc_msgSend)(wv->priv.window,
-               sel_registerName("initWithContentRect:styleMask:backing:defer:"),
-               r, style, NSBackingStoreBuffered, 0);
+  ((id(*)(id, SEL, CGRect, id, id, id))objc_msgSend)(wv->priv.window, sel_registerName("initWithContentRect:styleMask:backing:defer:"), r, (id)(long)style, (id)NSBackingStoreBuffered, 0);
   ((id(*)(id, SEL))objc_msgSend)(wv->priv.window, sel_registerName("autorelease"));
   ((id(*)(id, SEL, id))objc_msgSend)(wv->priv.window, sel_registerName("setTitle:"), nsTitle);
-  /* ((id(*)(id, SEL, id))objc_msgSend)(wv->priv.window, sel_registerName("setLevel:"), NSFloatingWindowLevel); */
-  ((id(*)(id, SEL, id))objc_msgSend)(wv->priv.window, sel_registerName("setDelegate:"),
-               wv->priv.windowDelegate);
+  ((id(*)(id, SEL, id))objc_msgSend)(wv->priv.window, sel_registerName("setDelegate:"), wv->priv.windowDelegate);
   ((id(*)(id, SEL))objc_msgSend)(wv->priv.window, sel_registerName("center"));
 
   static Class __WKUIDelegate;
@@ -459,99 +455,75 @@ WEBVIEW_API int webview_init(webview_t w) {
   }
   id navDel = ((id(*)(id, SEL))objc_msgSend)((id)__WKNavigationDelegate, sel_registerName("new"));
 
-  wv->priv.webview =
-      ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("WKWebView"), sel_registerName("alloc"));
-  ((id(*)(id, SEL, CGRect, id))objc_msgSend)(wv->priv.webview,
-               sel_registerName("initWithFrame:configuration:"), r, config);
+  wv->priv.webview = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("WKWebView"), sel_registerName("alloc"));
+  ((id(*)(id, SEL, CGRect, id))objc_msgSend)(wv->priv.webview, sel_registerName("initWithFrame:configuration:"), r, config);
   ((id(*)(id, SEL, id))objc_msgSend)(wv->priv.webview, sel_registerName("setUIDelegate:"), uiDel);
-  ((id(*)(id, SEL, id))objc_msgSend)(wv->priv.webview, sel_registerName("setNavigationDelegate:"),
-               navDel);
+  ((id(*)(id, SEL, id))objc_msgSend)(wv->priv.webview, sel_registerName("setNavigationDelegate:"), navDel);
 
-  id nsURL = ((id(*)(id, SEL, id))objc_msgSend)((id)objc_getClass("NSURL"),
-                          sel_registerName("URLWithString:"),
-                          get_nsstring(wv->url == NULL ? "" : wv->url));
+  id nsURL = ((id(*)(id, SEL, id))objc_msgSend)((id)objc_getClass("NSURL"), sel_registerName("URLWithString:"), get_nsstring(wv->url == NULL ? "" : wv->url));
 
-  ((id(*)(id, SEL, id))objc_msgSend)(wv->priv.webview, sel_registerName("loadRequest:"),
-               ((id(*)(id, SEL, id))objc_msgSend)((id)objc_getClass("NSURLRequest"),
-                            sel_registerName("requestWithURL:"), nsURL));
+  ((id(*)(id, SEL, id))objc_msgSend)(wv->priv.webview, sel_registerName("loadRequest:"), ((id(*)(id, SEL, id))objc_msgSend)((id)objc_getClass("NSURLRequest"), sel_registerName("requestWithURL:"), nsURL));
   ((id(*)(id, SEL, id))objc_msgSend)(wv->priv.webview, sel_registerName("setAutoresizesSubviews:"), 1);
-  ((id(*)(id, SEL, id))objc_msgSend)(wv->priv.webview, sel_registerName("setAutoresizingMask:"),
-              (id)(NSViewWidthSizable | NSViewHeightSizable));
-  ((id(*)(id, SEL, id))objc_msgSend)(((id(*)(id, SEL))objc_msgSend)(wv->priv.window, sel_registerName("contentView")),
-               sel_registerName("addSubview:"), wv->priv.webview);
+  ((id(*)(id, SEL, id))objc_msgSend)(wv->priv.webview, sel_registerName("setAutoresizingMask:"), (id)(NSViewWidthSizable | NSViewHeightSizable));
+  ((id(*)(id, SEL, id))objc_msgSend)(((id(*)(id, SEL))objc_msgSend)(wv->priv.window, sel_registerName("contentView")), sel_registerName("addSubview:"), wv->priv.webview);
 
   if (wv->visible) {
-    ((id(*)(id, SEL))objc_msgSend)(wv->priv.window, sel_registerName("orderFrontRegardless"));
+      ((id(*)(id, SEL))objc_msgSend)(wv->priv.window, sel_registerName("orderFrontRegardless"));
   }
   
   ((id(*)(id, SEL, CGSize))objc_msgSend)(wv->priv.window, sel_registerName("setMinSize:"), CGSizeMake(wv->min_width, wv->min_height));
-
-  ((id(*)(id, SEL, id))objc_msgSend)(((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSApplication"),
-                            sel_registerName("sharedApplication")),
-               sel_registerName("setActivationPolicy:"),
-               (id)NSApplicationActivationPolicyAccessory);
-
-  ((id(*)(id, SEL))objc_msgSend)(((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSApplication"),
-                            sel_registerName("sharedApplication")),
-               sel_registerName("finishLaunching"));
+  ((id(*)(id, SEL, id))objc_msgSend)(((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSApplication"), sel_registerName("sharedApplication")), sel_registerName("setActivationPolicy:"), (id)NSApplicationActivationPolicyAccessory);
+  ((id(*)(id, SEL))objc_msgSend)(((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSApplication"), sel_registerName("sharedApplication")), sel_registerName("finishLaunching"));
 
   if (wv->visible) {
-      ((id(*)(id, SEL, id))objc_msgSend)(((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSApplication"),
-        sel_registerName("sharedApplication")),
-          sel_registerName("activateIgnoringOtherApps:"), 1);
+      ((id(*)(id, SEL, id))objc_msgSend)(((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSApplication"), sel_registerName("sharedApplication")), sel_registerName("activateIgnoringOtherApps:"), 1);
   }
 
-  id menubar =
-      ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSMenu"), sel_registerName("alloc"));
+  id menubar = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSMenu"), sel_registerName("alloc"));
   ((id(*)(id, SEL, id))objc_msgSend)(menubar, sel_registerName("initWithTitle:"), get_nsstring(""));
   ((id(*)(id, SEL))objc_msgSend)(menubar, sel_registerName("autorelease"));
 
-  id appName = ((id(*)(id, SEL))objc_msgSend)(((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSProcessInfo"),
-                                         sel_registerName("processInfo")),
-                            sel_registerName("processName"));
+  id appName = ((id(*)(id, SEL))objc_msgSend)(((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSProcessInfo"), sel_registerName("processInfo")), sel_registerName("processName"));
 
-  id appMenuItem =
-      ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSMenuItem"), sel_registerName("alloc"));
-  ((id(*)(id, SEL, id, id, id))objc_msgSend)(appMenuItem,
-               sel_registerName("initWithTitle:action:keyEquivalent:"), appName,
-               NULL, get_nsstring(""));
+  id appMenuItem = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSMenuItem"), sel_registerName("alloc"));
+  ((id(*)(id, SEL, id, id, id))objc_msgSend)(appMenuItem, sel_registerName("initWithTitle:action:keyEquivalent:"), appName, NULL, get_nsstring(""));
 
-  id appMenu =
-      ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSMenu"), sel_registerName("alloc"));
+  id appMenu = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSMenu"), sel_registerName("alloc"));
   ((id(*)(id, SEL, id))objc_msgSend)(appMenu, sel_registerName("initWithTitle:"), appName);
   ((id(*)(id, SEL))objc_msgSend)(appMenu, sel_registerName("autorelease"));
 
   ((id(*)(id, SEL, id))objc_msgSend)(appMenuItem, sel_registerName("setSubmenu:"), appMenu);
   ((id(*)(id, SEL, id))objc_msgSend)(menubar, sel_registerName("addItem:"), appMenuItem);
 
-  id title =
-      ((id(*)(id, SEL, id))objc_msgSend)(get_nsstring("Hide "),
-                   sel_registerName("stringByAppendingString:"), appName);
+  id title = ((id(*)(id, SEL, id))objc_msgSend)(get_nsstring("Hide "), sel_registerName("stringByAppendingString:"), appName);
   id item = create_menu_item(title, "hide:", "h");
   ((id(*)(id, SEL, id))objc_msgSend)(appMenu, sel_registerName("addItem:"), item);
 
   item = create_menu_item(get_nsstring("Hide Others"),
                           "hideOtherApplications:", "h");
-  ((id(*)(id, SEL, id))objc_msgSend)(item, sel_registerName("setKeyEquivalentModifierMask:"),
-               (NSEventModifierFlagOption | NSEventModifierFlagCommand));
+  ((id(*)(id, SEL, id))objc_msgSend)(item, sel_registerName("setKeyEquivalentModifierMask:"), (id)(NSEventModifierFlagOption | NSEventModifierFlagCommand));
   ((id(*)(id, SEL, id))objc_msgSend)(appMenu, sel_registerName("addItem:"), item);
 
   item =
       create_menu_item(get_nsstring("Show All"), "unhideAllApplications:", "");
   ((id(*)(id, SEL, id))objc_msgSend)(appMenu, sel_registerName("addItem:"), item);
 
-  ((id(*)(id, SEL, id))objc_msgSend)(appMenu, sel_registerName("addItem:"),
-               ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSMenuItem"),
-                            sel_registerName("separatorItem")));
+  ((id(*)(id, SEL, id))objc_msgSend)(appMenu, sel_registerName("addItem:"), ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSMenuItem"), sel_registerName("separatorItem")));
 
-  title = ((id(*)(id, SEL, id))objc_msgSend)(get_nsstring("Quit "),
-                       sel_registerName("stringByAppendingString:"), appName);
+  title = ((id(*)(id, SEL, id))objc_msgSend)(get_nsstring("Quit "), sel_registerName("stringByAppendingString:"), appName);
   item = create_menu_item(title, wv->frameless ? "terminate:" : "close", "q");
   ((id(*)(id, SEL, id))objc_msgSend)(appMenu, sel_registerName("addItem:"), item);
 
-  ((id(*)(id, SEL, id))objc_msgSend)(((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSApplication"),
-                            sel_registerName("sharedApplication")),
-               sel_registerName("setMainMenu:"), menubar);
+  item = create_menu_item(get_nsstring("Copy"), "copy:", "c");
+  ((id(*)(id, SEL, id))objc_msgSend)(appMenu, sel_registerName("addItem:"), item);
+
+  item = create_menu_item(get_nsstring("Paste"), "paste:", "v");
+  ((id(*)(id, SEL, id))objc_msgSend)(appMenu, sel_registerName("addItem:"), item);
+
+  item = create_menu_item(get_nsstring("Select All"), "selectAll:", "a");
+  ((id(*)(id, SEL, id))objc_msgSend)(appMenu, sel_registerName("addItem:"), item);
+
+  ((id(*)(id, SEL, id))objc_msgSend)(((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSApplication"), sel_registerName("sharedApplication")), sel_registerName("setMainMenu:"), menubar);
 
   wv->priv.should_exit = 0;
   return 0;

@@ -147,19 +147,23 @@ static void menu_callback(id self, SEL cmd, id sender) {
 
 int tray_init(struct tray *tray) {
     kCFRunLoopDefaultMode = ((id(*)(id, SEL, char*))objc_msgSend)((id)objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), "kCFRunLoopDefaultMode");
+
     ((void(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSApplication"), sel_registerName("sharedApplication"));
     Class trayDelegateClass = objc_allocateClassPair(objc_getClass("NSObject"), "Tray", 0);
     class_addProtocol(trayDelegateClass, objc_getProtocol("NSApplicationDelegate"));
     class_addMethod(trayDelegateClass, sel_registerName("menuCallback:"), (IMP)menu_callback, "v@:@");
     objc_registerClassPair(trayDelegateClass);
     id trayDelegate = ((id(*)(id, SEL))objc_msgSend)((id)trayDelegateClass, sel_registerName("new"));
+
     app = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSApplication"), sel_registerName("sharedApplication"));
     ((void(*)(id, SEL,id))objc_msgSend)(app, sel_registerName("setDelegate:"), trayDelegate);
+
     statusBar = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSStatusBar"), sel_registerName("systemStatusBar"));
     statusItem = ((id(*)(id, SEL, double))objc_msgSend)(statusBar, sel_registerName("statusItemWithLength:"), -1.0);
     ((void(*)(id, SEL))objc_msgSend)(statusItem, sel_registerName("retain"));
     ((void(*)(id, SEL, bool))objc_msgSend)(statusItem, sel_registerName("setHighlightMode:"), true);
     statusBarButton = ((id(*)(id, SEL))objc_msgSend)(statusItem, sel_registerName("button"));
+
     tray_update(tray);
     /*((void(*)(id, SEL, bool))objc_msgSend)(app, sel_registerName("activateIgnoringOtherApps:"), true);*/
     return 0;
