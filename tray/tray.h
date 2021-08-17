@@ -1,8 +1,6 @@
 #ifndef TRAY_H
 #define TRAY_H
 
-#define TRAY_APPKIT
-
 /* Max time to block in tray_loop() */
 #define MAX_WAIT_SECONDS 5
 

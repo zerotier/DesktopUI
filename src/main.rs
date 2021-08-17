@@ -871,12 +871,23 @@ fn tray_main() {
         menu
     };
 
-    let tray = Tray::init(icon_name.as_ref(), refresh());
-    loop {
-        // Create and destroy authentication windows in response to networks that need authentication.
-        {
+    // Start a background thread to supervise windows and reap dead processes. This also
+    // handles launching SSO login sessions when needed.
+    let client2 = client.clone();
+    let auth_windows2 = auth_windows.clone();
+    let main_window2 = main_window.clone();
+    let about_window2 = about_window.clone();
+    std::thread::spawn(move || {
+        set_thread_to_background_priority();
+        let client = client2;
+        let auth_windows = auth_windows2;
+        let main_window = main_window2;
+        let about_window = about_window2;
+        loop {
+            std::thread::sleep(Duration::from_secs(5));
+
             let mut auth_windows = auth_windows.lock();
-            let auth_needed_networks = client.lock().sso_auth_needed_networks(15000);
+            let auth_needed_networks = client.lock().sso_auth_needed_networks(20000);
 
             for network in auth_needed_networks.iter() { // network is a tuple of (ID, URL, remaining ms)
                 let nwid = &(*network).0;
@@ -922,8 +933,15 @@ fn tray_main() {
                     true
                 }
             });
-        }
 
+            for w in [&main_window, &about_window].iter() {
+                did_process_exit(&mut *w.lock());
+            }
+        }
+    });
+
+    let tray = Tray::init(icon_name.as_ref(), refresh());
+    loop {
         // Refresh menu if data has changed.
         if dirty_flag.swap(false, std::sync::atomic::Ordering::Relaxed) {
             let new_icon = tray_icon_name();
@@ -934,13 +952,6 @@ fn tray_main() {
                 tray.update(None, refresh());
             }
         }
-
-        for w in [&main_window, &about_window].iter() {
-            did_process_exit(&mut *w.lock());
-        }
-        auth_windows.lock().retain(|_, window| {
-            !did_process_exit(&mut *(*window).1.lock())
-        });
 
         // Execute next tray event loop, which will (as per modifications made to tray.h) return after a second or two if
         // nothing happens. This allows periodic polling for changes to happen in this code.
