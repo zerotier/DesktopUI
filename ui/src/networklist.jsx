@@ -63,9 +63,17 @@ export default class NetworkList extends React.Component {
             let sn = nextProps.savedNetworks;
             if (Array.isArray(n)) {
                 // If networks change, ensure that expanded network panels also change.
+                let haveNetworks = {};
                 for(let i=0;i<n.length;++i) {
                     if (this.itemIdToExpandedRowMap[n[i].id])
                         this.itemIdToExpandedRowMap[n[i].id] = <Network config={n[i]}/>;
+                    haveNetworks[n[i].id] = true;
+                }
+                let exp = Object.keys(this.itemIdToExpandedRowMap);
+                for(let i=0;i<exp.length;++i) {
+                    if (!haveNetworks[exp[i]]) {
+                        delete this.itemIdToExpandedRowMap[exp[i]];
+                    }
                 }
                 this.setState({ networks: n, initialized: true, savedNetworks: sn||{} });
             } else {
