@@ -1,6 +1,8 @@
 #ifndef TRAY_H
 #define TRAY_H
 
+#define TRAY_APPKIT
+
 /* Max time to block in tray_loop() */
 #define MAX_WAIT_SECONDS 5
 
@@ -100,16 +102,22 @@ void tray_exit() { loop_result = -1; }
 #include <objc/objc-runtime.h>
 #include <limits.h>
 
-static id app;
-static id statusBar;
-static id statusItem;
-static id statusBarButton;
-static id kCFRunLoopDefaultMode;
+static id app = NULL;
+static id statusBar = NULL;
+static id statusItem = NULL;
+static id statusBarButton = NULL;
+static id rootMenu = NULL;
+static id kCFRunLoopDefaultMode = NULL;
 
-static id _tray_menu(struct tray_menu *m) {
-    id menu = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSMenu"), sel_registerName("new"));
-    menu = ((id(*)(id, SEL))objc_msgSend)(menu, sel_registerName("autorelease"));
-    ((void(*)(id, SEL, bool))objc_msgSend)(menu, sel_registerName("setAutoenablesItems:"), false);
+static id _tray_menu(struct tray_menu *m, id menu) {
+    if (menu) {
+      ((void(*)(id, SEL))objc_msgSend)(menu, sel_registerName("removeAllItems"));
+    } else {
+      menu = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSMenu"), sel_registerName("new"));
+      menu = ((id(*)(id, SEL))objc_msgSend)(menu, sel_registerName("autorelease"));
+      ((void(*)(id, SEL, bool))objc_msgSend)(menu, sel_registerName("setAutoenablesItems:"), false);
+    }
+
     for (; m != NULL && m->text != NULL; m++) {
         if (strcmp(m->text, "-") == 0) {
             id menuItem = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSMenuItem"), sel_registerName("separatorItem"));
@@ -130,10 +138,11 @@ static id _tray_menu(struct tray_menu *m) {
               ((id(*)(id, SEL, struct tray_menu*))objc_msgSend)((id)objc_getClass("NSValue"), sel_registerName("valueWithPointer:"), m));
             ((void(*)(id, SEL, id))objc_msgSend)(menu, sel_registerName("addItem:"), menuItem);
             if (m->submenu != NULL) {
-                ((void(*)(id, SEL, id, id))objc_msgSend)(menu, sel_registerName("setSubmenu:forItem:"), _tray_menu(m->submenu), menuItem);
+                ((void(*)(id, SEL, id, id))objc_msgSend)(menu, sel_registerName("setSubmenu:forItem:"), _tray_menu(m->submenu, NULL), menuItem);
             }
         }
     }
+
     return menu;
 }
 
@@ -195,13 +204,15 @@ void tray_update(struct tray *tray) {
     if (tray->icon) {
         ((void(*)(id, SEL, id))objc_msgSend)(statusBarButton, sel_registerName("setImage:"), ((id(*)(id, SEL, id))objc_msgSend)((id)objc_getClass("NSImage"), sel_registerName("imageNamed:"), ((id(*)(id, SEL, char *))objc_msgSend)((id)objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), tray->icon)));
     }
-    id menu = _tray_menu(tray->menu);
-    ((void(*)(id, SEL, id))objc_msgSend)(statusItem, sel_registerName("setMenu:"), menu);
-    /*((void(*)(id, SEL))objc_msgSend)(menu, sel_registerName("release"));*/
+    id wasMenuSet = rootMenu;
+    rootMenu = _tray_menu(tray->menu, rootMenu);
+    if (!wasMenuSet)
+      ((void(*)(id, SEL, id))objc_msgSend)(statusItem, sel_registerName("setMenu:"), rootMenu);
 }
 
 void tray_exit() {
     ((void(*)(id, SEL, id))objc_msgSend)(app, sel_registerName("terminate:"), app);
+    rootMenu = NULL;
 }
 
 #elif defined(TRAY_WINAPI)

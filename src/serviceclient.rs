@@ -346,12 +346,8 @@ impl ServiceClient {
                 let pq = self.post_queue.pop_front();
                 if pq.is_some() {
                     let pq = pq.unwrap();
-                    if self.http_post(pq.0.as_str(), pq.1.as_str()).0 == 200 {
-                        posted = true;
-                    } else {
-                        self.post_queue.push_front(pq);
-                        break;
-                    }
+                    posted = true;
+                    let _ = self.http_post(pq.0.as_str(), pq.1.as_str());
                 } else {
                     break;
                 }
@@ -360,11 +356,8 @@ impl ServiceClient {
                 let pq = self.delete_queue.pop_front();
                 if pq.is_some() {
                     let pq = pq.unwrap();
-                    if ureq::delete(format!("{}{}", self.base_url, pq).as_str()).timeout(Duration::from_millis(QUERY_TIMEOUT_MS)).set("X-ZT1-Auth", self.auth_token.as_str()).call().map_or(0_u16, |res| res.status()) == 200 {
-                        posted = true;
-                    } else {
-                        self.delete_queue.push_front(pq);
-                    }
+                    posted = true;
+                    let _ = ureq::delete(format!("{}{}", self.base_url, pq).as_str()).timeout(Duration::from_millis(QUERY_TIMEOUT_MS)).set("X-ZT1-Auth", self.auth_token.as_str()).call().map_or(0_u16, |res| res.status());
                 } else {
                     break;
                 }

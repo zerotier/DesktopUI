@@ -282,16 +282,14 @@ fn start_client(refresh_base_paths: Vec<&'static str>, tick_period_ms: u64, refr
         set_thread_to_background_priority();
         let mut k = 0_u64;
         loop {
-            let mut c = thread_client.lock();
+            if thread_client.lock().do_posts() {
+                k = refresh_period_ticks - 1;
+            }
             k += 1;
             if k >= refresh_period_ticks {
                 k = 0;
-                c.sync();
+                thread_client.lock().sync();
             }
-            if c.do_posts() {
-                k = refresh_period_ticks - 1;
-            }
-            drop(c);
             std::thread::sleep(Duration::from_millis(tick_period_ms));
         }
     });
@@ -452,6 +450,9 @@ fn control_panel_window_main(args: &Vec<String>) {
                     },
                     "remember_network" => {
                         let _ = ui_client.lock().remember_network(cmd.data, cmd.data2);
+                    },
+                    "forget_network" => {
+                        let _ = ui_client.lock().forget_network(&cmd.data);
                     },
                     "copy_to_clipboard" => {
                         copy_to_clipboard(cmd.data.as_str());

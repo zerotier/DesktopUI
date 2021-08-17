@@ -75,6 +75,13 @@ window.ztRememberNetwork = (networkId, networkName) => {
     }));
 };
 
+window.ztForgetNetwork = (networkId) => {
+    external.invoke(JSON.stringify({
+        cmd: "forget_network",
+        data: networkId
+    }));
+};
+
 // NOTE: window.zt_ui_update is set by primary React controls like Main. It's
 // called from Rust code during polling if things have changed. This is a dummy
 // for modes that don't need these updates.
