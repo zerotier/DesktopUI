@@ -67,18 +67,19 @@ window.ztDelete = (path) => {
     }));
 };
 
-window.ztRememberNetwork = (networkId, networkName) => {
+window.ztRememberNetwork = (networkId, networkName, networkSettings) => {
     external.invoke(JSON.stringify({
         cmd: "remember_network",
-        data: networkId,
-        data2: networkName
+        name: networkId,
+        data: networkName,
+        data2: networkSettings
     }));
 };
 
 window.ztForgetNetwork = (networkId) => {
     external.invoke(JSON.stringify({
         cmd: "forget_network",
-        data: networkId
+        name: networkId
     }));
 };
 

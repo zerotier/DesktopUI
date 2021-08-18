@@ -449,10 +449,10 @@ fn control_panel_window_main(args: &Vec<String>) {
                         let _ = ui_client.lock().enqueue_delete(cmd.name);
                     },
                     "remember_network" => {
-                        let _ = ui_client.lock().remember_network(cmd.data, cmd.data2);
+                        let _ = ui_client.lock().remember_network(cmd.name, cmd.data, cmd.data2);
                     },
                     "forget_network" => {
-                        let _ = ui_client.lock().forget_network(&cmd.data);
+                        let _ = ui_client.lock().forget_network(&cmd.name);
                     },
                     "copy_to_clipboard" => {
                         copy_to_clipboard(cmd.data.as_str());
@@ -734,6 +734,7 @@ fn tray_main() {
 
                     let (nwid, client2) = ((*network).0.clone(), client.clone());
                     let network_name: String = nw_obj.get("name").map_or("", |v| v.as_str().unwrap_or("")).into();
+                    let settings = serde_json::to_string(&nw_obj).unwrap_or(String::new());
                     network_menu.push(TrayMenuItem::Text {
                         text: "Disconnect ".into(),
                         checked: false,
@@ -741,7 +742,7 @@ fn tray_main() {
                         handler: Some(Box::new(move || {
                             let mut c = client2.lock();
                             c.enqueue_delete(format!("network/{}", nwid));
-                            c.remember_network(nwid.clone(), network_name.clone());
+                            c.remember_network(nwid.clone(), network_name.clone(), settings.clone());
                         })),
                     });
 
@@ -761,7 +762,7 @@ fn tray_main() {
                 for nw in saved_networks.iter() {
                     if !networks.iter().any(|x| (*x).0.eq(&(*nw).0)) {
                         let (client2, client3) = (client.clone(), client.clone());
-                        let (nwid2, nwid3) = ((*nw).0.clone(), (*nw).0.clone());
+                        let (nwid2, nwid3, settings) = ((*nw).0.clone(), (*nw).0.clone(), (*nw).2.clone());
                         menu.push(TrayMenuItem::Submenu {
                             text: format!("{}\t{}  ", (*nw).0, (*nw).1),
                             checked: false,
@@ -770,7 +771,7 @@ fn tray_main() {
                                     text: "Reconnect".into(),
                                     checked: false,
                                     disabled: false,
-                                    handler: Some(Box::new(move || client2.lock().enqueue_post(format!("network/{}", nwid2), "{}".into()))),
+                                    handler: Some(Box::new(move || client2.lock().enqueue_post(format!("network/{}", nwid2), settings.clone()))),
                                 },
                                 TrayMenuItem::Text {
                                     text: "Forget".into(),
@@ -879,10 +880,12 @@ fn tray_main() {
     let about_window2 = about_window.clone();
     std::thread::spawn(move || {
         set_thread_to_background_priority();
+
         let client = client2;
         let auth_windows = auth_windows2;
         let main_window = main_window2;
         let about_window = about_window2;
+
         loop {
             std::thread::sleep(Duration::from_secs(5));
 

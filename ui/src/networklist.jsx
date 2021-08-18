@@ -45,7 +45,7 @@ export default class NetworkList extends React.Component {
                             <div style={{width: '100%'}}>
                                 <span>{item.name}</span>
                                 <span style={{float: 'right'}}>
-                                    <EuiButtonEmpty size="s" aria-label='Reconnect to Network' color='primary' onClick={() => { ztPost('network/' + item.id, {}); }}>Reconnect</EuiButtonEmpty>
+                                    <EuiButtonEmpty size="s" aria-label='Reconnect to Network' color='primary' onClick={() => { ztPost('network/' + item.id, item.settings); }}>Reconnect</EuiButtonEmpty>
                                     &nbsp;&nbsp;
                                     <EuiButtonEmpty size="s" aria-label='Forget Network' color='danger' onClick={() => { ztForgetNetwork(item.id); }}>Forget</EuiButtonEmpty>
                                 </span>

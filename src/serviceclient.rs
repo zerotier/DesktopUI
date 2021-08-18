@@ -237,14 +237,18 @@ impl ServiceClient {
         nw
     }
 
-    pub fn saved_networks(&self) -> Vec<(String, String)> {
-        let mut nw: Vec<(String, String)> = Vec::new();
+    pub fn saved_networks(&self) -> Vec<(String, String, String)> {
+        let mut nw: Vec<(String, String, String)> = Vec::new();
         for kv in self.saved_networks.iter() {
             let _ = kv.1.as_object().map(|n| {
                 n.get("id").map(|id| {
                     id.as_str().map(|id| {
                         if id.len() == 16 {
                             nw.push((id.into(), n.get("name").map_or_else(|| {
+                                String::new()
+                            }, |name| {
+                                name.as_str().unwrap_or("").into()
+                            }), n.get("settings").map_or_else(|| {
                                 String::new()
                             }, |name| {
                                 name.as_str().unwrap_or("").into()
@@ -371,10 +375,11 @@ impl ServiceClient {
         }
     }
 
-    pub fn remember_network(&mut self, id: String, name: String) {
+    pub fn remember_network(&mut self, id: String, name: String, settings: String) {
         let mut n: serde_json::Map<String, Value> = serde_json::Map::new();
         n.insert("id".into(), Value::from(id.clone()));
         n.insert("name".into(), Value::from(name));
+        n.insert("settings".into(), Value::from(settings));
         self.saved_networks.insert(id, Value::from(n));
         self.state.insert("saved_networks".into(), serde_json::Value::from(self.saved_networks.clone()));
         let _ = serde_json::to_vec(&self.saved_networks).map(|json| std::fs::write(unsafe { crate::NETWORK_CACHE_PATH.as_str() }, &json));
