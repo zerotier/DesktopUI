@@ -456,6 +456,9 @@ fn control_panel_window_main(args: &Vec<String>) {
                     },
                     "copy_to_clipboard" => {
                         copy_to_clipboard(cmd.data.as_str());
+                        if !cmd.data2.is_empty() {
+                            notify(cmd.data2.as_str());
+                        }
                     },
                     "paste_from_clipboard" => {
                         let data = read_from_clipboard();
@@ -485,6 +488,10 @@ fn control_panel_window_main(args: &Vec<String>) {
         })
         .run()
         .unwrap();
+}
+
+fn notify(text: &str) {
+    let _ = notify_rust::Notification::new().body(text).appname("ZeroTier").show();
 }
 
 /// System tray main function.
@@ -529,10 +536,13 @@ fn tray_main() {
             let address = client.lock().get_str(&["status", "address"]);
             let address2 = address.clone();
             menu.push(TrayMenuItem::Text {
-                text: format!("Node ID:  {} ", address),
+                text: format!("My Address:  {} ", address),
                 checked: false,
                 disabled: false,
-                handler: Some(Box::new(move || copy_to_clipboard(address2.as_str()) )),
+                handler: Some(Box::new(move || {
+                    copy_to_clipboard(address2.as_str());
+                    notify("Copied this node's ZeroTier address to clipboard.");
+                })),
             });
 
             menu.push(TrayMenuItem::Separator);
@@ -567,7 +577,10 @@ fn tray_main() {
                         text: format!("Network ID:\t  {}", (*network).0),
                         checked: false,
                         disabled: false,
-                        handler: Some(Box::new(move || copy_to_clipboard(nwid.as_str()) )),
+                        handler: Some(Box::new(move || {
+                            copy_to_clipboard(nwid.as_str());
+                            notify("Copied network ID to clipboard.");
+                        })),
                     });
 
                     network_menu.push(TrayMenuItem::Separator);
@@ -666,7 +679,10 @@ fn tray_main() {
                                         text: String::from(a),
                                         checked: false,
                                         disabled: false,
-                                        handler: Some(Box::new(move || copy_to_clipboard(a_copy.split_once('/').map_or(a_copy.as_str(), |a| a.0)) )),
+                                        handler: Some(Box::new(move || {
+                                            copy_to_clipboard(a_copy.split_once('/').map_or(a_copy.as_str(), |a| a.0));
+                                            notify("Copied address to clipboard.");
+                                        })),
                                     });
                                 });
                             }
@@ -720,7 +736,10 @@ fn tray_main() {
                                 text: s.clone(),
                                 checked: false,
                                 disabled: false,
-                                handler: Some(Box::new(move || copy_to_clipboard(s.as_str()))),
+                                handler: Some(Box::new(move || {
+                                    copy_to_clipboard(s.as_str());
+                                    notify("Copied managed route to clipboard.");
+                                })),
                             });
                         }
                         network_menu.push(TrayMenuItem::Submenu {

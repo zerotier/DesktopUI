@@ -35,8 +35,9 @@ export default class Join extends React.Component {
         }
         if ((e.metaKey||e.ctrlKey) && e.key === 'c') {
             e.preventDefault();
-            if (e.target.value)
+            if (e.target.value) {
                 window.copyToClipboard(e.target.value);
+            }
         }
     }
 

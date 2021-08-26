@@ -19,6 +19,7 @@ crc64fast = "^1"
 single-instance = "^0"
 chrono = "^0"
 parking_lot = "^0"
+notify-rust = "^4"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 plist = "^1"

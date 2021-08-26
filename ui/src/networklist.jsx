@@ -24,7 +24,7 @@ export default class NetworkList extends React.Component {
                 name: 'Network ID',
                 width: '12rem',
                 render: (id) => (
-                    <EuiLink onClick={ () => { copyToClipboard(id) }} className="font-monospaced" color="text">{id}</EuiLink>
+                    <span className="font-monospaced">{id}</span>
                 )
             },
             {

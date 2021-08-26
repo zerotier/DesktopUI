@@ -25,10 +25,11 @@ window.onerror = function(message, source, lineno, colno, error) {
     extLog(message);
 };
 
-window.copyToClipboard = (str) => {
+window.copyToClipboard = (str, msg) => {
     external.invoke(JSON.stringify({
         cmd: "copy_to_clipboard",
-        data: str
+        data: str,
+        data2: msg||''
     }));
 };
 

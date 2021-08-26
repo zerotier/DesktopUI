@@ -63,7 +63,7 @@ export default class ConfigPanel extends React.Component {
                             <EuiFlexItem><EuiText>ZeroTier Address</EuiText></EuiFlexItem>
                             <EuiFlexItem grow={false}>
                                 <EuiText>
-                                    <EuiLink className="font-monospaced" color="text" onClick={ () => { copyToClipboard(status.address) } }>{status.address}</EuiLink>
+                                    <EuiLink className="font-monospaced" color="text" onClick={ () => { copyToClipboard(status.address, "Copied this node's ZeroTier address to clipboard.") } }>{status.address}</EuiLink>
                                 </EuiText>
                             </EuiFlexItem>
                             <EuiFlexItem><EuiText>Version</EuiText></EuiFlexItem>
