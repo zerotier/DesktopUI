@@ -36,7 +36,7 @@ linux: FORCE
 
 mac: FORCE
 	cd tray ; make clean
-	cd tray ; make zt_lib
+	cd tray ; make -j2 zt_lib
 	MACOSX_DEPLOYMENT_TARGET=10.13 cargo build --release --target=aarch64-apple-darwin
 	MACOSX_DEPLOYMENT_TARGET=10.13 cargo build --release --target=x86_64-apple-darwin
 	lipo -create target/aarch64-apple-darwin/release/zerotier_desktop_ui target/x86_64-apple-darwin/release/zerotier_desktop_ui -output target/release/zerotier_desktop_ui
