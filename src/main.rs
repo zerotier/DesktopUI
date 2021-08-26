@@ -490,6 +490,12 @@ fn control_panel_window_main(args: &Vec<String>) {
         .unwrap();
 }
 
+#[cfg(windows)]
+fn notify(text: &str) {
+    let _ = notify_rust::Notification::new().summary(text).appname("ZeroTier").show();
+}
+
+#[cfg(not(windows))]
 fn notify(text: &str) {
     let _ = notify_rust::Notification::new().body(text).appname("ZeroTier").show();
 }
