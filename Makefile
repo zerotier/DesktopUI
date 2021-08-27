@@ -27,7 +27,10 @@ all:    $(MAINTARGET)
 windows: FORCE
 	make -C tray clean
 	make -C tray zt_lib
-	cargo build --release
+	cargo build --release --target=x86_64-pc-windows-msvc
+	make -C tray clean
+	make -C tray zt_lib WIN_32BIT=1
+	set "RUSTFLAGS=-C link-args=/SAFESEH:NO" && cargo build --release --target=i686-pc-windows-msvc
 
 linux: FORCE
 	cd tray ; make clean
@@ -37,8 +40,8 @@ linux: FORCE
 mac: FORCE
 	cd tray ; make clean
 	cd tray ; make -j2 zt_lib
-	MACOSX_DEPLOYMENT_TARGET=10.13 cargo build --release --target=aarch64-apple-darwin
-	MACOSX_DEPLOYMENT_TARGET=10.13 cargo build --release --target=x86_64-apple-darwin
+	MACOSX_DEPLOYMENT_TARGET=10.13 cargo -Zextra-link-arg build --release --target=aarch64-apple-darwin
+	MACOSX_DEPLOYMENT_TARGET=10.13 cargo -Zextra-link-arg build --release --target=x86_64-apple-darwin
 	lipo -create target/aarch64-apple-darwin/release/zerotier_desktop_ui target/x86_64-apple-darwin/release/zerotier_desktop_ui -output target/release/zerotier_desktop_ui
 	make mac-assemble-app
 

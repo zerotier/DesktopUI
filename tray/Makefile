@@ -2,8 +2,12 @@ ifeq ($(OS),Windows_NT)
 	CC=gcc
 	RM=del /q
 	LIB_NAME=zt_desktop_tray.lib
-	TRAY_CFLAGS := -O -DTRAY_WINAPI=1 -std=c99
 	TRAY_LDFLAGS :=
+	ifeq ($(WIN_32BIT),1)
+		TRAY_CFLAGS := -O -DTRAY_WINAPI=1 -std=c99 -m32 -fno-exceptions
+	else
+		TRAY_CFLAGS := -O -DTRAY_WINAPI=1 -std=c99 -m64 -fno-exceptions
+	endif
 else ifeq ($(shell uname -s),Linux)
 	RM=rm -f
 	LIB_NAME=libzt_desktop_tray.a

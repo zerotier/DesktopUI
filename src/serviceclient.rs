@@ -1,6 +1,7 @@
 use std::time::{Duration, SystemTime};
 use std::collections::{LinkedList, HashMap};
 use std::cell::Cell;
+use std::io::Write;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::path::Path;
@@ -82,8 +83,8 @@ pub fn get_auth_token_and_port() -> Option<(String, u16)> {
 
 const SEP_BYTE: [u8; 1] = [0_u8];
 
-fn hash_result(v: &Value, h: &mut crc64fast::Digest) {
-    h.write(&SEP_BYTE);
+fn hash_result(v: &Value, h: &mut crc64::Crc64) {
+    let _ = h.write(&SEP_BYTE);
     match v {
         Value::Array(a) => {
             for x in a.iter() {
@@ -92,20 +93,20 @@ fn hash_result(v: &Value, h: &mut crc64fast::Digest) {
         },
         Value::Object(o) => {
             for x in o.iter() {
-                h.write(x.0.as_bytes());
+                let _ = h.write(x.0.as_bytes());
                 if !x.0.eq("clock") && !x.0.eq("netconfRevision") { // omit fields that change meaninglessly
                     hash_result(x.1, h);
                 }
             }
         },
         Value::Bool(b) => {
-            h.write(&[*b as u8]);
+            let _ = h.write(&[*b as u8]);
         },
         Value::Number(n) => {
-            h.write(n.to_string().as_bytes());
+            let _ = h.write(n.to_string().as_bytes());
         },
         Value::String(s) => {
-            h.write(s.as_bytes());
+            let _ = h.write(s.as_bytes());
         }
         _ => {}
     }
@@ -408,9 +409,9 @@ impl ServiceClient {
                     let endpoint = String::from(endpoint);
                     let data = serde_json::from_str::<Value>(data.1.as_str()).unwrap_or(Value::Null);
 
-                    let mut c64 = crc64fast::Digest::new();
+                    let mut c64 = crc64::Crc64::new();
                     hash_result(&data, &mut c64);
-                    let c64 = c64.sum64();
+                    let c64 = c64.get();
 
                     self.online = true;
                     if self.state_hash.insert(endpoint.clone(), c64).unwrap_or(0) != c64 {

@@ -456,9 +456,6 @@ fn control_panel_window_main(args: &Vec<String>) {
                     },
                     "copy_to_clipboard" => {
                         copy_to_clipboard(cmd.data.as_str());
-                        if !cmd.data2.is_empty() {
-                            notify(cmd.data2.as_str());
-                        }
                     },
                     "paste_from_clipboard" => {
                         let data = read_from_clipboard();
@@ -492,7 +489,8 @@ fn control_panel_window_main(args: &Vec<String>) {
 
 #[cfg(windows)]
 fn notify(text: &str) {
-    let _ = notify_rust::Notification::new().summary(text).appname("ZeroTier").show();
+    let ico: String = tray_icon_name();
+    let _ = notify_rust::Notification::new().icon(ico.as_str()).body(text).appname("ZeroTier").show();
 }
 
 #[cfg(not(windows))]

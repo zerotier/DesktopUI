@@ -220,9 +220,10 @@ void tray_exit() {
 
 #include <windows.h>
 #include <shellapi.h>
+#include <Shobjidl.h>
 
 #define WM_TRAY_CALLBACK_MESSAGE (WM_USER + 1)
-#define WC_TRAY_CLASS_NAME L"ZeroTierTray"
+#define WC_TRAY_CLASS_NAME L"com.zerotier.zerotier.DesktopUI"
 #define ID_TRAY_FIRST 1000
 
 static WNDCLASSEX wc;
@@ -301,7 +302,10 @@ static HMENU _tray_menu(struct tray_menu *m, UINT *id) {
   return hmenu;
 }
 
+SHSTDAPI SetCurrentProcessExplicitAppUserModelID(PCWSTR AppID);
+
 int tray_init(struct tray *tray) {
+  SetCurrentProcessExplicitAppUserModelID(L"com.zerotier.zerotier.DesktopUI");
   memset(&wc, 0, sizeof(wc));
   wc.cbSize = sizeof(WNDCLASSEX);
   wc.lpfnWndProc = _tray_wnd_proc;

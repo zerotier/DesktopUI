@@ -173,10 +173,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "245097e9a4535ee1e3e3931fcfcd55a796a44c643e8596ff6566d68f09b87bbc"
 
 [[package]]
-name = "crc64fast"
+name = "crc64"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd3d10c557924c719a61e583165e31a0d8131b20415d6858983e67d1eb8a82bd"
+checksum = "55626594feae15d266d52440b26ff77de0e22230cf0c113abe619084c1ddc910"
 
 [[package]]
 name = "crossbeam-utils"
@@ -1554,7 +1554,7 @@ name = "zerotier_desktop_ui"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "crc64fast",
+ "crc64",
  "notify-rust",
  "parking_lot",
  "plist",
