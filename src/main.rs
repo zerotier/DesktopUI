@@ -1041,9 +1041,8 @@ fn main() {
         NETWORK_CACHE_PATH = String::from(Path::new(&APPLICATION_HOME).join("saved_networks.json").to_str().unwrap());
     }
 
+    // These blocks handle trying to import old saved network data from old versions of the ZeroTier UI app.
     #[cfg(target_os = "macos")] {
-        // If saved_networks.json does not exist, see if there's an old networkinfo.dat from the old ObjC
-        // Mac GUI and if so migrate the list of networks to the new app.
         if !Path::new(unsafe { NETWORK_CACHE_PATH.as_str() }).is_file() {
             let mut nwid: Option<u64> = None;
             let mut name: Option<String> = None;
@@ -1057,7 +1056,7 @@ fn main() {
                             }
                         });
                     });
-                });
+                });0
             });
             let mut networks_json: HashMap<String, HashMap<String, String>> = HashMap::new();
             for kv in networks.iter() {
@@ -1067,6 +1066,28 @@ fn main() {
                 networks_json.insert(kv.0.clone(), nw);
             }
             let _ = std::fs::write(unsafe { NETWORK_CACHE_PATH.as_str() }, serde_json::to_vec(&networks_json).unwrap());
+        }
+    }
+    #[cfg(windows)] {
+        if !Path::new(unsafe { NETWORK_CACHE_PATH.as_str() }).is_file() {
+            let _ = std::env::var("USERPROFILE").map(|uprof| std::fs::read(format!("{}\\AppData\\Local\\ZeroTier\\One\\networks.dat", uprof)).map(|windows_networks_bin| {
+                let mut networks_json: HashMap<String, HashMap<String, String>> = HashMap::new();
+                let mut hex_str = String::with_capacity(16);
+                for b in windows_networks_bin.iter() {
+                    if (b"0123456789abcdef").contains(b) {
+                        hex_str.push(*b as char);
+                        if hex_str.len() == 16 {
+                            let mut nw: HashMap<String, String> = HashMap::new();
+                            nw.insert(String::from("id"), hex_str.clone());
+                            networks_json.insert(hex_str.clone(), nw);
+                            hex_str.clear();
+                        }
+                    } else {
+                        hex_str.clear();
+                    }
+                }
+                let _ = std::fs::write(unsafe { NETWORK_CACHE_PATH.as_str() }, serde_json::to_vec(&networks_json).unwrap());
+            }));
         }
     }
 
