@@ -8,18 +8,10 @@ else ifeq ($(shell uname -s),Darwin)
 endif
 
 CODESIGN=echo
-PRODUCTSIGN=echo
 CODESIGN_APP_CERT=
-CODESIGN_INSTALLER_CERT=
-NOTARIZE=echo
-NOTARIZE_USER_ID=null
 ifeq ($(ZT_OFFICIAL_RELEASE),1)
 	CODESIGN=codesign
-	PRODUCTSIGN=productsign
 	CODESIGN_APP_CERT="Developer ID Application: ZeroTier, Inc (8ZD9JUCZ4V)"
-	CODESIGN_INSTALLER_CERT="Developer ID Installer: ZeroTier, Inc (8ZD9JUCZ4V)"
-	NOTARIZE=xcrun altool
-	NOTARIZE_USER_ID="adam.ierymenko@gmail.com"
 endif
 
 all:    $(MAINTARGET)
