@@ -9,11 +9,9 @@
 *.lib
 *.exe
 /ui/node_modules
-/ui/yarn.lock
 /ui/.cache
 /ui/.yarn
 /ui/.parcel-cache
 /ui/*.log
 /ZeroTier.app
 /web-view/target
-/Cargo.lock
