@@ -5,13 +5,15 @@
 *.a
 *.dSym
 *.dylib
+*.so
 *.lib
 *.exe
 /ui/node_modules
+/ui/yarn.lock
 /ui/.cache
 /ui/.yarn
 /ui/.parcel-cache
-/ui/dist/index*.js
 /ui/*.log
 /ZeroTier.app
 /web-view/target
+/Cargo.lock

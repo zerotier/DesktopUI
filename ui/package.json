@@ -1,7 +1,7 @@
 {
   "name": "zerotier-desktop-ui-js",
   "version": "1.0.0",
-  "license": "UNLICENSED",
+  "license": "MPL-2.0",
   "dependencies": {
     "@babel/polyfill": "^7.12.1",
     "@elastic/datemath": "^5.0.3",
