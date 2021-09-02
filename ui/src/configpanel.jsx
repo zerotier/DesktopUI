@@ -15,28 +15,33 @@ export default class ConfigPanel extends React.Component {
         this.onPrimaryPortChange = this.onPrimaryPortChange.bind(this);
         this.onPrimaryPortLostFocus = this.onPrimaryPortLostFocus.bind(this);
         this.onEnablePortMappingChange = this.onEnablePortMappingChange.bind(this);
+        this.apply = this.apply.bind(this);
+        this.cancel = this.cancel.bind(this);
+        this.hasChanges = this.hasChanges.bind(this);
         this.state = {
             primaryPort: null,
             portMappingEnabled: null,
-            receivedProps: false
+            receivedProps: false,
+            submittedChanges: false
         };
     }
 
     componentWillReceiveProps(nextProps) {
         let primaryPort = nextProps.status?.config?.settings?.primaryPort;
         let portMappingEnabled = nextProps.status?.config?.settings?.portMappingEnabled;
-        if (!this.state.receivedProps) {
+        if ((!this.state.receivedProps)&&(!this.state.submittedChanges)) {
             this.setState({
                 primaryPort: primaryPort,
                 portMappingEnabled: portMappingEnabled,
-                receivedProps: true
+                receivedProps: true,
+                submittedChanges: false
             });
         }
     }
 
     onPrimaryPortChange(e) {
         try {
-            let vstr = e.target.value;
+            let vstr = e.target.value||'0';
             let v = parseInt(vstr, 10);
             if ((v)&&(v > 0)&&(v < 65536)) {
                 this.setState({ primaryPort: v });
@@ -57,13 +62,32 @@ export default class ConfigPanel extends React.Component {
         this.setState({ portMappingEnabled: !this.state.portMappingEnabled });
     }
 
+    apply() {
+        this.setState({ submittedChanges: true });
+        ztPost('config/settings', {
+            primaryPort: this.state.primaryPort,
+            portMappingEnabled: !!this.state.portMappingEnabled
+        });
+    }
+
+    cancel() {
+        let primaryPort = this.props.status?.config?.settings?.primaryPort;
+        let portMappingEnabled = this.props.status?.config?.settings?.portMappingEnabled;
+        this.setState({
+            primaryPort: primaryPort,
+            portMappingEnabled: portMappingEnabled
+        });
+    }
+
+    hasChanges() {
+        return (this.state.primaryPort != this.props.status?.config?.settings?.primaryPort) ||
+               (this.state.portMappingEnabled != this.props.status?.config?.settings?.portMappingEnabled);
+    }
+
     render() {
         let status = this.props.status;
-        let inner = <div></div>;
+        let inner = <div/>;
         if (status) {
-            let changes = 
-                (this.state.primaryPort != this.props.status?.config?.settings?.primaryPort) ||
-                (this.state.portMappingEnabled != this.props.status?.config?.settings?.portMappingEnabled);
             inner = (
                 <EuiSplitPanel.Outer responsive={false} grow={true} className="eui-fullHeight" hasShadow={false} hasBorder={false} borderRadius="none">
                     <EuiSplitPanel.Inner paddingSize="none" color="subdued" responsive={false}>
@@ -96,12 +120,14 @@ export default class ConfigPanel extends React.Component {
                             </EuiFlexItem>
                         </EuiFlexGrid>
                     </EuiSplitPanel.Inner>
-                    {changes ? (
+                    {this.hasChanges() ? (
                         <EuiSplitPanel.Inner grow={false} paddingSize="none" color="subdued" responsive={false}>
                             <EuiSpacer size="m"/>
+                            <EuiText size="s">Note: changes to ports or port mapping require the ZeroTier service to be restarted.</EuiText>
+                            <EuiSpacer size="m"/>
                             <EuiFlexGrid columns={2} gutterSize="s" alignItems="center" responsive={false}>
-                                <EuiFlexItem><EuiButton size="s" color="text">Cancel</EuiButton></EuiFlexItem>
-                                <EuiFlexItem><EuiButton size="s" color="text" fill>Apply</EuiButton></EuiFlexItem>
+                                <EuiFlexItem><EuiButton size="s" color="text" onClick={() => { this.cancel(); }}>Cancel</EuiButton></EuiFlexItem>
+                                <EuiFlexItem><EuiButton size="s" color="text" fill onClick={() => { this.apply(); }}>Apply</EuiButton></EuiFlexItem>
                             </EuiFlexGrid>
                         </EuiSplitPanel.Inner>
                     ) : null}

@@ -23,11 +23,11 @@ export default class Main extends React.Component {
 
     onZtUpdate(update) {
         if (update.status) {
-            // This field constantly changes and prevents equality check optimizations in React code.
             delete update.status.clock;
         }
-        if (!equal(update, this.state.zt))
-            this.setState({ zt: update });
+        if (!equal(update, this.state.zt)) {
+            this.setState({zt: update});
+        }
     }
 
     render() {

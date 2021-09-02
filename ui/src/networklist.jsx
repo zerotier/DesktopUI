@@ -7,7 +7,7 @@
  */
 
 import React, { Fragment } from 'react';
-import { EuiPanel, EuiEmptyPrompt, EuiBasicTable, EuiText, EuiLink, EuiButtonEmpty } from '@elastic/eui';
+import { EuiPanel, EuiEmptyPrompt, EuiBasicTable, EuiLink, EuiButtonEmpty } from '@elastic/eui';
 import equal from 'fast-deep-equal';
 
 import Network from './network';
