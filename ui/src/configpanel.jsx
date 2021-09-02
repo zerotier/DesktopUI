@@ -22,7 +22,8 @@ export default class ConfigPanel extends React.Component {
             primaryPort: null,
             portMappingEnabled: null,
             receivedProps: false,
-            submittedChanges: false
+            submittedChanges: false,
+            needsRestart: false
         };
     }
 
@@ -63,7 +64,10 @@ export default class ConfigPanel extends React.Component {
     }
 
     apply() {
-        this.setState({ submittedChanges: true });
+        this.setState({
+            submittedChanges: true,
+            needsRestart: true
+        });
         ztPost('config/settings', {
             primaryPort: this.state.primaryPort,
             portMappingEnabled: !!this.state.portMappingEnabled
@@ -130,7 +134,12 @@ export default class ConfigPanel extends React.Component {
                                 <EuiFlexItem><EuiButton size="s" color="text" fill onClick={() => { this.apply(); }}>Apply</EuiButton></EuiFlexItem>
                             </EuiFlexGrid>
                         </EuiSplitPanel.Inner>
-                    ) : null}
+                    ) : ((this.state.needsRestart) ? (
+                        <EuiSplitPanel.Inner grow={false} paddingSize="none" color="subdued" responsive={false}>
+                            <EuiSpacer size="m"/>
+                            <EuiText size="s">Changes written to local.conf but require the ZeroTier service to be restarted to take effect.</EuiText>
+                        </EuiSplitPanel.Inner>
+                    ) : null)}
                 </EuiSplitPanel.Outer>
             );
         }
