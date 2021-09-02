@@ -50,6 +50,16 @@ pub fn get_auth_token_and_port(spawn_elevated: bool) -> Option<(String, u16)> {
     #[cfg(not(windows))]
     let home = std::env::var("HOME");
 
+    for p in [crate::GLOBAL_SERVICE_HOME_V2, crate::GLOBAL_SERVICE_HOME_V1] {
+        let p = Path::new(p);
+        for port_path in [p.join("zerotier.port"), p.join("zerotier-one.port")] {
+            let _ = std::fs::read(port_path).map(|pp| String::from_utf8(pp).map(|pp| u16::from_str_radix(pp.trim(), 10).map(|pp| port = pp)));
+            if port != 0 {
+                break;
+            }
+        }
+    }
+
     for attempt in 0..2 {
         let _ = home.clone().map(|mut p| {
             #[cfg(target_os = "macos")]
@@ -82,12 +92,6 @@ pub fn get_auth_token_and_port(spawn_elevated: bool) -> Option<(String, u16)> {
         if token.is_empty() {
             for p in [crate::GLOBAL_SERVICE_HOME_V2, crate::GLOBAL_SERVICE_HOME_V1] {
                 let p = Path::new(p);
-                for port_path in [p.join("zerotier.port"), p.join("zerotier-one.port")] {
-                    let _ = std::fs::read(port_path).map(|pp| String::from_utf8(pp).map(|pp| u16::from_str_radix(pp.trim(), 10).map(|pp| port = pp)));
-                    if port != 0 {
-                        break;
-                    }
-                }
                 let _ = std::fs::read(p.join("authtoken.secret")).map(|tok| String::from_utf8(tok).map(|tok| token = tok.trim().into()));
                 if !token.is_empty() {
                     break;
