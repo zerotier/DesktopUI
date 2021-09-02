@@ -81,3 +81,35 @@ extern unsigned int c_windows_get_from_clipboard(char *buf, unsigned int len)
 	return 0;
 }
 #endif
+
+extern void c_lock_down_file(const char *path, int is_dir)
+{
+#ifdef __UNIX_LIKE__
+    chmod(path,is_dir ? 0700 : 0600);
+#else
+#ifdef __WINDOWS__
+    {
+		STARTUPINFOA startupInfo;
+		PROCESS_INFORMATION processInfo;
+
+		startupInfo.cb = sizeof(startupInfo);
+		memset(&startupInfo,0,sizeof(STARTUPINFOA));
+		memset(&processInfo,0,sizeof(PROCESS_INFORMATION));
+		if (CreateProcessA(NULL,(LPSTR)(std::string("C:\\Windows\\System32\\icacls.exe \"") + path + "\" /inheritance:d /Q").c_str(),NULL,NULL,FALSE,CREATE_NO_WINDOW,NULL,NULL,&startupInfo,&processInfo)) {
+			WaitForSingleObject(processInfo.hProcess,INFINITE);
+			CloseHandle(processInfo.hProcess);
+			CloseHandle(processInfo.hThread);
+		}
+
+		startupInfo.cb = sizeof(startupInfo);
+		memset(&startupInfo,0,sizeof(STARTUPINFOA));
+		memset(&processInfo,0,sizeof(PROCESS_INFORMATION));
+		if (CreateProcessA(NULL,(LPSTR)(std::string("C:\\Windows\\System32\\icacls.exe \"") + path + "\" /remove *S-1-5-32-545 /Q").c_str(),NULL,NULL,FALSE,CREATE_NO_WINDOW,NULL,NULL,&startupInfo,&processInfo)) {
+			WaitForSingleObject(processInfo.hProcess,INFINITE);
+			CloseHandle(processInfo.hProcess);
+			CloseHandle(processInfo.hThread);
+		}
+	}
+#endif
+#endif
+}

@@ -6,13 +6,14 @@
  * https://www.zerotier.com/
  */
 
-use std::time::{Duration, SystemTime};
-use std::collections::{LinkedList, HashMap};
 use std::cell::Cell;
+use std::collections::{HashMap, LinkedList};
+use std::ffi::CString;
 use std::io::Write;
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::path::Path;
+use std::time::{Duration, SystemTime};
 
 use serde_json::{Map, Value};
 
@@ -39,52 +40,97 @@ pub fn ms_since_epoch() -> i64 {
     SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map_or(0, |t| t.as_millis() as i64)
 }
 
-pub fn get_auth_token_and_port() -> Option<(String, u16)> {
+pub fn get_auth_token_and_port(spawn_elevated: bool) -> Option<(String, u16)> {
     let mut port = 0_u16;
     let mut token = String::new();
 
-    // On newer versions the auth token will have permissions set so local system 'admins' can read it.
-    // The port file also contains the current local TCP port for the service admin API.
-    for p in [crate::GLOBAL_SERVICE_HOME_V2, crate::GLOBAL_SERVICE_HOME_V1] {
-        let p = Path::new(p);
-        for port_path in [p.join("zerotier.port"), p.join("zerotier-one.port")] {
-            let _ = std::fs::read(port_path).map(|pp| String::from_utf8(pp).map(|pp| u16::from_str_radix(pp.trim(), 10).map(|pp| port = pp)));
-            if port != 0 {
-                break;
-            }
-        }
-        let _ = std::fs::read(p.join("authtoken.secret")).map(|tok| String::from_utf8(tok).map(|tok| token = tok.trim().into()));
-    }
+    #[cfg(windows)]
+    let home = std::env::var("USERPROFILE");
 
-    if port == 0 {
-        port = 9993;
-    }
+    #[cfg(not(windows))]
+    let home = std::env::var("HOME");
 
-    // Try to read legacy local locations of the auth token in case we're running an older ZT version.
-    if token.is_empty() {
-        #[cfg(windows)]
-        let home = std::env::var("USERPROFILE");
-
-        #[cfg(not(windows))]
-        let home = std::env::var("HOME");
-
-        let _ = home.map(|mut p| {
+    for attempt in 0..2 {
+        let _ = home.clone().map(|mut p| {
             #[cfg(target_os = "macos")]
-            p.push_str("/Library/Application Support/ZeroTier/One/authtoken.secret");
+                p.push_str("/Library/Application Support/ZeroTier/One/authtoken.secret");
 
             #[cfg(windows)]
-            p.push_str("\\AppData\\Local\\ZeroTier\\One\\authtoken.secret");
+                p.push_str("\\AppData\\Local\\ZeroTier\\One\\authtoken.secret");
 
             #[cfg(all(unix, not(target_os = "macos")))]
-            p.push_str("/.zeroTierOneAuthToken");
+                p.push_str("/.zeroTierOneAuthToken");
 
             let _ = std::fs::read(p).map(|tok| String::from_utf8(tok).map(|tok| token = tok.trim().into()));
         });
+
+        if token.is_empty() {
+            let _ = home.clone().map(|mut p| {
+                #[cfg(target_os = "macos")]
+                    p.push_str("/Library/Application Support/ZeroTier/authtoken.secret");
+
+                #[cfg(windows)]
+                    p.push_str("\\AppData\\Local\\ZeroTier\\authtoken.secret");
+
+                #[cfg(all(unix, not(target_os = "macos")))]
+                    p.push_str("/.zerotier-local-auth");
+
+                let _ = std::fs::read(p).map(|tok| String::from_utf8(tok).map(|tok| token = tok.trim().into()));
+            });
+        }
+
+        if token.is_empty() {
+            for p in [crate::GLOBAL_SERVICE_HOME_V2, crate::GLOBAL_SERVICE_HOME_V1] {
+                let p = Path::new(p);
+                for port_path in [p.join("zerotier.port"), p.join("zerotier-one.port")] {
+                    let _ = std::fs::read(port_path).map(|pp| String::from_utf8(pp).map(|pp| u16::from_str_radix(pp.trim(), 10).map(|pp| port = pp)));
+                    if port != 0 {
+                        break;
+                    }
+                }
+                let _ = std::fs::read(p.join("authtoken.secret")).map(|tok| String::from_utf8(tok).map(|tok| token = tok.trim().into()));
+                if !token.is_empty() {
+                    break;
+                }
+            }
+
+            if token.is_empty() {
+                if spawn_elevated && attempt == 0 {
+                    let _ = runas::Command::new(std::env::current_exe().unwrap()).arg("copy_authtoken").gui(true).status();
+                }
+            } else {
+                let _ = home.clone().map(|mut p| {
+                    #[cfg(target_os = "macos")]
+                    p.push_str("/Library/Application Support/ZeroTier/authtoken.secret");
+
+                    #[cfg(windows)]
+                    p.push_str("\\AppData\\Local\\ZeroTier\\authtoken.secret");
+
+                    #[cfg(all(unix, not(target_os = "macos")))]
+                    p.push_str("/.zerotier-local-auth");
+
+                    let ok = std::fs::write(&p, token.as_bytes());
+                    if ok.is_ok() {
+                        unsafe {
+                            let cstr = CString::new(p.as_str()).unwrap();
+                            crate::c_lock_down_file(cstr.as_ptr(), 0);
+                        }
+                    }
+                });
+            }
+        }
+
+        if !token.is_empty() {
+            break;
+        }
     }
 
     if token.is_empty() {
         None
     } else {
+        if port == 0 {
+            port = 9993;
+        }
         Some((token, port))
     }
 }
@@ -339,7 +385,7 @@ impl ServiceClient {
 
     /// Check auth token and port for running service and update if changed.
     pub fn sync_client_config(&mut self) {
-        get_auth_token_and_port().map(|token_port| {
+        get_auth_token_and_port(true).map(|token_port| {
             if self.auth_token != token_port.0 || self.port != token_port.1 {
                 self.auth_token = token_port.0.clone();
                 self.port = token_port.1;

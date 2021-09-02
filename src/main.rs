@@ -98,6 +98,10 @@ extern "C" {
     pub fn c_set_this_thread_to_foreground_priority();
 }
 
+extern "C" {
+    pub fn c_lock_down_file(path: *const c_char, is_dir: c_int);
+}
+
 #[cfg(target_os = "macos")]
 fn set_thread_to_background_priority() {
     unsafe { c_set_this_thread_to_background_priority(); }
@@ -1107,7 +1111,6 @@ fn main() {
                     println!("FATAL: window requires arguments: ui_mode [width hint] [height hint]");
                 }
             },
-
             "auth" => { // invoked to open a window to an SSO login endpoint
                 if args.len() >= 5 {
                     sso_auth_window_main(&args);
@@ -1115,13 +1118,9 @@ fn main() {
                     println!("FATAL: window requires arguments: ui_mode [width hint] [height hint] [url]");
                 }
             },
-
-            "copy" => { // invoked with elevated privileges to copy authtoken.secret on some platforms
-                if args.len() >= 4 {
-                    std::process::exit(std::fs::copy(&args[2], &args[3]).is_err() as i32);
-                }
-            },
-
+            "copy_authtoken" => { // invoked with elevated permissions to get the auth token and copy it locally
+                let _ = serviceclient::get_auth_token_and_port(false);
+            }
             _ => println!("FATAL: unrecognized mode: {}", args[1])
         }
     } else {
