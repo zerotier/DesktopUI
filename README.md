@@ -19,7 +19,7 @@ Building the full HTML/JS/CSS UI bundle is a bit cumbersome but is only required
 
  * Rust (and cargo) with targets `x86_64-apple-darwin` and `aarch64-apple-darwin` installed to enable universal binaries to be built.
  * Xcode with standard command line tools and SDKs.
- * If you want to modify the UI:
+ * We ship the JavaScript UI bundle pre-built. If you want to modify the JavaScript parts of the UI you need:
    * NodeJS (we use the Node package from Homebrew)
    * The [yarn](https://yarnpkg.com) package manager for NodeJS.
 
