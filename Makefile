@@ -40,6 +40,7 @@ mac: FORCE
 mac-assemble-app: FORCE
 	rm -rf ZeroTier.app
 	cp -av mac-app-template/ZeroTier.app .
+	mkdir -p ZeroTier.app/Contents/MacOS
 	cp -f target/release/zerotier_desktop_ui ZeroTier.app/Contents/MacOS/ZeroTier
 	cp -f ui/dist/index.html ZeroTier.app/Contents/Resources/ui.html
 	cp -f ui/dist/dark.css ZeroTier.app/Contents/Resources/dark.css
