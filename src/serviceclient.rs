@@ -104,6 +104,8 @@ pub fn get_auth_token_and_port(spawn_elevated: bool) -> Option<(String, u16)> {
                 }
             } else {
                 let _ = home.clone().map(|mut p| {
+                    // Save in both places for now for backward compatibility.
+
                     #[cfg(target_os = "macos")]
                     p.push_str("/Library/Application Support/ZeroTier/authtoken.secret");
 
@@ -113,8 +115,25 @@ pub fn get_auth_token_and_port(spawn_elevated: bool) -> Option<(String, u16)> {
                     #[cfg(all(unix, not(target_os = "macos")))]
                     p.push_str("/.zerotier-local-auth");
 
-                    let ok = std::fs::write(&p, token.as_bytes());
-                    if ok.is_ok() {
+                    if std::fs::write(&p, token.as_bytes()).is_ok() {
+                        unsafe {
+                            let cstr = CString::new(p.as_str()).unwrap();
+                            crate::c_lock_down_file(cstr.as_ptr(), 0);
+                        }
+                    }
+
+                    p.clear();
+
+                    #[cfg(target_os = "macos")]
+                    p.push_str("/Library/Application Support/ZeroTier/One/authtoken.secret");
+
+                    #[cfg(windows)]
+                    p.push_str("\\AppData\\Local\\ZeroTier\\One\\authtoken.secret");
+
+                    #[cfg(all(unix, not(target_os = "macos")))]
+                    p.push_str("/.zeroTierOneAuthToken");
+
+                    if std::fs::write(&p, token.as_bytes()).is_ok() {
                         unsafe {
                             let cstr = CString::new(p.as_str()).unwrap();
                             crate::c_lock_down_file(cstr.as_ptr(), 0);

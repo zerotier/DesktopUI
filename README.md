@@ -35,13 +35,11 @@ To rebuild the UI, change into `ui/` and type `yarn install` (this is needed onl
  * [Microsoft Visual Studio](https://visualstudio.microsoft.com/vs/) (we use 2019) with both 32-bit and 64-bit X86 targets and with appropriate desktop application SDKs.
  * [GCC/G++](https://nuwen.net/mingw.html) with support for both 64-bit and 32-bit builds (we use the linked distribution). Yes, we need both Visual Studio and GCC with GNU make.
  
-Building of the UI on Windows has never been done and those tool chains tend to be unfriendly to Windows. We recommend doing UI builds in Linux or MacOS. It should work in the Linux subsystem for Windows.
+To build native applications for Windows, just type `make`. This assumes that GNU make, GCC, and Cargo are in your path. The result will be two native EXEs in `target\x86_64-pc-windows-msvc\release` and `target\i686-pc-windows-msvc\release`. We plan to add native support for Windows on ARM64 soon, both for this UI application and for ZeroTier itself.
 
-To build native applications for Windows, just type `make`. This assumes that GNU make, GCC, and Cargo are in your path. The result will be two native EXEs in `target\x86_64-pc-windows-msvc\release` and `target\i686-pc-windows-msvc\release`.
+Building the web bundle part of the UI on Windows has never been done and those tool chains tend to be unfriendly to Windows. We recommend doing `yarn build` stuff in Linux or MacOS. It should work in the Linux subsystem for Windows. As mentioned above we ship this pre-built to make builds easy if you don't need to modify the JavaScript code.
 
-We plan to add support for Windows on ARM64 soon, both for this UI application and for ZeroTier itself.
-
-## Linux
+## Linux, FreeBSD, Other Open Source Desktops
 
 *Coming soon.*
 
@@ -49,10 +47,10 @@ We plan to add support for Windows on ARM64 soon, both for this UI application a
 
 The ZeroTier desktop UI uses forked and slightly modified versions of the following third party code:
 
- * [Tray](https://github.com/zserge/tray) by [Serge Zaitsev](https://github.com/zserge), forked to slightly modify behavior in regard to loop timeouts and Mac application settings. (Retains the MIT license.)
+ * [Tray](https://github.com/zserge/tray) by [Serge Zaitsev](https://github.com/zserge), forked to slightly modify behavior in regard to loop timeouts and Mac application settings. We also manually applied a pull request that fixes builds on ARM64 MacOS. (Retains the MIT license.)
  * [Rust web-view](https://github.com/Boscop/web-view) by multiple contributors, forked to modify Mac application behavior and add some custom functionality around copy/paste. (Retains the MIT license.)
 
-See [Cargo.toml](Cargo.toml) and [ui/package.json](ui/package.json) for other third party dependencies.
+Other third party dependencies are included in the normal way. See [Cargo.toml](Cargo.toml) and [ui/package.json](ui/package.json) for these.
 
 # License
 
