@@ -174,6 +174,7 @@ public:
 
         UpdateWindow(m_window);
         SetFocus(m_window);
+        SetTimer(NULL, 0, 1000, NULL);
     }
 
     void run()

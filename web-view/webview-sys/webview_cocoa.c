@@ -529,10 +529,14 @@ WEBVIEW_API int webview_init(webview_t w) {
 
 WEBVIEW_API int webview_loop(webview_t w, int blocking) {
   struct cocoa_webview* wv = (struct cocoa_webview*)w;
-  id until = (blocking ? ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSDate"),
-                                      sel_registerName("distantFuture"))
-                       : ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSDate"),
-                                      sel_registerName("distantPast")));
+  id until;
+  if (blocking) {
+      until = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSDate"), sel_registerName("now"));
+      until = ((id(*)(id, SEL, double))objc_msgSend)(until, sel_registerName("dateByAddingTimeInterval:"), 1.0);
+      until = ((id(*)(id, SEL))objc_msgSend)(until, sel_registerName("autorelease"));
+  } else {
+      until = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSDate"), sel_registerName("distantPast"));
+  }
   id app = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSApplication"),
                    sel_registerName("sharedApplication"));
   id event = ((id(*)(id, SEL, id, id, id, id))objc_msgSend)(

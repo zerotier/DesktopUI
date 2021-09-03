@@ -376,8 +376,7 @@ fn sso_auth_window_main(args: &Vec<String>) {
         .build()
         .unwrap();
     loop {
-        let r = wv.step();
-        if r.is_none() {
+        if wv.step().is_none() {
             break;
         }
         if raise_window.swap(false, std::sync::atomic::Ordering::Relaxed) {
