@@ -26,4 +26,6 @@ runas = "^0"
 plist = "^1"
 
 [target.'cfg(windows)'.dependencies]
+winrt = "^0"
+winapi = { version = "^0", features = ["wincon", "winuser"] }
 winreg = "^0"

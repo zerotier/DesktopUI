@@ -6,6 +6,8 @@
  * https://www.zerotier.com/
  */
 
+#![windows_subsystem = "windows"]
+
 use std::cmp::Ordering;
 #[allow(unused)]
 use std::collections::{HashMap, LinkedList};
@@ -362,7 +364,7 @@ fn open_sso_auth_window_subprocess(w: &mut Option<Child>, width: i32, height: i3
 /// Main function for SSO authentication webview popup windows.
 fn sso_auth_window_main(args: &Vec<String>) {
     let raise_window = create_raise_window_listener_thread();
-    let title = format!("{} Network Login", args[4].as_str());
+    let title = format!("Remote Network Login: {}", args[4].as_str());
     let mut wv = web_view::builder()
         .title(title.as_str())
         .content(web_view::Content::Url(args[5].as_str()))
@@ -379,7 +381,7 @@ fn sso_auth_window_main(args: &Vec<String>) {
         if wv.step().is_none() {
             break;
         }
-        if raise_window.swap(false, std::sync::atomic::Ordering::Relaxed) {
+        if raise_window.load(std::sync::atomic::Ordering::Relaxed) {
             wv.set_visible(true);
         }
     }
@@ -1004,6 +1006,14 @@ fn tray_main() {
 }
 
 fn main() {
+    /*
+    #[cfg(windows)] {
+        unsafe {
+            winapi::um::wincon::FreeConsole();
+        }
+    }
+    */
+
     #[cfg(target_os = "macos")] {
         let p = std::env::current_exe().unwrap();
         for pp in p.ancestors() {

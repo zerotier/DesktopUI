@@ -1651,7 +1651,9 @@ dependencies = [
  "single-instance",
  "ureq",
  "web-view",
+ "winapi",
  "winreg",
+ "winrt",
 ]
 
 [[package]]
