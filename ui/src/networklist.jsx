@@ -117,21 +117,20 @@ export default class NetworkList extends React.Component {
 
         let content = null;
         if (this.state.initialized) {
-            if ((Array.isArray(networks))&&(networks.length > 0)) {
-                let merged = [];
+            let merged = [];
+            let joined = {};
+            for(let i=0;i<networks.length;++i) {
+                merged.push(networks[i]);
+                joined[networks[i].id] = true;
+            }
+            let savedIds = Object.keys(savedNetworks);
+            for(let i=0;i<savedIds.length;++i) {
+                let o = savedNetworks[savedIds[i]];
+                if ((o.id)&&(!joined[o.id]))
+                    merged.push(o);
+            }
 
-                let joined = {};
-                for(let i=0;i<networks.length;++i) {
-                    merged.push(networks[i]);
-                    joined[networks[i].id] = true;
-                }
-                let savedIds = Object.keys(savedNetworks);
-                for(let i=0;i<savedIds.length;++i) {
-                    let o = savedNetworks[savedIds[i]];
-                    if ((o.id)&&(!joined[o.id]))
-                        merged.push(o);
-                }
-
+            if ((Array.isArray(merged))&&(merged.length > 0)) {
                 content = (
                     <EuiBasicTable
                         items={merged}
