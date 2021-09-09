@@ -6,6 +6,7 @@
  * https://www.zerotier.com/
  */
 
+// Without this Windows will pop up a cmd.exe window when this is launched.
 #![windows_subsystem = "windows"]
 
 use std::cmp::Ordering;
@@ -1006,14 +1007,6 @@ fn tray_main() {
 }
 
 fn main() {
-    /*
-    #[cfg(windows)] {
-        unsafe {
-            winapi::um::wincon::FreeConsole();
-        }
-    }
-    */
-
     #[cfg(target_os = "macos")] {
         let p = std::env::current_exe().unwrap();
         for pp in p.ancestors() {
@@ -1060,7 +1053,7 @@ fn main() {
         NETWORK_CACHE_PATH = String::from(Path::new(&APPLICATION_HOME).join("saved_networks.json").to_str().unwrap());
     }
 
-    // These blocks handle trying to import old saved network data from old versions of the ZeroTier UI app.
+    // Import old network list info from old Mac UI.
     #[cfg(target_os = "macos")] {
         if !Path::new(unsafe { NETWORK_CACHE_PATH.as_str() }).is_file() {
             let mut nwid: Option<u64> = None;
@@ -1087,6 +1080,8 @@ fn main() {
             let _ = std::fs::write(unsafe { NETWORK_CACHE_PATH.as_str() }, serde_json::to_vec(&networks_json).unwrap());
         }
     }
+
+    // Import old network list info from old Windows UI
     #[cfg(windows)] {
         if !Path::new(unsafe { NETWORK_CACHE_PATH.as_str() }).is_file() {
             let _ = std::env::var("USERPROFILE").map(|uprof| std::fs::read(format!("{}\\AppData\\Local\\ZeroTier\\One\\networks.dat", uprof)).map(|windows_networks_bin| {
