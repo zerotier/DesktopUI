@@ -7,7 +7,7 @@
  */
 
 import React from 'react';
-import { EuiPanel, EuiText, EuiHorizontalRule } from '@elastic/eui';
+import { EuiPanel, EuiText } from '@elastic/eui';
 
 export default class About extends React.Component {
     constructor(props) {
@@ -18,12 +18,15 @@ export default class About extends React.Component {
     render() {
         return (
             <EuiPanel borderRadius="none" hasShadow={false} hasBorder={false} paddingSize="m" color="subdued">
-                <EuiText>
+                <EuiText size="m">
                     <h2>ZeroTier Network Virtualization Service</h2>
-                    GUI Control Application<br/>
-                    (c) ZeroTier, Inc.
+                    Desktop GUI Control Application<br/>
+                    <br/>
+                    (c) ZeroTier, Inc.<br/>
+                    Released under the Mozilla Public License (MPL) v2<br/>
+                    <br/>
+                    Source code available at: https://github.com/zerotier/DesktopUI<br/>
                 </EuiText>
-                <EuiHorizontalRule/>
             </EuiPanel>
         );
     }
