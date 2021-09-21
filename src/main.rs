@@ -23,11 +23,19 @@ use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::*;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, SystemTime, Instant};
 
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+/*
+use wry::application::event_loop::{EventLoop, ControlFlow};
+use wry::application::event::Event;
+use wry::application::window::WindowBuilder;
+use wry::application::dpi::LogicalSize;
+use wry::webview::WebViewBuilder;
+*/
 
 use crate::serviceclient::*;
 use crate::tray::*;
@@ -366,6 +374,48 @@ fn open_sso_auth_window_subprocess(w: &mut Option<Child>, width: i32, height: i3
 fn sso_auth_window_main(args: &Vec<String>) {
     let raise_window = create_raise_window_listener_thread();
     let title = format!("Remote Network Login: {}", args[4].as_str());
+
+    /*
+    let event_loop = EventLoop::new();
+    let window = WindowBuilder::new()
+        .with_title(title)
+        .with_inner_size(LogicalSize::new(i32::from_str_radix(args[2].as_str(), 10).unwrap_or(1024), i32::from_str_radix(args[3].as_str(), 10).unwrap_or(768)))
+        .with_resizable(true)
+        .with_visible(true)
+        .build(&event_loop);
+    if window.is_err() {
+        return;
+    }
+    let window = window.unwrap();
+
+    let webview = WebViewBuilder::new(window);
+    if webview.is_err() {
+        return;
+    }
+    let webview = webview.unwrap();
+    let webview = webview.with_url(args[5].as_str());
+    if webview.is_err() {
+        return;
+    }
+    let webview = webview.unwrap().build();
+    if webview.is_err() {
+        return;
+    }
+    let webview = webview.unwrap();
+
+    event_loop.run(move |event, _, control_flow| {
+        *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_secs(1));
+        match event {
+            Event::WindowEvent {event: wry::application::event::WindowEvent::CloseRequested, ..} => *control_flow = ControlFlow::Exit,
+            _ => {}
+        }
+        if raise_window.load(std::sync::atomic::Ordering::Relaxed) {
+            webview.window().set_visible(true);
+            webview.window().set_focus();
+        }
+    });
+    */
+
     let mut wv = web_view::builder()
         .title(title.as_str())
         .content(web_view::Content::Url(args[5].as_str()))
@@ -424,6 +474,7 @@ fn control_panel_window_main(args: &Vec<String>) {
      * data to be posted at the next refresh.
      */
 
+    /*
     let (client, dirty_flag) = start_client(vec!["status", "network", "peer"], 100, 5);
 
     let raise_window = create_raise_window_listener_thread();
@@ -497,6 +548,7 @@ fn control_panel_window_main(args: &Vec<String>) {
         })
         .run()
         .unwrap();
+    */
 }
 
 #[cfg(windows)]
