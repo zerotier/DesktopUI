@@ -114,7 +114,7 @@ export default class Network extends React.Component {
                     <div className="eui-textRight">
                         <EuiButton color="danger" size="s" onClick={() => {
                             if (typeof config.id === 'string' && config.id.length === 16) {
-                                ztRememberNetwork(config.id, config.name||'');
+                                ztRememberNetwork(config.id, config.name||'', config);
                                 ztDelete('network/' + config.id);
                             }
                         }}>Disconnect</EuiButton>

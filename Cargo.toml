@@ -11,7 +11,6 @@ codegen-units = 1
 panic = 'abort'
 
 [dependencies]
-web-view = { path = "web-view", features = ["edge"] }
 serde = { version = "^1", features = ["derive"] }
 serde_json = "^1"
 ureq = { version = "^2", features = [] }
@@ -21,6 +20,7 @@ parking_lot = "^0"
 notify-rust = "^4"
 crc64 = "^1"
 runas = "^0"
+wry = "^0"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 plist = "^1"

@@ -17,16 +17,13 @@ window.oncontextmenu = function() { return false; }
 
 window.addEventListener("keypress", (event) => {
     if ((event.metaKey||event.altKey) && ((event.key === 'q')||(event.key === 'x'))) {
-        external.invoke('{"cmd": "quit"}');
+        window.rpc.notify('quit');
         event.preventDefault();
     }
 });
 
 window.extLog = (data) => {
-    external.invoke(JSON.stringify({
-        cmd: "log",
-        data: JSON.stringify(data)
-    }));
+    window.rpc.notify('log', data);
 };
 
 window.onerror = function(message, source, lineno, colno, error) {
@@ -34,62 +31,37 @@ window.onerror = function(message, source, lineno, colno, error) {
 };
 
 window.copyToClipboard = (str, msg) => {
-    external.invoke(JSON.stringify({
-        cmd: "copy_to_clipboard",
-        data: str,
-        data2: msg||''
-    }));
+    window.rpc.notify('copy_to_clipboard', [str||'', msg||''])
 };
 
-window.zt_paste_callback_function = null;
-window.zt_paste_from_clipboard_callback = (data) => {
-    if (typeof window.zt_paste_callback_function === 'function') {
+window.pasteFromClipboard = (callback) => {
+    window.rpc.call('paste_from_clipboard').then((data) => {
         if (Array.isArray(data)) {
             let s = "";
             for (let i=0;i<data.length;++i) {
                 s += String.fromCharCode(data[i]);
             }
-            window.zt_paste_callback_function(s);
+            callback(s);
         } else {
-            window.zt_paste_callback_function('');
+            callback('');
         }
-    }
-    window.zt_paste_callback_function = null;
-};
-window.pasteFromClipboard = (callback) => {
-    window.zt_paste_callback_function = callback;
-    external.invoke('{"cmd": "paste_from_clipboard"}');
+    });
 };
 
 window.ztPost = (path, data) => {
-    external.invoke(JSON.stringify({
-        cmd: "post",
-        name: path,
-        data: JSON.stringify(data)
-    }));
+    window.rpc.notify('post', [path, JSON.stringify(data)]);
 };
 
 window.ztDelete = (path) => {
-    external.invoke(JSON.stringify({
-        cmd: "delete",
-        name: path
-    }));
+    window.rpc.notify('delete', path);
 };
 
 window.ztRememberNetwork = (networkId, networkName, networkSettings) => {
-    external.invoke(JSON.stringify({
-        cmd: "remember_network",
-        name: networkId,
-        data: networkName,
-        data2: networkSettings
-    }));
+    window.rpc.notify('remember_network', [networkId, networkName, JSON.stringify(networkSettings||{})]);
 };
 
 window.ztForgetNetwork = (networkId) => {
-    external.invoke(JSON.stringify({
-        cmd: "forget_network",
-        name: networkId
-    }));
+    window.rpc.notify('forget_network', networkId);
 };
 
 // NOTE: window.zt_ui_update is set by primary React controls like Main. It's
@@ -97,15 +69,19 @@ window.ztForgetNetwork = (networkId) => {
 // for modes that don't need these updates.
 window.zt_ui_update = (update) => {};
 
-// Called from Rust code in response to 'ready' command indicating that UI should render.
-window.zt_ui_render = (ui_mode, frameless) => {
+window.zt_ui_render = (ui_mode) => {
     if (ui_mode === "Main") {
         ReactDOM.render((<div style={{width: '100%', height: '100%'}}><Main/></div>), document.getElementById("_app_root"));
+        setInterval(function() {
+            window.rpc.call('poll').then((result) => {
+                window.zt_ui_update(JSON.parse(result));
+            });
+        }, 200);
     } else if (ui_mode === "About") {
         ReactDOM.render((<div style={{width: '100%', height: '100%'}}><About/></div>), document.getElementById("_app_root"));
     }
-    setInterval(function() { external.invoke('{ "cmd": "poll" }'); }, 200);
-    setTimeout(function() { external.invoke('{ "cmd": "raise" }'); }, 1200);
 };
 
-setTimeout(function() { external.invoke('{ "cmd": "ready" }'); }, 5);
+setTimeout(function() {
+    window.rpc.call('ready').then((ui_mode) => { window.zt_ui_render(ui_mode); });
+}, 5);

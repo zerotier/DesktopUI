@@ -26,17 +26,24 @@ use std::sync::atomic::*;
 use std::time::{Duration, SystemTime, Instant};
 
 use parking_lot::Mutex;
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-/*
+#[allow(unused_imports)]
 use wry::application::event_loop::{EventLoop, ControlFlow};
+#[allow(unused_imports)]
 use wry::application::event::Event;
+#[allow(unused_imports)]
 use wry::application::window::WindowBuilder;
+#[allow(unused_imports)]
 use wry::application::dpi::LogicalSize;
-use wry::webview::WebViewBuilder;
-*/
-
+#[allow(unused_imports)]
+use wry::webview::{WebViewBuilder, RpcRequest, RpcResponse};
+#[allow(unused_imports)]
+use wry::application::menu::{MenuBar, MenuItem};
+#[allow(unused_imports)]
+use wry::application::platform::macos::{EventLoopExtMacOS, ActivationPolicy};
+#[allow(unused_imports)]
+use wry::application::window::Window;
 use crate::serviceclient::*;
 use crate::tray::*;
 
@@ -49,8 +56,6 @@ const CSS_PLACEHOLDER: &'static str = ".XXXthis_is_replaced_by_css_in_the_rust_c
 
 const MAIN_WINDOW_WIDTH: i32 = 1350;
 const MAIN_WINDOW_HEIGHT: i32 = 600;
-
-const WEBVIEW_WINDOW_FRAMELESS: bool = false;
 
 pub(crate) static mut APPLICATION_PATH: String = String::new();
 pub(crate) static mut APPLICATION_HOME: String = String::new();
@@ -80,18 +85,6 @@ pub(crate) const GLOBAL_SERVICE_HOME_V1: &'static str = "/var/db/zerotier-one";
 
 #[cfg(target_os = "linux")]
 pub(crate) const GLOBAL_SERVICE_HOME_V1: &'static str = "/var/lib/zerotier-one";
-
-#[derive(Serialize, Deserialize)]
-pub struct CommandFromWebView {
-    #[serde(default)]
-    pub cmd: String,
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub data: String,
-    #[serde(default)]
-    pub data2: String,
-}
 
 /*******************************************************************************************************************/
 /* OS-specific functions and C externs */
@@ -373,12 +366,13 @@ fn open_sso_auth_window_subprocess(w: &mut Option<Child>, width: i32, height: i3
 /// Main function for SSO authentication webview popup windows.
 fn sso_auth_window_main(args: &Vec<String>) {
     let raise_window = create_raise_window_listener_thread();
-    let title = format!("Remote Network Login: {}", args[4].as_str());
 
-    /*
-    let event_loop = EventLoop::new();
+    let mut event_loop = EventLoop::new();
+    #[cfg(target_os = "macos")] {
+        event_loop.set_activation_policy(ActivationPolicy::Accessory);
+    }
     let window = WindowBuilder::new()
-        .with_title(title)
+        .with_title(format!("Remote Network Login: {}", args[4].as_str()))
         .with_inner_size(LogicalSize::new(i32::from_str_radix(args[2].as_str(), 10).unwrap_or(1024), i32::from_str_radix(args[3].as_str(), 10).unwrap_or(768)))
         .with_resizable(true)
         .with_visible(true)
@@ -414,28 +408,6 @@ fn sso_auth_window_main(args: &Vec<String>) {
             webview.window().set_focus();
         }
     });
-    */
-
-    let mut wv = web_view::builder()
-        .title(title.as_str())
-        .content(web_view::Content::Url(args[5].as_str()))
-        .size(i32::from_str_radix(args[2].as_str(), 10).unwrap_or(1024), i32::from_str_radix(args[3].as_str(), 10).unwrap_or(768))
-        .visible(false)
-        .frameless(false)
-        .hide_instead_of_close(false)
-        .debug(false)
-        .user_data(())
-        .invoke_handler(move |_, _| Ok(()))
-        .build()
-        .unwrap();
-    loop {
-        if wv.step().is_none() {
-            break;
-        }
-        if raise_window.load(std::sync::atomic::Ordering::Relaxed) {
-            wv.set_visible(true);
-        }
-    }
 }
 
 /// Opens a UI window subprocess, which in turn runs control_panel_window_main().
@@ -474,81 +446,100 @@ fn control_panel_window_main(args: &Vec<String>) {
      * data to be posted at the next refresh.
      */
 
-    /*
-    let (client, dirty_flag) = start_client(vec!["status", "network", "peer"], 100, 5);
-
-    let raise_window = create_raise_window_listener_thread();
-
     set_thread_to_foreground_priority();
 
+    let (client, dirty_flag) = start_client(vec!["status", "network", "peer"], 100, 5);
+    let raise_window = create_raise_window_listener_thread();
+
+    let mut event_loop = EventLoop::new();
+    #[cfg(target_os = "macos")] {
+        event_loop.set_activation_policy(ActivationPolicy::Accessory);
+    }
+    let window = WindowBuilder::new()
+        .with_title("ZeroTier Control Panel")
+        .with_inner_size(LogicalSize::new(i32::from_str_radix(args[3].as_str(), 10).unwrap_or(1024), i32::from_str_radix(args[4].as_str(), 10).unwrap_or(768)))
+        .with_resizable(true)
+        .with_visible(true)
+        .build(&event_loop);
+    if window.is_err() {
+        return;
+    }
+    let window = window.unwrap();
+
+    let ui_mode = args[2].clone();
     let ui_client = client.clone();
-    let _ = ui_client.lock().sync();
-    let _ = web_view::builder()
-        .title("ZeroTier")
-        .content(web_view::Content::Html(get_web_ui_blob(is_dark_mode())))
-        .size(
-            if args.len() >= 5 { i32::from_str_radix(args[3].as_str(), 10).unwrap_or(800) } else { 800 },
-            if args.len() >= 5 { i32::from_str_radix(args[4].as_str(), 10).unwrap_or(600) } else { 600 })
-        .resizable(true)
-        .visible(false)
-        .frameless(WEBVIEW_WINDOW_FRAMELESS)
-        .debug(false)
-        .user_data(())
-        .invoke_handler(move |wv, arg| {
-            if raise_window.swap(false, std::sync::atomic::Ordering::Relaxed) {
-                wv.set_visible(true);
-            }
 
-            let _ = serde_json::from_str::<CommandFromWebView>(arg).map(|cmd| {
-                match cmd.cmd.as_str() {
-                    "ready" => {
-                        wv.set_visible(true);
-                        let _ = wv.eval(format!("zt_ui_render('{}', {});", args[2], WEBVIEW_WINDOW_FRAMELESS).as_str());
-                    },
-                    "post" => {
-                        let _ = ui_client.lock().enqueue_post(cmd.name, cmd.data);
-                    },
-                    "delete" => {
-                        let _ = ui_client.lock().enqueue_delete(cmd.name);
-                    },
-                    "remember_network" => {
-                        let _ = ui_client.lock().remember_network(cmd.name, cmd.data, cmd.data2);
-                    },
-                    "forget_network" => {
-                        let _ = ui_client.lock().forget_network(&cmd.name);
-                    },
-                    "copy_to_clipboard" => {
-                        copy_to_clipboard(cmd.data.as_str());
-                    },
-                    "paste_from_clipboard" => {
-                        let data = read_from_clipboard();
-                        let data: Vec<u16> = data.encode_utf16().collect();
-                        let data = format!("zt_paste_from_clipboard_callback({});", serde_json::to_string(data.as_slice()).unwrap());
-                        let _ = wv.eval(data.as_str());
-                    },
-                    "raise" => {
-                        wv.set_visible(true);
-                    },
-                    "poll" => {
-                        if dirty_flag.swap(false, std::sync::atomic::Ordering::Relaxed) {
-                            let _ = wv.eval(format!("zt_ui_update({});", ui_client.lock().get_all_json()).as_str());
+    let webview = WebViewBuilder::new(window);
+    if webview.is_err() {
+        return;
+    }
+    let webview = webview.unwrap();
+    let webview = webview.with_html(get_web_ui_blob(is_dark_mode())).unwrap().with_rpc_handler(move |window: &Window, req: RpcRequest| -> Option<RpcResponse> {
+        println!("method: {}", req.method.as_str());
+        match req.method.as_str() {
+            "ready" => {
+                Some(RpcResponse::new_result(req.id.clone(), Some(Value::from(ui_mode.as_str()))))
+            },
+            "log" => {
+                let _ = req.params.map(|p| {
+                    let _ = p.as_array().map(|p| {
+                        for s in p.iter() {
+                            println!("> {}", s.to_string())
                         }
-                    },
-                    "log" => {
-                        println!("> {}", cmd.data);
-                    },
-                    "quit" => {
-                        wv.exit();
-                    },
-                    _ => {},
+                    });
+                });
+                None
+            }
+            "post" => {
+                //let _ = ui_client.lock().enqueue_post(cmd.name, cmd.data);
+                None
+            },
+            "delete" => {
+                //let _ = ui_client.lock().enqueue_delete(cmd.name);
+                None
+            },
+            "remember_network" => {
+                //let _ = ui_client.lock().remember_network(cmd.name, cmd.data, cmd.data2);
+                None
+            },
+            "forget_network" => {
+                //let _ = ui_client.lock().forget_network(&cmd.name);
+                None
+            },
+            "copy_to_clipboard" => {
+                //copy_to_clipboard();
+                None
+            },
+            "paste_from_clipboard" => {
+                Some(RpcResponse::new_result(req.id.clone(), Some(Value::from(read_from_clipboard()))))
+            },
+            "raise" => {
+                window.set_visible(true);
+                window.set_focus();
+                None
+            },
+            "poll" => {
+                if dirty_flag.swap(false, std::sync::atomic::Ordering::Relaxed) {
+                    Some(RpcResponse::new_result(req.id.clone(), Some(Value::from(ui_client.lock().get_all_json()))))
+                } else {
+                    Some(RpcResponse::new_result(req.id.clone(), Some(Value::Null)))
                 }
-            });
+            },
+            _ => None
+        }
+    }).build().unwrap();
 
-            Ok(())
-        })
-        .run()
-        .unwrap();
-    */
+    event_loop.run(move |event, _, control_flow| {
+        *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_secs(1));
+        match event {
+            Event::WindowEvent {event: wry::application::event::WindowEvent::CloseRequested, ..} => *control_flow = ControlFlow::Exit,
+            _ => {}
+        }
+        if raise_window.load(std::sync::atomic::Ordering::Relaxed) {
+            webview.window().set_visible(true);
+            webview.window().set_focus();
+        }
+    });
 }
 
 #[cfg(windows)]

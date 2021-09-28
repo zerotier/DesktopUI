@@ -55,11 +55,10 @@ ifeq ($(OS),Windows_NT)
 clean: FORCE
 	-make -C tray clean
 	-rmdir /Q /S target
-	-rmdir /Q /S web-view\target
 else
 clean: FORCE
 	rm -f tray/*.o tray/*.a tray/example tray/example.exe
-	rm -rf ZeroTier.app target web-view/target
+	rm -rf ZeroTier.app target
 endif
 
 FORCE:
