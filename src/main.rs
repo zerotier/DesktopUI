@@ -7,7 +7,7 @@
  */
 
 // Without this Windows will pop up a cmd.exe window when this is launched.
-#![windows_subsystem = "windows"]
+//#![windows_subsystem = "windows"]
 
 use std::cmp::Ordering;
 #[allow(unused)]
@@ -41,9 +41,11 @@ use wry::webview::{WebViewBuilder, RpcRequest, RpcResponse};
 #[allow(unused_imports)]
 use wry::application::menu::{MenuBar, MenuItem};
 #[allow(unused_imports)]
+#[cfg(target_os = "macos")]
 use wry::application::platform::macos::{EventLoopExtMacOS, ActivationPolicy};
 #[allow(unused_imports)]
 use wry::application::window::Window;
+
 use crate::serviceclient::*;
 use crate::tray::*;
 
@@ -364,6 +366,7 @@ fn open_sso_auth_window_subprocess(w: &mut Option<Child>, width: i32, height: i3
 }
 
 /// Main function for SSO authentication webview popup windows.
+#[allow(unused_mut)]
 fn sso_auth_window_main(args: &Vec<String>) {
     let raise_window = create_raise_window_listener_thread();
 
@@ -425,6 +428,7 @@ fn open_ui_window_subprocess(w: &mut Option<Child>, ui_mode: &str, width: i32, h
 }
 
 /// Main function for control panel webview windows.
+#[allow(unused_mut)]
 fn control_panel_window_main(args: &Vec<String>) {
     /*
      * Web UI subprocess
@@ -460,92 +464,88 @@ fn control_panel_window_main(args: &Vec<String>) {
         .with_inner_size(LogicalSize::new(i32::from_str_radix(args[3].as_str(), 10).unwrap_or(1024), i32::from_str_radix(args[4].as_str(), 10).unwrap_or(768)))
         .with_resizable(true)
         .with_visible(true)
-        .build(&event_loop);
-    if window.is_err() {
-        return;
-    }
-    let window = window.unwrap();
+        .build(&event_loop)
+        .unwrap();
 
     let ui_mode = args[2].clone();
     let ui_client = client.clone();
 
-    let webview = WebViewBuilder::new(window);
-    if webview.is_err() {
-        return;
-    }
-    let webview = webview.unwrap();
-    let webview = webview.with_html(get_web_ui_blob(is_dark_mode())).unwrap().with_rpc_handler(move |window: &Window, req: RpcRequest| -> Option<RpcResponse> {
-        let arg = req.params.map_or(Value::Null, |p| p.as_array().map_or(Value::Null, |p| {
-            if p.is_empty() {
-                Value::Null
-            } else {
-                p.first().unwrap().clone()
-            }
-        }));
-        match req.method.as_str() {
-            "ready" => {
-                Some(RpcResponse::new_result(req.id.clone(), Some(Value::from(ui_mode.as_str()))))
-            },
-            "log" => {
-                println!("> {}", arg.to_string());
-                None
-            }
-            "post" => {
-                let _ = arg.as_array().map(|p| {
-                    if p.len() == 2 {
-                        let path = p.get(0).map_or("", |s| s.as_str().unwrap_or(""));
-                        let data = p.get(1).map_or("", |s| s.as_str().unwrap_or(""));
-                        if !path.is_empty() && !data.is_empty() {
-                            ui_client.lock().enqueue_post(path.to_string(), data.to_string());
-                        }
-                    }
-                });
-                None
-            },
-            "delete" => {
-                arg.as_str().map(|path| ui_client.lock().enqueue_delete(path.to_string()));
-                None
-            },
-            "remember_network" => {
-                let _ = arg.as_array().map(|p| {
-                    if p.len() == 3 {
-                        let nwid = p.get(0).map_or("", |s| s.as_str().unwrap_or(""));
-                        let name = p.get(1).map_or("", |s| s.as_str().unwrap_or(""));
-                        let settings = p.get(2).map_or("", |s| s.as_str().unwrap_or(""));
-                        ui_client.lock().remember_network(nwid.to_string(), name.to_string(), settings.to_string());
-                    }
-                });
-                None
-            },
-            "forget_network" => {
-                arg.as_str().map(|path| ui_client.lock().forget_network(&path.to_string()));
-                None
-            },
-            "copy_to_clipboard" => {
-                arg.as_str().map(|path| copy_to_clipboard(path));
-                None
-            },
-            "paste_from_clipboard" => {
-                Some(RpcResponse::new_result(req.id.clone(), Some(Value::from(read_from_clipboard()))))
-            },
-            "raise" => {
-                window.set_visible(true);
-                window.set_focus();
-                None
-            },
-            "poll" => {
-                if dirty_flag.swap(false, std::sync::atomic::Ordering::Relaxed) {
-                    Some(RpcResponse::new_result(req.id.clone(), Some(Value::from(ui_client.lock().get_all_json()))))
+    let webview = WebViewBuilder::new(window).unwrap()
+        .with_html(get_web_ui_blob(is_dark_mode())).unwrap()
+        .with_rpc_handler(move |window: &Window, req: RpcRequest| -> Option<RpcResponse> {
+            let arg = req.params.map_or(Value::Null, |p| p.as_array().map_or(Value::Null, |p| {
+                if p.is_empty() {
+                    Value::Null
                 } else {
-                    Some(RpcResponse::new_result(req.id.clone(), Some(Value::Null)))
+                    p.first().unwrap().clone()
                 }
-            },
-            "quit" => {
-                std::process::exit(0);
+            }));
+            match req.method.as_str() {
+                "ready" => {
+                    Some(RpcResponse::new_result(req.id.clone(), Some(Value::from(ui_mode.as_str()))))
+                },
+                "log" => {
+                    println!("> {}", arg.to_string());
+                    None
+                }
+                "post" => {
+                    let _ = arg.as_array().map(|p| {
+                        if p.len() == 2 {
+                            let path = p.get(0).map_or("", |s| s.as_str().unwrap_or(""));
+                            let data = p.get(1).map_or("", |s| s.as_str().unwrap_or(""));
+                            if !path.is_empty() && !data.is_empty() {
+                                ui_client.lock().enqueue_post(path.to_string(), data.to_string());
+                            }
+                        }
+                    });
+                    None
+                },
+                "delete" => {
+                    arg.as_str().map(|path| ui_client.lock().enqueue_delete(path.to_string()));
+                    None
+                },
+                "remember_network" => {
+                    let _ = arg.as_array().map(|p| {
+                        if p.len() == 3 {
+                            let nwid = p.get(0).map_or("", |s| s.as_str().unwrap_or(""));
+                            let name = p.get(1).map_or("", |s| s.as_str().unwrap_or(""));
+                            let settings = p.get(2).map_or("", |s| s.as_str().unwrap_or(""));
+                            ui_client.lock().remember_network(nwid.to_string(), name.to_string(), settings.to_string());
+                        }
+                    });
+                    None
+                },
+                "forget_network" => {
+                    arg.as_str().map(|path| ui_client.lock().forget_network(&path.to_string()));
+                    None
+                },
+                "copy_to_clipboard" => {
+                    arg.as_str().map(|path| copy_to_clipboard(path));
+                    None
+                },
+                "paste_from_clipboard" => {
+                    Some(RpcResponse::new_result(req.id.clone(), Some(Value::from(read_from_clipboard()))))
+                },
+                "raise" => {
+                    window.set_visible(true);
+                    window.set_focus();
+                    None
+                },
+                "poll" => {
+                    if dirty_flag.swap(false, std::sync::atomic::Ordering::Relaxed) {
+                        Some(RpcResponse::new_result(req.id.clone(), Some(Value::from(ui_client.lock().get_all_json()))))
+                    } else {
+                        Some(RpcResponse::new_result(req.id.clone(), Some(Value::Null)))
+                    }
+                },
+                "quit" => {
+                    std::process::exit(0);
+                }
+                _ => None
             }
-            _ => None
-        }
-    }).build().unwrap();
+        })
+        .build()
+        .unwrap();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_secs(1));
@@ -582,11 +582,13 @@ fn tray_main() {
      * this binary in webview mode.
      */
 
-    let single = single_instance::SingleInstance::new(std::env::temp_dir().join("ZeroTierUI_InstanceLock").to_str().unwrap()).unwrap();
-    if !single.is_single() {
+    /*
+    let single = single_instance::SingleInstance::new(std::env::temp_dir().join("ZeroTierUI_InstanceLock").to_str().unwrap());
+    if single.is_err() || !single.unwrap().is_single() {
         println!("FATAL: another instance of the ZeroTier UI is already running.");
         std::process::exit(1);
     }
+    */
 
     // On Apple Silicon Macs this tells the OS to use efficiency cores for the tray app. Perceptible performance is still great.
     // Don't do it on Intel Macs because it seems to make stuff really slow with little power use benefit. For the genuine background
