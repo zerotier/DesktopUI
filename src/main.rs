@@ -375,7 +375,7 @@ fn sso_auth_window_main(args: &Vec<String>) {
         .with_title(format!("Remote Network Login: {}", args[4].as_str()))
         .with_inner_size(LogicalSize::new(i32::from_str_radix(args[2].as_str(), 10).unwrap_or(1024), i32::from_str_radix(args[3].as_str(), 10).unwrap_or(768)))
         .with_resizable(true)
-        .with_visible(true)
+        .with_visible(false)
         .build(&event_loop);
     if window.is_err() {
         return;
