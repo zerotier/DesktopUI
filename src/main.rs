@@ -475,39 +475,54 @@ fn control_panel_window_main(args: &Vec<String>) {
     }
     let webview = webview.unwrap();
     let webview = webview.with_html(get_web_ui_blob(is_dark_mode())).unwrap().with_rpc_handler(move |window: &Window, req: RpcRequest| -> Option<RpcResponse> {
-        println!("method: {}", req.method.as_str());
+        let arg = req.params.map_or(Value::Null, |p| p.as_array().map_or(Value::Null, |p| {
+            if p.is_empty() {
+                Value::Null
+            } else {
+                p.first().unwrap().clone()
+            }
+        }));
         match req.method.as_str() {
             "ready" => {
                 Some(RpcResponse::new_result(req.id.clone(), Some(Value::from(ui_mode.as_str()))))
             },
             "log" => {
-                let _ = req.params.map(|p| {
-                    let _ = p.as_array().map(|p| {
-                        for s in p.iter() {
-                            println!("> {}", s.to_string())
-                        }
-                    });
-                });
+                println!("> {}", arg.to_string());
                 None
             }
             "post" => {
-                //let _ = ui_client.lock().enqueue_post(cmd.name, cmd.data);
+                let _ = arg.as_array().map(|p| {
+                    if p.len() == 2 {
+                        let path = p.get(0).map_or("", |s| s.as_str().unwrap_or(""));
+                        let data = p.get(1).map_or("", |s| s.as_str().unwrap_or(""));
+                        if !path.is_empty() && !data.is_empty() {
+                            ui_client.lock().enqueue_post(path.to_string(), data.to_string());
+                        }
+                    }
+                });
                 None
             },
             "delete" => {
-                //let _ = ui_client.lock().enqueue_delete(cmd.name);
+                arg.as_str().map(|path| ui_client.lock().enqueue_delete(path.to_string()));
                 None
             },
             "remember_network" => {
-                //let _ = ui_client.lock().remember_network(cmd.name, cmd.data, cmd.data2);
+                let _ = arg.as_array().map(|p| {
+                    if p.len() == 3 {
+                        let nwid = p.get(0).map_or("", |s| s.as_str().unwrap_or(""));
+                        let name = p.get(1).map_or("", |s| s.as_str().unwrap_or(""));
+                        let settings = p.get(2).map_or("", |s| s.as_str().unwrap_or(""));
+                        ui_client.lock().remember_network(nwid.to_string(), name.to_string(), settings.to_string());
+                    }
+                });
                 None
             },
             "forget_network" => {
-                //let _ = ui_client.lock().forget_network(&cmd.name);
+                arg.as_str().map(|path| ui_client.lock().forget_network(&path.to_string()));
                 None
             },
             "copy_to_clipboard" => {
-                //copy_to_clipboard();
+                arg.as_str().map(|path| copy_to_clipboard(path));
                 None
             },
             "paste_from_clipboard" => {
@@ -525,6 +540,9 @@ fn control_panel_window_main(args: &Vec<String>) {
                     Some(RpcResponse::new_result(req.id.clone(), Some(Value::Null)))
                 }
             },
+            "quit" => {
+                std::process::exit(0);
+            }
             _ => None
         }
     }).build().unwrap();

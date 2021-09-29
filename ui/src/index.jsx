@@ -31,7 +31,7 @@ window.onerror = function(message, source, lineno, colno, error) {
 };
 
 window.copyToClipboard = (str, msg) => {
-    window.rpc.notify('copy_to_clipboard', [str||'', msg||''])
+    window.rpc.notify('copy_to_clipboard', str||'')
 };
 
 window.pasteFromClipboard = (callback) => {
@@ -74,7 +74,9 @@ window.zt_ui_render = (ui_mode) => {
         ReactDOM.render((<div style={{width: '100%', height: '100%'}}><Main/></div>), document.getElementById("_app_root"));
         setInterval(function() {
             window.rpc.call('poll').then((result) => {
-                window.zt_ui_update(JSON.parse(result));
+                if (result) {
+                    window.zt_ui_update(JSON.parse(result));
+                }
             });
         }, 200);
     } else if (ui_mode === "About") {
