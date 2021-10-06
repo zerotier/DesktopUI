@@ -15,3 +15,4 @@
 /ui/*.log
 /ZeroTier.app
 /web-view/target
+/Cargo.lock

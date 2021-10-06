@@ -369,37 +369,20 @@ fn open_sso_auth_window_subprocess(w: &mut Option<Child>, width: i32, height: i3
 #[allow(unused_mut)]
 fn sso_auth_window_main(args: &Vec<String>) {
     let raise_window = create_raise_window_listener_thread();
-
+    set_thread_to_background_priority();
     let mut event_loop = EventLoop::new();
     #[cfg(target_os = "macos")] {
         event_loop.set_activation_policy(ActivationPolicy::Accessory);
     }
     let window = WindowBuilder::new()
+        .with_visible(false)
         .with_title(format!("Remote Network Login: {}", args[4].as_str()))
         .with_inner_size(LogicalSize::new(i32::from_str_radix(args[2].as_str(), 10).unwrap_or(1024), i32::from_str_radix(args[3].as_str(), 10).unwrap_or(768)))
         .with_resizable(true)
-        .with_visible(false)
-        .build(&event_loop);
-    if window.is_err() {
-        return;
-    }
-    let window = window.unwrap();
-
-    let webview = WebViewBuilder::new(window);
-    if webview.is_err() {
-        return;
-    }
-    let webview = webview.unwrap();
-    let webview = webview.with_url(args[5].as_str());
-    if webview.is_err() {
-        return;
-    }
-    let webview = webview.unwrap().build();
-    if webview.is_err() {
-        return;
-    }
-    let webview = webview.unwrap();
-
+        .build(&event_loop).unwrap();
+    let webview = WebViewBuilder::new(window).unwrap()
+        .with_url(args[5].as_str()).unwrap()
+        .build().unwrap();
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_secs(1));
         match event {
@@ -407,6 +390,7 @@ fn sso_auth_window_main(args: &Vec<String>) {
             _ => {}
         }
         if raise_window.load(std::sync::atomic::Ordering::Relaxed) {
+            set_thread_to_foreground_priority();
             webview.window().set_visible(true);
             webview.window().set_focus();
         }
