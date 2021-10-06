@@ -1,6 +1,12 @@
 .DS*
 .Icon*
 /target
+/ui/node_modules
+/ui/.cache
+/ui/.yarn
+/ui/.parcel-cache
+/ui/*.log
+/ZeroTier.app
 *.o
 *.a
 *.dSym
@@ -8,11 +14,3 @@
 *.so
 *.lib
 *.exe
-/ui/node_modules
-/ui/.cache
-/ui/.yarn
-/ui/.parcel-cache
-/ui/*.log
-/ZeroTier.app
-/web-view/target
-/Cargo.lock
