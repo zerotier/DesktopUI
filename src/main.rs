@@ -390,6 +390,7 @@ fn sso_auth_window_main(args: &Vec<String>) {
         .with_resizable(true)
         .build(&event_loop).unwrap();
     #[allow(unused_mut)]
+    #[allow(unused)]
     let mut web_context_path: Option<PathBuf> = None;
     #[cfg(windows)] {
         web_context_path = Some(std::env::temp_dir().join(format!("zt_desktop_ui_{}", std::env::var("USERNAME").unwrap_or(String::new()))));
@@ -467,7 +468,15 @@ fn control_panel_window_main(args: &Vec<String>) {
     let ui_mode = args[2].clone();
     let ui_client = client.clone();
 
+    #[allow(unused_mut)]
+    #[allow(unused)]
+    let mut web_context_path: Option<PathBuf> = None;
+    #[cfg(windows)] {
+        web_context_path = Some(std::env::temp_dir().join(format!("zt_desktop_ui_{}", std::env::var("USERNAME").unwrap_or(String::new()))));
+    }
+    let mut web_context = wry::webview::WebContext::new(web_context_path);
     let webview = wry::webview::WebViewBuilder::new(window).unwrap()
+        .with_web_context(&mut web_context)
         .with_html(get_web_ui_blob(is_dark_mode())).unwrap()
         .with_rpc_handler(move |window: &wry::application::window::Window, req: wry::webview::RpcRequest| -> Option<wry::webview::RpcResponse> {
             let arg = req.params.map_or(Value::Null, |p| p.as_array().map_or(Value::Null, |p| {
