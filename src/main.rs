@@ -382,14 +382,14 @@ fn sso_auth_window_main(args: &Vec<String>) {
 fn sso_auth_window_main(args: &Vec<String>) {
     let raise_window = create_raise_window_listener_thread();
     set_thread_to_background_priority();
-    let mut event_loop = EventLoop::new();
-    let window = wry::window::WindowBuilder::new()
+    let mut event_loop = wry::application::event_loop::EventLoop::new();
+    let window = wry::application::window::WindowBuilder::new()
         .with_visible(false)
         .with_title(format!("Remote Network Login: {}", args[4].as_str()))
         .with_inner_size(wry::application::dpi::LogicalSize::new(i32::from_str_radix(args[2].as_str(), 10).unwrap_or(1024), i32::from_str_radix(args[3].as_str(), 10).unwrap_or(768)))
         .with_resizable(true)
         .build(&event_loop).unwrap();
-    let webview = wry::WebViewBuilder::new(window).unwrap()
+    let webview = wry::webview::WebViewBuilder::new(window).unwrap()
         .with_url(args[5].as_str()).unwrap()
         .build().unwrap();
     event_loop.run(move |event, _, control_flow| {
