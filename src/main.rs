@@ -27,6 +27,7 @@ use std::time::{Duration, SystemTime, Instant};
 
 use parking_lot::Mutex;
 use serde_json::Value;
+use wry::application::platform::macos::{EventLoopExtMacOS, ActivationPolicy};
 
 use crate::serviceclient::*;
 use crate::tray::*;
@@ -40,6 +41,7 @@ const CSS_PLACEHOLDER: &'static str = ".XXXthis_is_replaced_by_css_in_the_rust_c
 
 const MAIN_WINDOW_WIDTH: i32 = 1350;
 const MAIN_WINDOW_HEIGHT: i32 = 600;
+const WEB_UI_BLOB_PATH: &'static str = "zt_desktop_ui.html";
 
 pub(crate) static mut APPLICATION_PATH: String = String::new();
 pub(crate) static mut APPLICATION_HOME: String = String::new();
@@ -457,6 +459,10 @@ fn control_panel_window_main(args: &Vec<String>) {
     let raise_window = create_raise_window_listener_thread();
 
     let mut event_loop = wry::application::event_loop::EventLoop::new();
+    #[cfg(target_os = "macos")] {
+        event_loop.set_activation_policy(ActivationPolicy::Accessory);
+    }
+
     let window = wry::application::window::WindowBuilder::new()
         .with_title("ZeroTier Control Panel")
         .with_inner_size(wry::application::dpi::LogicalSize::new(i32::from_str_radix(args[3].as_str(), 10).unwrap_or(1024), i32::from_str_radix(args[4].as_str(), 10).unwrap_or(768)))
@@ -468,6 +474,8 @@ fn control_panel_window_main(args: &Vec<String>) {
     let ui_mode = args[2].clone();
     let ui_client = client.clone();
 
+    let web_ui_blob_path = std::env::temp_dir().join(WEB_UI_BLOB_PATH).canonicalize().unwrap();
+
     #[allow(unused_mut)]
     #[allow(unused)]
     let mut web_context_path: Option<PathBuf> = None;
@@ -477,7 +485,7 @@ fn control_panel_window_main(args: &Vec<String>) {
     let mut web_context = wry::webview::WebContext::new(web_context_path);
     let webview = wry::webview::WebViewBuilder::new(window).unwrap()
         .with_web_context(&mut web_context)
-        .with_html(get_web_ui_blob(is_dark_mode())).unwrap()
+        .with_url(format!("file:{}", web_ui_blob_path.to_str().unwrap()).as_str()).unwrap()
         .with_rpc_handler(move |window: &wry::application::window::Window, req: wry::webview::RpcRequest| -> Option<wry::webview::RpcResponse> {
             let arg = req.params.map_or(Value::Null, |p| p.as_array().map_or(Value::Null, |p| {
                 if p.is_empty() {
@@ -1197,6 +1205,7 @@ fn main() {
             _ => println!("FATAL: unrecognized mode: {}", args[1])
         }
     } else {
+        std::fs::write(std::env::temp_dir().join(WEB_UI_BLOB_PATH), get_web_ui_blob(is_dark_mode())).expect("unable to write web UI HTML");
         tray_main();
     }
     std::process::exit(0);
