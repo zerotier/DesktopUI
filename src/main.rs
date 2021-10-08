@@ -350,7 +350,7 @@ fn open_sso_auth_window_subprocess(w: &mut Option<Child>, width: i32, height: i3
 // TEMPORARY HACK: the new 'wry' web view steals focus on Mac, and there seems to be no way to fix that.
 // Until we have full flow SSO, use old web_view to pop up SSO windows on Mac since we hacked that to
 // not steal focus.
-#[cfg(target_os = "macoss")]
+#[cfg(target_os = "macos")]
 fn sso_auth_window_main(args: &Vec<String>) {
     let raise_window = create_raise_window_listener_thread();
     let title = format!("Remote Network Login: {}", args[4].as_str());
@@ -377,7 +377,7 @@ fn sso_auth_window_main(args: &Vec<String>) {
 }
 
 /// Main function for SSO authentication webview popup windows.
-#[cfg(not(target_os = "macoss"))]
+#[cfg(not(target_os = "macos"))]
 #[allow(unused_mut)]
 fn sso_auth_window_main(args: &Vec<String>) {
     let raise_window = create_raise_window_listener_thread();
