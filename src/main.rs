@@ -18,7 +18,7 @@ use std::ffi::CString;
 use std::io::{Read, Write};
 #[allow(unused)]
 use std::os::raw::{c_char, c_int, c_uint};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 #[allow(unused)]
 use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
@@ -350,7 +350,7 @@ fn open_sso_auth_window_subprocess(w: &mut Option<Child>, width: i32, height: i3
 // TEMPORARY HACK: the new 'wry' web view steals focus on Mac, and there seems to be no way to fix that.
 // Until we have full flow SSO, use old web_view to pop up SSO windows on Mac since we hacked that to
 // not steal focus.
-#[cfg(target_os = "macos")]
+#[cfg(target_os = "macoss")]
 fn sso_auth_window_main(args: &Vec<String>) {
     let raise_window = create_raise_window_listener_thread();
     let title = format!("Remote Network Login: {}", args[4].as_str());
@@ -377,7 +377,7 @@ fn sso_auth_window_main(args: &Vec<String>) {
 }
 
 /// Main function for SSO authentication webview popup windows.
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(target_os = "macoss"))]
 #[allow(unused_mut)]
 fn sso_auth_window_main(args: &Vec<String>) {
     let raise_window = create_raise_window_listener_thread();
@@ -389,7 +389,14 @@ fn sso_auth_window_main(args: &Vec<String>) {
         .with_inner_size(wry::application::dpi::LogicalSize::new(i32::from_str_radix(args[2].as_str(), 10).unwrap_or(1024), i32::from_str_radix(args[3].as_str(), 10).unwrap_or(768)))
         .with_resizable(true)
         .build(&event_loop).unwrap();
+    #[allow(unused_mut)]
+    let mut web_context_path: Option<PathBuf> = None;
+    #[cfg(windows)] {
+        web_context_path = Some(std::env::temp_dir().join(format!("zt_desktop_ui_{}", std::env::var("USERNAME").unwrap_or(String::new()))));
+    }
+    let mut web_context = wry::webview::WebContext::new(web_context_path);
     let webview = wry::webview::WebViewBuilder::new(window).unwrap()
+        .with_web_context(&mut web_context)
         .with_url(args[5].as_str()).unwrap()
         .build().unwrap();
     event_loop.run(move |event, _, control_flow| {
