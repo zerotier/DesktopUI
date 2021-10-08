@@ -48,6 +48,7 @@ use wry::application::window::Window;
 
 use crate::serviceclient::*;
 use crate::tray::*;
+use wry::application::platform::macos::WindowBuilderExtMacOS;
 
 mod tray;
 mod serviceclient;
@@ -373,6 +374,7 @@ fn sso_auth_window_main(args: &Vec<String>) {
     let mut event_loop = EventLoop::new();
     #[cfg(target_os = "macos")] {
         event_loop.set_activation_policy(ActivationPolicy::Accessory);
+        event_loop.enable_default_menu_creation(false);
     }
     let window = WindowBuilder::new()
         .with_visible(false)
@@ -442,6 +444,7 @@ fn control_panel_window_main(args: &Vec<String>) {
     let mut event_loop = EventLoop::new();
     #[cfg(target_os = "macos")] {
         event_loop.set_activation_policy(ActivationPolicy::Accessory);
+        event_loop.enable_default_menu_creation(false);
     }
     let window = WindowBuilder::new()
         .with_title("ZeroTier Control Panel")
