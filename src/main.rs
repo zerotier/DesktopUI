@@ -347,6 +347,9 @@ fn open_sso_auth_window_subprocess(w: &mut Option<Child>, width: i32, height: i3
     }
 }
 
+// TEMPORARY HACK: the new 'wry' web view steals focus on Mac, and there seems to be no way to fix that.
+// Until we have full flow SSO, use old web_view to pop up SSO windows on Mac since we hacked that to
+// not steal focus.
 #[cfg(target_os = "macos")]
 fn sso_auth_window_main(args: &Vec<String>) {
     let raise_window = create_raise_window_listener_thread();
@@ -445,10 +448,10 @@ fn control_panel_window_main(args: &Vec<String>) {
     let (client, dirty_flag) = start_client(vec!["status", "network", "peer"], 100, 5);
     let raise_window = create_raise_window_listener_thread();
 
-    let mut event_loop = EventLoop::new();
-    let window = wry::window::WindowBuilder::new()
+    let mut event_loop = wry::application::event_loop::EventLoop::new();
+    let window = wry::application::window::WindowBuilder::new()
         .with_title("ZeroTier Control Panel")
-        .with_inner_size(wry::dpi::LogicalSize::new(i32::from_str_radix(args[3].as_str(), 10).unwrap_or(1024), i32::from_str_radix(args[4].as_str(), 10).unwrap_or(768)))
+        .with_inner_size(wry::application::dpi::LogicalSize::new(i32::from_str_radix(args[3].as_str(), 10).unwrap_or(1024), i32::from_str_radix(args[4].as_str(), 10).unwrap_or(768)))
         .with_resizable(true)
         .with_visible(true)
         .build(&event_loop)
@@ -457,9 +460,9 @@ fn control_panel_window_main(args: &Vec<String>) {
     let ui_mode = args[2].clone();
     let ui_client = client.clone();
 
-    let webview = wry::WebViewBuilder::new(window).unwrap()
+    let webview = wry::webview::WebViewBuilder::new(window).unwrap()
         .with_html(get_web_ui_blob(is_dark_mode())).unwrap()
-        .with_rpc_handler(move |window: &wry::window::Window, req: wry::webview::RpcRequest| -> Option<wry::webview::RpcResponse> {
+        .with_rpc_handler(move |window: &wry::application::window::Window, req: wry::webview::RpcRequest| -> Option<wry::webview::RpcResponse> {
             let arg = req.params.map_or(Value::Null, |p| p.as_array().map_or(Value::Null, |p| {
                 if p.is_empty() {
                     Value::Null
@@ -535,9 +538,9 @@ fn control_panel_window_main(args: &Vec<String>) {
         .unwrap();
 
     event_loop.run(move |event, _, control_flow| {
-        *control_flow = wry::event_loop::ControlFlow::WaitUntil(Instant::now() + Duration::from_secs(1));
+        *control_flow = wry::application::event_loop::ControlFlow::WaitUntil(Instant::now() + Duration::from_secs(1));
         match event {
-            wry::event::Event::WindowEvent {event: wry::application::event::WindowEvent::CloseRequested, ..} => *control_flow = wry::event_loop::ControlFlow::Exit,
+            wry::application::event::Event::WindowEvent {event: wry::application::event::WindowEvent::CloseRequested, ..} => *control_flow = wry::application::event_loop::ControlFlow::Exit,
             _ => {}
         }
         if raise_window.load(std::sync::atomic::Ordering::Relaxed) {
