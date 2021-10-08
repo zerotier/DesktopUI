@@ -20,14 +20,14 @@ path = "lib.rs"
 edge = []
 
 [target.'cfg(all(target_family = "unix", not(target_os = "macos")))'.dependencies]
-javascriptcore-rs-sys = "0.2"
-gtk-sys = "0.10"
-glib-sys = "0.10"
-gobject-sys = "0.10"
-webkit2gtk-sys = { version = "0.12.0", features = ["v2_8"] }
-gdk-sys = "0.10"
-gio-sys = "0.10"
-libc = "0.2"
+javascriptcore-rs-sys = "^0"
+gtk-sys = "^0"
+glib-sys = "^0"
+gobject-sys = "^0"
+webkit2gtk-sys = { version = "^0", features = ["v2_8"] }
+gdk-sys = "^0"
+gio-sys = "^0"
+libc = "^0"
 
 [build-dependencies]
 cc = "1"

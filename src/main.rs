@@ -28,27 +28,8 @@ use std::time::{Duration, SystemTime, Instant};
 use parking_lot::Mutex;
 use serde_json::Value;
 
-#[allow(unused_imports)]
-use wry::application::event_loop::{EventLoop, ControlFlow};
-#[allow(unused_imports)]
-use wry::application::event::Event;
-#[allow(unused_imports)]
-use wry::application::window::WindowBuilder;
-#[allow(unused_imports)]
-use wry::application::dpi::LogicalSize;
-#[allow(unused_imports)]
-use wry::webview::{WebViewBuilder, RpcRequest, RpcResponse};
-#[allow(unused_imports)]
-use wry::application::menu::{MenuBar, MenuItem};
-#[allow(unused_imports)]
-#[cfg(target_os = "macos")]
-use wry::application::platform::macos::{EventLoopExtMacOS, ActivationPolicy};
-#[allow(unused_imports)]
-use wry::application::window::Window;
-
 use crate::serviceclient::*;
 use crate::tray::*;
-use wry::application::platform::macos::WindowBuilderExtMacOS;
 
 mod tray;
 mod serviceclient;
@@ -366,7 +347,7 @@ fn open_sso_auth_window_subprocess(w: &mut Option<Child>, width: i32, height: i3
     }
 }
 
-#[cfg(target_os = "macoss")]
+#[cfg(target_os = "macos")]
 fn sso_auth_window_main(args: &Vec<String>) {
     let raise_window = create_raise_window_listener_thread();
     let title = format!("Remote Network Login: {}", args[4].as_str());
@@ -393,29 +374,25 @@ fn sso_auth_window_main(args: &Vec<String>) {
 }
 
 /// Main function for SSO authentication webview popup windows.
-#[cfg(not(target_os = "macoss"))]
+#[cfg(not(target_os = "macos"))]
 #[allow(unused_mut)]
 fn sso_auth_window_main(args: &Vec<String>) {
     let raise_window = create_raise_window_listener_thread();
     set_thread_to_background_priority();
     let mut event_loop = EventLoop::new();
-    #[cfg(target_os = "macos")] {
-        event_loop.set_activation_policy(ActivationPolicy::Accessory);
-        event_loop.enable_default_menu_creation(false);
-    }
-    let window = WindowBuilder::new()
+    let window = wry::window::WindowBuilder::new()
         .with_visible(false)
         .with_title(format!("Remote Network Login: {}", args[4].as_str()))
-        .with_inner_size(LogicalSize::new(i32::from_str_radix(args[2].as_str(), 10).unwrap_or(1024), i32::from_str_radix(args[3].as_str(), 10).unwrap_or(768)))
+        .with_inner_size(wry::application::dpi::LogicalSize::new(i32::from_str_radix(args[2].as_str(), 10).unwrap_or(1024), i32::from_str_radix(args[3].as_str(), 10).unwrap_or(768)))
         .with_resizable(true)
         .build(&event_loop).unwrap();
-    let webview = WebViewBuilder::new(window).unwrap()
+    let webview = wry::WebViewBuilder::new(window).unwrap()
         .with_url(args[5].as_str()).unwrap()
         .build().unwrap();
     event_loop.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_secs(1));
+        *control_flow = wry::application::event_loop::ControlFlow::WaitUntil(Instant::now() + Duration::from_secs(1));
         match event {
-            Event::WindowEvent {event: wry::application::event::WindowEvent::CloseRequested, ..} => *control_flow = ControlFlow::Exit,
+            wry::application::event::Event::WindowEvent {event: wry::application::event::WindowEvent::CloseRequested, ..} => *control_flow = wry::application::event_loop::ControlFlow::Exit,
             _ => {}
         }
         if raise_window.load(std::sync::atomic::Ordering::Relaxed) {
@@ -469,10 +446,6 @@ fn control_panel_window_main(args: &Vec<String>) {
     let raise_window = create_raise_window_listener_thread();
 
     let mut event_loop = EventLoop::new();
-    #[cfg(target_os = "macos")] {
-        event_loop.set_activation_policy(ActivationPolicy::Accessory);
-        event_loop.enable_default_menu_creation(false);
-    }
     let window = wry::window::WindowBuilder::new()
         .with_title("ZeroTier Control Panel")
         .with_inner_size(wry::dpi::LogicalSize::new(i32::from_str_radix(args[3].as_str(), 10).unwrap_or(1024), i32::from_str_radix(args[4].as_str(), 10).unwrap_or(768)))
@@ -486,7 +459,7 @@ fn control_panel_window_main(args: &Vec<String>) {
 
     let webview = wry::WebViewBuilder::new(window).unwrap()
         .with_html(get_web_ui_blob(is_dark_mode())).unwrap()
-        .with_rpc_handler(move |window: &wry::window::Window, req: RpcRequest| -> Option<RpcResponse> {
+        .with_rpc_handler(move |window: &wry::window::Window, req: wry::webview::RpcRequest| -> Option<wry::webview::RpcResponse> {
             let arg = req.params.map_or(Value::Null, |p| p.as_array().map_or(Value::Null, |p| {
                 if p.is_empty() {
                     Value::Null
@@ -496,7 +469,7 @@ fn control_panel_window_main(args: &Vec<String>) {
             }));
             match req.method.as_str() {
                 "ready" => {
-                    Some(RpcResponse::new_result(req.id.clone(), Some(Value::from(ui_mode.as_str()))))
+                    Some(wry::webview::RpcResponse::new_result(req.id.clone(), Some(Value::from(ui_mode.as_str()))))
                 },
                 "log" => {
                     println!("> {}", arg.to_string());
@@ -538,7 +511,7 @@ fn control_panel_window_main(args: &Vec<String>) {
                     None
                 },
                 "paste_from_clipboard" => {
-                    Some(RpcResponse::new_result(req.id.clone(), Some(Value::from(read_from_clipboard()))))
+                    Some(wry::webview::RpcResponse::new_result(req.id.clone(), Some(Value::from(read_from_clipboard()))))
                 },
                 "raise" => {
                     window.set_visible(true);
@@ -547,9 +520,9 @@ fn control_panel_window_main(args: &Vec<String>) {
                 },
                 "poll" => {
                     if dirty_flag.swap(false, std::sync::atomic::Ordering::Relaxed) {
-                        Some(RpcResponse::new_result(req.id.clone(), Some(Value::from(ui_client.lock().get_all_json()))))
+                        Some(wry::webview::RpcResponse::new_result(req.id.clone(), Some(Value::from(ui_client.lock().get_all_json()))))
                     } else {
-                        Some(RpcResponse::new_result(req.id.clone(), Some(Value::Null)))
+                        Some(wry::webview::RpcResponse::new_result(req.id.clone(), Some(Value::Null)))
                     }
                 },
                 "quit" => {
