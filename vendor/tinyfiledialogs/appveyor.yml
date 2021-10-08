@@ -1,0 +1,21 @@
+environment:
+  matrix:
+  - TARGET: x86_64-pc-windows-msvc
+  - TARGET: i686-pc-windows-msvc
+
+platform:
+  - x64
+
+install:
+  - ps: Start-FileDownload "https://static.rust-lang.org/dist/rust-nightly-${env:TARGET}.exe"
+  - rust-nightly-%TARGET%.exe /VERYSILENT /NORESTART /DIR="C:\Program Files (x86)\Rust"
+  - SET PATH=C:\msys64\mingw64\bin;C:\msys64\usr\bin\;%PATH%
+  - SET PATH=%PATH%;C:\Program Files (x86)\Rust\bin
+  - SET RUST_BACKTRACE=1
+  - rustc -V
+  - cargo -V
+
+build: false
+
+test_script:
+  - cargo test --verbose

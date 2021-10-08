@@ -1,0 +1,286 @@
+[crate_name_overrides]
+"web_kit2" = "webkit2"
+
+[options]
+girs_directories = ["gir-files"]
+library = "WebKit2"
+version = "4.0"
+work_mode = "normal"
+target_path = "."
+generate_safety_asserts = true
+single_version_file = true
+
+external_libraries = [
+    "Gio",
+    "Gtk",
+    "JavaScriptCore",
+]
+
+generate = [
+    "WebKit2.ApplicationInfo",
+    "WebKit2.AuthenticationScheme",
+    "WebKit2.AutomationBrowsingContextPresentation",
+    "WebKit2.AutoplayPolicy",
+    "WebKit2.BackForwardList",
+    "WebKit2.BackForwardListItem",
+    "WebKit2.CacheModel",
+    "WebKit2.ContextMenu",
+    "WebKit2.ContextMenuAction",
+    "WebKit2.ContextMenuItem",
+    "WebKit2.CookieAcceptPolicy",
+    "WebKit2.CookieManager",
+    "WebKit2.CookiePersistentStorage",
+    "WebKit2.Credential",
+    "WebKit2.CredentialPersistence",
+    "WebKit2.DeviceInfoPermissionRequest",
+    "WebKit2.DownloadError",
+    "WebKit2.EditorState",
+    "WebKit2.EditorTypingAttributes",
+    "WebKit2.FaviconDatabase",
+    "WebKit2.FaviconDatabaseError",
+    "WebKit2.FileChooserRequest",
+    "WebKit2.FindOptions",
+    "WebKit2.GeolocationManager",
+    "WebKit2.GeolocationPermissionRequest",
+    "WebKit2.GeolocationPosition",
+    "WebKit2.HardwareAccelerationPolicy",
+    "WebKit2.HitTestResultContext",
+    "WebKit2.ITPFirstParty",
+    "WebKit2.ITPThirdParty",
+    "WebKit2.InputHints",
+    "WebKit2.InputMethodContext",
+    "WebKit2.InputMethodUnderline",
+    "WebKit2.InputPurpose",
+    "WebKit2.InsecureContentEvent",
+    "WebKit2.InstallMissingMediaPluginsPermissionRequest",
+    "WebKit2.JavascriptError",
+    "WebKit2.JavascriptResult",
+    "WebKit2.LoadEvent",
+    "WebKit2.MimeInfo",
+    "WebKit2.NavigationPolicyDecision",
+    "WebKit2.NavigationType",
+    "WebKit2.NetworkError",
+    "WebKit2.NetworkProxyMode",
+    "WebKit2.Notification",
+    "WebKit2.NotificationPermissionRequest",
+    "WebKit2.OptionMenu",
+    "WebKit2.OptionMenuItem",
+    "WebKit2.PermissionRequest",
+    "WebKit2.Plugin",
+    "WebKit2.PluginError",
+    "WebKit2.PointerLockPermissionRequest",
+    "WebKit2.PolicyDecision",
+    "WebKit2.PolicyDecisionType",
+    "WebKit2.PolicyError",
+    "WebKit2.PrintError",
+    "WebKit2.PrintOperationResponse",
+    "WebKit2.ProcessModel",
+    "WebKit2.ResponsePolicyDecision",
+    "WebKit2.SaveMode",
+    "WebKit2.ScriptDialogType",
+    "WebKit2.SecurityManager",
+    "WebKit2.SecurityOrigin",
+    "WebKit2.SnapshotError",
+    "WebKit2.SnapshotOptions",
+    "WebKit2.SnapshotRegion",
+    "WebKit2.TLSErrorsPolicy",
+    # "WebKit2.UserContentFilter",
+    "WebKit2.UserContentFilterError",
+    # "WebKit2.UserContentFilterStore",
+    "WebKit2.UserContentInjectedFrames",
+    "WebKit2.UserContentManager",
+    "WebKit2.UserMediaPermissionRequest",
+    "WebKit2.UserMessageError",
+    "WebKit2.UserScript",
+    "WebKit2.UserScriptInjectionTime",
+    "WebKit2.UserStyleLevel",
+    "WebKit2.UserStyleSheet",
+    "WebKit2.WebInspector",
+    "WebKit2.WebProcessTerminationReason",
+    "WebKit2.WebResource",
+    "WebKit2.WebViewBase",
+    "WebKit2.WebViewSessionState",
+    "WebKit2.WebsiteData",
+    "WebKit2.WebsiteDataAccessPermissionRequest",
+    "WebKit2.WebsiteDataTypes",
+]
+
+manual = [
+    "cairo.Surface",
+    "Gdk.Event",
+    "Gdk.EventKey",
+    "Gdk.Rectangle",
+    "Gdk.RGBA",
+    "Gio.Action",
+    "Gio.Cancellable",
+    "Gio.File",
+    "Gio.InputStream",
+    "Gio.TlsCertificate",
+    "Gio.TlsCertificateFlags",
+    "Gio.UnixFDList",
+    "GLib.Bytes",
+    "GLib.DateTime",
+    "GLib.Error",
+    "GLib.List",
+    "GLib.Quark",
+    "GLib.TimeSpan",
+    "GLib.Variant",
+    "GObject.Object",
+    #"Gtk.Action",
+    "Gtk.Container",
+    "Gtk.FileFilter",
+    "Gtk.PageSetup",
+    "Gtk.PrintSettings",
+    "Gtk.Widget",
+    "Gtk.Window",
+    "JavaScriptCore.GlobalContextRef",
+    "JavaScriptCore.Value",
+    "JavaScriptCore.ValueRef",
+    "WebKit2.ScriptDialog",
+]
+
+[[object]]
+name = "WebKit2.AuthenticationRequest"
+status = "generate"
+    [[object.function]]
+    name = "authenticate"
+    ignore = true
+
+[[object]]
+name = "WebKit2.AutomationSession"
+status = "generate"
+generate_builder = true
+
+[[object]]
+name = "WebKit2.ColorChooserRequest"
+status = "generate"
+generate_builder = true
+
+[[object]]
+name = "WebKit2.Download"
+status = "generate"
+generate_builder = true
+
+[[object]]
+name = "WebKit2.FindController"
+status = "generate"
+generate_builder = true
+
+[[object]]
+name = "WebKit2.FormSubmissionRequest"
+status = "generate"
+    [[object.function]]
+    name = "list_text_fields"
+    # Fails to get generated as some how glib::GString doesn't get added
+    ignore = true
+
+[[object]]
+name = "WebKit2.HitTestResult"
+status = "generate"
+generate_builder = true
+
+[[object]]
+name = "WebKit2.NavigationAction"
+status = "generate"
+    [[object.function]]
+    name = "get_modifiers"
+        [[object.function.parameter]]
+        name = "navigation"
+        const = true
+    [[object.function]]
+    name = "get_mouse_button"
+        [[object.function.parameter]]
+        name = "navigation"
+        const = true
+    [[object.function]]
+    name = "get_navigation_type"
+        [[object.function.parameter]]
+        name = "navigation"
+        const = true
+    [[object.function]]
+    name = "get_request"
+        [[object.function.parameter]]
+        name = "navigation"
+        const = true
+    [[object.function]]
+    name = "is_user_gesture"
+        [[object.function.parameter]]
+        name = "navigation"
+        const = true
+
+
+[[object]]
+name = "WebKit2.NetworkProxySettings"
+status = "generate"
+
+[[object]]
+name = "WebKit2.PrintCustomWidget"
+status = "generate"
+generate_builder = true
+
+[[object]]
+name = "WebKit2.PrintOperation"
+status = "generate"
+generate_builder = true
+
+[[object]]
+name = "WebKit2.Settings"
+status = "generate"
+generate_builder = true
+
+[[object]]
+name = "WebKit2.UserMessage"
+status = "generate"
+generate_builder = true
+
+[[object]]
+name = "WebKit2.URISchemeRequest"
+status = "generate"
+module_name = "uri_scheme_request"
+
+[[object]]
+name = "WebKit2.URIRequest"
+status = "generate"
+generate_builder = true
+module_name = "uri_request"
+
+[[object]]
+name = "WebKit2.URIResponse"
+status = "generate"
+module_name = "uri_response"
+
+[[object]]
+name = "WebKit2.WebContext"
+status = "generate"
+generate_builder = true
+    [[object.function]]
+    name = "set_network_proxy_settings"
+    ignore = true
+
+[[object]]
+name = "WebKit2.WebsiteDataManager"
+status = "generate"
+generate_builder = true
+    [[object.function]]
+    name = "remove"
+    ignore = true # to be generated manually
+
+[[object]]
+name = "WebKit2.WebsitePolicies"
+status = "generate"
+generate_builder = true
+
+[[object]]
+name = "WebKit2.WebView"
+status = "generate"
+generate_builder = true
+    [[object.signal]]
+    name = "create"
+    version = "2.6"
+        [object.signal.return]
+        nullable = true
+
+[[object]]
+name = "WebKit2.WindowProperties"
+status = "generate"
+generate_builder = true

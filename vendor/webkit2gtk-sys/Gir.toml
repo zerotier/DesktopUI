@@ -1,0 +1,21 @@
+[options]
+girs_directories = ["../gir-files"]
+work_mode = "sys"
+min_cfg_version="2.4"
+library = "WebKit2"
+version = "4.0"
+single_version_file = "."
+target_path = "."
+
+external_libraries = [
+    "Gtk",
+    "GLib",
+    "GObject",
+    "Gio",
+    "Gdk",
+    "Cairo",
+    "Soup",
+]
+
+[external_libraries]
+javascriptcore = "JavaScriptCore"

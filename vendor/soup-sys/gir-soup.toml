@@ -1,0 +1,9 @@
+[options]
+work_mode = "sys"
+library = "Soup"
+version = "2.4"
+external_libraries = [
+   "GLib",
+   "GObject",
+   "Gio",
+]
