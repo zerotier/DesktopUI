@@ -1,7 +1,0 @@
-https://launchpad.net/~gnome3-team/+archive/ubuntu/gnome3-staging/+files/libatk1.0-dev_2.16.0-2%7Evivid0_amd64.deb
-https://launchpad.net/~gnome3-team/+archive/ubuntu/gnome3-staging/+files/libgdk-pixbuf2.0-dev_2.31.4-1%7Evivid0_amd64.deb
-https://launchpad.net/~gnome3-team/+archive/ubuntu/gnome3-staging/+files/libgirepository1.0-dev_1.44.0-1%7Evivid0_amd64.deb
-https://launchpad.net/~gnome3-team/+archive/ubuntu/gnome3-staging/+files/libgtk-3-dev_3.16.3-0ubuntu1%7Evivid2_amd64.deb
-https://launchpad.net/~gnome3-team/+archive/ubuntu/gnome3-staging/+files/libpango1.0-dev_1.36.7-1%7Eutopic1_amd64.deb
-https://launchpad.net/~gnome3-team/+archive/ubuntu/gnome3-staging/+files/libsecret-1-dev_0.18.2-1%7Evivid0_amd64.deb
-https://launchpad.net/~gnome3-team/+archive/ubuntu/gnome3-staging/+files/libvte-2.91-dev_0.40.2-1ubuntu1%7Evivid1_amd64.deb
