@@ -475,7 +475,7 @@ fn control_panel_window_main(args: &Vec<String>) {
     let ui_mode = args[2].clone();
     let ui_client = client.clone();
 
-    let web_ui_blob_path = std::env::temp_dir().join(WEB_UI_BLOB_PATH).canonicalize().unwrap();
+    let web_ui_blob_path = std::env::temp_dir().join(WEB_UI_BLOB_PATH);
     //println!("{}", web_ui_blob_path.to_str().unwrap());
 
     #[allow(unused_mut)]
