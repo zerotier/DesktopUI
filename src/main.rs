@@ -27,6 +27,7 @@ use std::time::{Duration, SystemTime, Instant};
 
 use parking_lot::Mutex;
 use serde_json::Value;
+#[cfg(target_os = "macos")]
 use wry::application::platform::macos::{EventLoopExtMacOS, ActivationPolicy};
 
 use crate::serviceclient::*;
@@ -475,6 +476,7 @@ fn control_panel_window_main(args: &Vec<String>) {
     let ui_client = client.clone();
 
     let web_ui_blob_path = std::env::temp_dir().join(WEB_UI_BLOB_PATH).canonicalize().unwrap();
+    //println!("{}", web_ui_blob_path.to_str().unwrap());
 
     #[allow(unused_mut)]
     #[allow(unused)]
