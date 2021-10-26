@@ -569,7 +569,7 @@ fn control_panel_window_main(args: &Vec<String>) {
             wry::application::event::Event::WindowEvent {event: wry::application::event::WindowEvent::CloseRequested, ..} => *control_flow = wry::application::event_loop::ControlFlow::Exit,
             _ => {}
         }
-        if raise_window.load(std::sync::atomic::Ordering::Relaxed) {
+        if raise_window.swap(false, std::sync::atomic::Ordering::Relaxed) {
             webview.window().set_visible(true);
             webview.window().set_focus();
         }
