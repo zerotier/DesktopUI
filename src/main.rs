@@ -910,25 +910,34 @@ fn tray_main() {
                     checked: unsafe { START_ON_LOGIN },
                     disabled: false,
                     handler: Some(Box::new(move || {
-                        refresh_mac_start_on_login();
-                        if unsafe { START_ON_LOGIN } {
-                            // osascript -e 'tell application "System Events" to get the name of every login item'
-                            let out = Command::new("/usr/bin/osascript").arg("-e").arg("tell application \"System Events\" to get the name of every login item").output();
-                            let _ = out.map(|app_list| {
-                                String::from_utf8(app_list.stdout).map(|app_list| {
-                                    app_list.split('\n').for_each(|app| {
-                                        if app.to_ascii_lowercase().contains("zerotier") {
-                                            // osascript -e 'tell application "System Events" to delete login item "itemname"'
-                                            let _ = Command::new("/usr/bin/osascript").arg("-e").arg(format!("tell application \"System Events\" to delete login item \"{}\"", app.trim())).output();
-                                        }
-                                    });
-                                })
-                            });
-                        } else {
-                            // osascript -e 'tell application "System Events" to make login item at end with properties {path:"PATH_TO_APP", hidden:false}'
-                            let _ = Command::new("/usr/bin/osascript").arg("-e").arg(format!("tell application \"System Events\" to make login item at end with properties {{path:\"{}\", hidden:false}}", unsafe { &APPLICATION_PATH })).output();
+                        for _ in 0..2 {
+                            refresh_mac_start_on_login();
+                            let previous_start_on_login = unsafe { START_ON_LOGIN };
+                            if previous_start_on_login {
+                                // osascript -e 'tell application "System Events" to get the name of every login item'
+                                let out = Command::new("/usr/bin/osascript").arg("-e").arg("tell application \"System Events\" to get the name of every login item").output();
+                                let _ = out.map(|app_list| {
+                                    String::from_utf8(app_list.stdout).map(|app_list| {
+                                        app_list.split('\n').for_each(|app| {
+                                            if app.to_ascii_lowercase().contains("zerotier") {
+                                                // osascript -e 'tell application "System Events" to delete login item "itemname"'
+                                                let _ = Command::new("/usr/bin/osascript").arg("-e").arg(format!("tell application \"System Events\" to delete login item \"{}\"", app.trim())).output();
+                                            }
+                                        });
+                                    })
+                                });
+                            } else {
+                                // osascript -e 'tell application "System Events" to make login item at end with properties {path:"PATH_TO_APP", hidden:false}'
+                                let _ = Command::new("/usr/bin/osascript").arg("-e").arg(format!("tell application \"System Events\" to make login item at end with properties {{path:\"{}\", hidden:false}}", unsafe { &APPLICATION_PATH })).output();
+                            }
+                            refresh_mac_start_on_login();
+                            if previous_start_on_login != unsafe { START_ON_LOGIN } {
+                                break;
+                            } else {
+                                // If toggling failed, re-request permission to send apple events as this is required to toggle.
+                                let _ = Command::new("/usr/bin/tccutil").arg("reset").arg("AppleEvents").arg("com.zerotier.ZeroTier-UI").output();
+                            }
                         }
-                        refresh_mac_start_on_login();
                         dirty_flag2.store(true, std::sync::atomic::Ordering::Relaxed);
                     }))
                 });
