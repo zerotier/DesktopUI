@@ -9,10 +9,3 @@ replace-with = "vendored-sources"
 
 [source.vendored-sources]
 directory = "vendor"
-
-[target.'cfg(target_os = "macos")'.dependencies]
-plist = "^1"
-web-view = { path = "web-view", features = [] }
-
-[target.'cfg(windows)'.dependencies]
-winreg = "^0"
