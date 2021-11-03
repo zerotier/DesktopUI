@@ -76,6 +76,15 @@ pub struct Tray {
     tray_initialized: bool,
 }
 
+#[cfg(target_os = "linux")]
+extern "C" {
+    fn tray_init(tray: *const CTray) -> c_int;
+    fn tray_loop(blocking: c_int) -> c_int;
+    fn tray_update(tray: *const CTray);
+    fn tray_exit();
+}
+
+
 #[cfg(target_os = "macos")]
 #[link(name = "Cocoa", kind = "framework")]
 extern "C" {
