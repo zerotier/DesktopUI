@@ -229,7 +229,6 @@ fn read_from_clipboard() -> String {
     Command::new("/usr/bin/xclip").output().map_or_else(|_| String::new(), |out| String::from_utf8(out.stdout).map_or_else(|_| String::new(), |s| s))
 }
 
-#[cfg(windows)]
 #[cfg(target_os = "macos")]
 fn copy_to_clipboard(s: &str) {
     let _ = Command::new("/usr/bin/pbcopy").stdin(Stdio::piped()).stdout(Stdio::inherit()).stderr(Stdio::inherit()).spawn().map(|mut c| {
