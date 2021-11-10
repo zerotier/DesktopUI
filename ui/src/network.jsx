@@ -31,7 +31,7 @@ export default class Network extends React.Component {
                         <EuiFlexItem><EuiText size="s">Name</EuiText></EuiFlexItem>
                         <EuiFlexItem><EuiLink style={{color: 'inherit'}} onClick={() => { copyToClipboard(config.name, "Copied network name to clipboard.") }} size="s">{config.name}</EuiLink></EuiFlexItem>
                         <EuiFlexItem><EuiText size="s">Type</EuiText></EuiFlexItem>
-                        <EuiFlexItem><EuiText size="s">{(config.private) ? 'PRIVATE' : 'PUBLIC'}</EuiText></EuiFlexItem>
+                        <EuiFlexItem><EuiText size="s">{config.type}</EuiText></EuiFlexItem>
                         <EuiFlexItem><EuiText size="s">Status</EuiText></EuiFlexItem>
                         <EuiFlexItem><EuiText size="s">{config.status}</EuiText></EuiFlexItem>
                         <EuiFlexItem><EuiText size="s">Ethernet MAC</EuiText></EuiFlexItem>
