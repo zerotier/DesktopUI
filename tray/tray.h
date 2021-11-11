@@ -181,8 +181,7 @@ int tray_loop(int blocking) {
 
     id until;
     if (blocking) {
-        until = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSDate"), sel_registerName("now"));
-        until = ((id(*)(id, SEL, double))objc_msgSend)(until, sel_registerName("dateByAddingTimeInterval:"), (double)MAX_WAIT_SECONDS);
+        until = ((id(*)(id, SEL, double))objc_msgSend)((id)objc_getClass("NSDate"), sel_registerName("dateWithTimeIntervalSinceNow:"), (double)MAX_WAIT_SECONDS);
         until = ((id(*)(id, SEL))objc_msgSend)(until, sel_registerName("autorelease"));
     } else {
         until = ((id(*)(id, SEL))objc_msgSend)((id)objc_getClass("NSDate"), sel_registerName("distantPast"));
