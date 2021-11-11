@@ -52,7 +52,7 @@ pub type host_flavor_t = integer_t;
 pub type host_info64_t = *mut integer_t;
 pub type processor_flavor_t = ::c_int;
 pub type thread_flavor_t = natural_t;
-pub type thread_inspect_t = mach_port_t;
+pub type thread_inspect_t = ::mach_port_t;
 pub type policy_t = ::c_int;
 pub type mach_vm_address_t = u64;
 pub type mach_vm_offset_t = u64;
@@ -90,7 +90,7 @@ pub type thread_identifier_info_data_t = thread_identifier_info;
 pub type thread_extended_info_t = *mut thread_extended_info;
 pub type thread_extended_info_data_t = thread_extended_info;
 
-pub type thread_t = mach_port_t;
+pub type thread_t = ::mach_port_t;
 pub type thread_policy_flavor_t = natural_t;
 pub type thread_policy_t = *mut integer_t;
 pub type thread_latency_qos_t = integer_t;
@@ -112,10 +112,15 @@ pub type thread_latency_qos_policy_t = *mut thread_latency_qos_policy;
 pub type thread_throughput_qos_policy_data_t = thread_throughput_qos_policy;
 pub type thread_throughput_qos_policy_t = *mut thread_throughput_qos_policy;
 
+pub type pthread_introspection_hook_t =
+    extern "C" fn(event: ::c_uint, thread: ::pthread_t, addr: *mut ::c_void, size: ::size_t);
+
 pub type vm_statistics_t = *mut vm_statistics;
 pub type vm_statistics_data_t = vm_statistics;
 pub type vm_statistics64_t = *mut vm_statistics64;
 pub type vm_statistics64_data_t = vm_statistics64;
+
+pub type task_t = ::mach_port_t;
 
 pub type sysdir_search_path_enumeration_state = ::c_uint;
 
@@ -741,8 +746,9 @@ s! {
         pub bytes_free: ::size_t,
     }
 
-    pub struct malloc_zone_t {
-        __private: [::uintptr_t; 18], // FIXME: keeping private for now
+    pub struct vm_range_t {
+        pub address: ::vm_address_t,
+        pub size: ::vm_size_t,
     }
 
     // sched.h
@@ -2956,6 +2962,11 @@ pub const AT_SYMLINK_NOFOLLOW: ::c_int = 0x0020;
 pub const AT_SYMLINK_FOLLOW: ::c_int = 0x0040;
 pub const AT_REMOVEDIR: ::c_int = 0x0080;
 
+pub const PTHREAD_INTROSPECTION_THREAD_CREATE: ::c_uint = 1;
+pub const PTHREAD_INTROSPECTION_THREAD_START: ::c_uint = 2;
+pub const PTHREAD_INTROSPECTION_THREAD_TERMINATE: ::c_uint = 3;
+pub const PTHREAD_INTROSPECTION_THREAD_DESTROY: ::c_uint = 4;
+
 pub const TIOCMODG: ::c_ulong = 0x40047403;
 pub const TIOCMODS: ::c_ulong = 0x80047404;
 pub const TIOCM_LE: ::c_int = 0x1;
@@ -4226,6 +4237,8 @@ pub const RTF_CONDEMNED: ::c_int = 0x2000000;
 pub const RTF_IFREF: ::c_int = 0x4000000;
 pub const RTF_PROXY: ::c_int = 0x8000000;
 pub const RTF_ROUTER: ::c_int = 0x10000000;
+pub const RTF_DEAD: ::c_int = 0x20000000;
+pub const RTF_GLOBAL: ::c_int = 0x40000000;
 
 pub const RTM_VERSION: ::c_int = 5;
 
@@ -4289,6 +4302,9 @@ pub const PROC_PIDTASKINFO: ::c_int = 4;
 pub const PROC_PIDTHREADINFO: ::c_int = 5;
 pub const PROC_PIDVNODEPATHINFO: ::c_int = 9;
 pub const PROC_PIDPATHINFO_MAXSIZE: ::c_int = 4096;
+pub const PROC_CSM_ALL: ::c_uint = 0x0001;
+pub const PROC_CSM_NOSMT: ::c_uint = 0x0002;
+pub const PROC_CSM_TECS: ::c_uint = 0x0004;
 pub const MAXCOMLEN: usize = 16;
 pub const MAXTHREADNAMESIZE: usize = 64;
 
@@ -4785,6 +4801,12 @@ extern "C" {
     pub fn pthread_getname_np(thread: ::pthread_t, name: *mut ::c_char, len: ::size_t) -> ::c_int;
     pub fn pthread_mach_thread_np(thread: ::pthread_t) -> ::mach_port_t;
     pub fn pthread_from_mach_thread_np(port: ::mach_port_t) -> ::pthread_t;
+    pub fn pthread_create_from_mach_thread(
+        thread: *mut ::pthread_t,
+        attr: *const ::pthread_attr_t,
+        f: extern "C" fn(*mut ::c_void) -> *mut ::c_void,
+        value: *mut ::c_void,
+    ) -> ::c_int;
     pub fn pthread_get_stackaddr_np(thread: ::pthread_t) -> *mut ::c_void;
     pub fn pthread_get_stacksize_np(thread: ::pthread_t) -> ::size_t;
     pub fn pthread_condattr_setpshared(attr: *mut pthread_condattr_t, pshared: ::c_int) -> ::c_int;
@@ -4840,6 +4862,24 @@ extern "C" {
         policy: ::c_int,
         param: *const sched_param,
     ) -> ::c_int;
+
+    // Available from Big Sur
+    pub fn pthread_introspection_hook_install(
+        hook: ::pthread_introspection_hook_t,
+    ) -> ::pthread_introspection_hook_t;
+    pub fn pthread_introspection_setspecific_np(
+        thread: ::pthread_t,
+        key: ::pthread_key_t,
+        value: *const ::c_void,
+    ) -> ::c_int;
+    pub fn pthread_introspection_getspecific_np(
+        thread: ::pthread_t,
+        key: ::pthread_key_t,
+    ) -> *mut ::c_void;
+    pub fn pthread_jit_write_protect_np(enabled: ::c_int);
+    pub fn pthread_jit_write_protect_supported_np() -> ::c_int;
+    pub fn pthread_cpu_number_np(cpu_number_out: *mut ::size_t) -> ::c_int;
+
     pub fn thread_policy_set(
         thread: thread_t,
         flavor: thread_policy_flavor_t,
@@ -4891,6 +4931,12 @@ extern "C" {
     pub fn mount(
         src: *const ::c_char,
         target: *const ::c_char,
+        flags: ::c_int,
+        data: *mut ::c_void,
+    ) -> ::c_int;
+    pub fn fmount(
+        src: *const ::c_char,
+        fd: ::c_int,
         flags: ::c_int,
         data: *mut ::c_void,
     ) -> ::c_int;
@@ -5070,6 +5116,20 @@ extern "C" {
         flags: *mut ::pid_t,
     ) -> ::c_int;
     pub fn posix_spawnattr_setpgroup(attr: *mut posix_spawnattr_t, flags: ::pid_t) -> ::c_int;
+    pub fn posix_spawnattr_setarchpref_np(
+        attr: *mut posix_spawnattr_t,
+        count: ::size_t,
+        pref: *mut ::cpu_type_t,
+        subpref: *mut ::cpu_subtype_t,
+        ocount: *mut ::size_t,
+    ) -> ::c_int;
+    pub fn posix_spawnattr_getarchpref_np(
+        attr: *const posix_spawnattr_t,
+        count: ::size_t,
+        pref: *mut ::cpu_type_t,
+        subpref: *mut ::cpu_subtype_t,
+        ocount: *mut ::size_t,
+    ) -> ::c_int;
 
     pub fn posix_spawn_file_actions_init(actions: *mut posix_spawn_file_actions_t) -> ::c_int;
     pub fn posix_spawn_file_actions_destroy(actions: *mut posix_spawn_file_actions_t) -> ::c_int;
@@ -5143,6 +5203,14 @@ extern "C" {
     pub fn memset_pattern8(b: *mut ::c_void, pattern8: *const ::c_void, len: ::size_t);
     pub fn memset_pattern16(b: *mut ::c_void, pattern16: *const ::c_void, len: ::size_t);
 
+    // Inherited from BSD but available from Big Sur only
+    pub fn strtonum(
+        __numstr: *const ::c_char,
+        __minval: ::c_longlong,
+        __maxval: ::c_longlong,
+        errstrp: *mut *const ::c_char,
+    ) -> ::c_longlong;
+
     pub fn mstats() -> mstats;
     pub fn malloc_printf(format: *const ::c_char, ...);
     pub fn malloc_zone_check(zone: *mut ::malloc_zone_t) -> ::boolean_t;
@@ -5212,6 +5280,12 @@ extern "C" {
     pub fn proc_kmsgbuf(buffer: *mut ::c_void, buffersize: u32) -> ::c_int;
     pub fn proc_libversion(major: *mut ::c_int, mintor: *mut ::c_int) -> ::c_int;
     pub fn proc_pid_rusage(pid: ::c_int, flavor: ::c_int, buffer: *mut rusage_info_t) -> ::c_int;
+
+    // Available from Big Sur
+    pub fn proc_set_no_smt() -> ::c_int;
+    pub fn proc_setthread_no_smt() -> ::c_int;
+    pub fn proc_set_csm(flags: u32) -> ::c_int;
+    pub fn proc_setthread_csm(flags: u32) -> ::c_int;
     /// # Notes
     ///
     /// `id` is of type [`uuid_t`].
@@ -5259,11 +5333,14 @@ extern "C" {
         out_processor_infoCnt: *mut mach_msg_type_number_t,
     ) -> ::kern_return_t;
 
-    pub static mut mach_task_self_: mach_port_t;
-    pub fn task_for_pid(host: mach_port_t, pid: ::pid_t, task: *mut mach_port_t)
-        -> ::kern_return_t;
+    pub static mut mach_task_self_: ::mach_port_t;
+    pub fn task_for_pid(
+        host: ::mach_port_t,
+        pid: ::pid_t,
+        task: *mut ::mach_port_t,
+    ) -> ::kern_return_t;
     pub fn task_info(
-        host: mach_port_t,
+        host: ::mach_port_t,
         flavor: task_flavor_t,
         task_info_out: task_info_t,
         task_info_count: *mut mach_msg_type_number_t,
@@ -5288,13 +5365,14 @@ extern "C" {
     pub static vm_page_size: vm_size_t;
 }
 
-pub unsafe fn mach_task_self() -> mach_port_t {
+pub unsafe fn mach_task_self() -> ::mach_port_t {
     mach_task_self_
 }
 
 cfg_if! {
     if #[cfg(target_os = "macos")] {
         extern "C" {
+            pub fn clock_settime(clock_id: ::clockid_t, tp: *const ::timespec) -> ::c_int;
             pub fn memmem(
                 haystack: *const ::c_void,
                 haystacklen: ::size_t,

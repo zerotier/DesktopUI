@@ -33,7 +33,6 @@
     clippy::needless_borrow,
     clippy::needless_continue,
     clippy::option_option,
-    clippy::pub_enum_variant_names,
     clippy::ref_option_ref,
     clippy::rest_pat_in_fully_bound_structs,
     clippy::string_add_assign,
@@ -51,11 +50,12 @@
 )]
 // END - Embark standard lints v0.3
 
-//! cfg-expr is a crate that can be used to parse and evaluate Rust cfg() expressions,
-//! both as declarable in Rust code itself, as well in cargo's `[target.'cfg()'.dependencies]` sections.
+//! cfg-expr is a crate that can be used to parse and evaluate Rust `cfg()`
+//! expressions, both as declarable in Rust code itself, as well in cargo
+//! manifests' `[target.'cfg()'.dependencies]` sections.
 //!
-//! It contains a list of all builtin targets known to rustc as of 1.41 that can be used
-//! to determine if a particular cfg expression is satisfiable.
+//! It contains a list of all builtin targets known to rustc as of `1.54.0` that
+//! can be used to determine if a particular cfg expression is satisfiable.
 //!
 //! ```
 //! use cfg_expr::{targets::get_builtin_target_by_triple, Expression, Predicate};
@@ -77,7 +77,7 @@
 //! )
 //! .unwrap();
 //!
-//! // cfg_expr includes a list of every builtin target in rustc (as of 1.41)
+//! // cfg_expr includes a list of every builtin target in rustc
 //! let x86_win = get_builtin_target_by_triple("i686-pc-windows-msvc").unwrap();
 //! let x86_pentium_win = get_builtin_target_by_triple("i586-pc-windows-msvc").unwrap();
 //! let uwp_win = get_builtin_target_by_triple("i686-uwp-windows-msvc").unwrap();

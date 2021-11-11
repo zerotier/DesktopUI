@@ -300,8 +300,7 @@
 //! [macro]: https://docs.serde.rs/serde_json/macro.json.html
 //! [`serde-json-core`]: https://github.com/rust-embedded-community/serde-json-core
 
-#![doc(html_root_url = "https://docs.rs/serde_json/1.0.68")]
-#![deny(clippy::all, clippy::pedantic)]
+#![doc(html_root_url = "https://docs.rs/serde_json/1.0.69")]
 // Ignored clippy lints
 #![allow(
     clippy::comparison_chain,
@@ -380,7 +379,7 @@ mod lib {
     pub use self::core::convert::{self, From, Into};
     pub use self::core::default::{self, Default};
     pub use self::core::fmt::{self, Debug, Display};
-    pub use self::core::hash::{self, Hash};
+    pub use self::core::hash::{self, Hash, Hasher};
     pub use self::core::iter::FusedIterator;
     pub use self::core::marker::{self, PhantomData};
     pub use self::core::ops::{Bound, RangeBounds};

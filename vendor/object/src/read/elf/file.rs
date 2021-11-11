@@ -1,11 +1,11 @@
 use alloc::vec::Vec;
 use core::convert::TryInto;
 use core::fmt::Debug;
-use core::{mem, str};
+use core::mem;
 
 use crate::read::{
     self, util, Architecture, ByteString, Bytes, Error, Export, FileFlags, Import, Object,
-    ReadError, ReadRef, SectionIndex, StringTable, SymbolIndex,
+    ObjectKind, ReadError, ReadRef, SectionIndex, StringTable, SymbolIndex,
 };
 use crate::{elf, endian, Endian, Endianness, Pod, U32};
 
@@ -93,10 +93,10 @@ where
 
     fn raw_section_by_name<'file>(
         &'file self,
-        section_name: &str,
+        section_name: &[u8],
     ) -> Option<ElfSection<'data, 'file, Elf, R>> {
         self.sections
-            .section_by_name(self.endian, section_name.as_bytes())
+            .section_by_name(self.endian, section_name)
             .map(|(index, section)| ElfSection {
                 file: self,
                 index: SectionIndex(index),
@@ -107,18 +107,21 @@ where
     #[cfg(feature = "compression")]
     fn zdebug_section_by_name<'file>(
         &'file self,
-        section_name: &str,
+        section_name: &[u8],
     ) -> Option<ElfSection<'data, 'file, Elf, R>> {
-        if !section_name.starts_with(".debug_") {
+        if !section_name.starts_with(b".debug_") {
             return None;
         }
-        self.raw_section_by_name(&format!(".zdebug_{}", &section_name[7..]))
+        let mut name = Vec::with_capacity(section_name.len() + 1);
+        name.extend_from_slice(b".zdebug_");
+        name.extend_from_slice(&section_name[7..]);
+        self.raw_section_by_name(&name)
     }
 
     #[cfg(not(feature = "compression"))]
     fn zdebug_section_by_name<'file>(
         &'file self,
-        _section_name: &str,
+        _section_name: &[u8],
     ) -> Option<ElfSection<'data, 'file, Elf, R>> {
         None
     }
@@ -186,6 +189,17 @@ where
         self.header.is_class_64()
     }
 
+    fn kind(&self) -> ObjectKind {
+        match self.header.e_type(self.endian) {
+            elf::ET_REL => ObjectKind::Relocatable,
+            elf::ET_EXEC => ObjectKind::Executable,
+            // TODO: check for `DF_1_PIE`?
+            elf::ET_DYN => ObjectKind::Dynamic,
+            elf::ET_CORE => ObjectKind::Core,
+            _ => ObjectKind::Unknown,
+        }
+    }
+
     fn segments(&'file self) -> ElfSegmentIterator<'data, 'file, Elf, R> {
         ElfSegmentIterator {
             file: self,
@@ -193,9 +207,9 @@ where
         }
     }
 
-    fn section_by_name(
+    fn section_by_name_bytes(
         &'file self,
-        section_name: &str,
+        section_name: &[u8],
     ) -> Option<ElfSection<'data, 'file, Elf, R>> {
         self.raw_section_by_name(section_name)
             .or_else(|| self.zdebug_section_by_name(section_name))
@@ -205,7 +219,7 @@ where
         &'file self,
         index: SectionIndex,
     ) -> read::Result<ElfSection<'data, 'file, Elf, R>> {
-        let section = self.sections.section(index.0)?;
+        let section = self.sections.section(index)?;
         Ok(ElfSection {
             file: self,
             index,
@@ -274,7 +288,7 @@ where
         &'file self,
     ) -> Option<ElfDynamicRelocationIterator<'data, 'file, Elf, R>> {
         Some(ElfDynamicRelocationIterator {
-            section_index: 1,
+            section_index: SectionIndex(1),
             file: self,
             relocations: None,
         })
@@ -357,7 +371,7 @@ where
     }
 
     fn gnu_debuglink(&self) -> read::Result<Option<(&'data [u8], u32)>> {
-        let section = match self.raw_section_by_name(".gnu_debuglink") {
+        let section = match self.raw_section_by_name(b".gnu_debuglink") {
             Some(section) => section,
             None => return Ok(None),
         };
@@ -378,7 +392,7 @@ where
     }
 
     fn gnu_debugaltlink(&self) -> read::Result<Option<(&'data [u8], &'data [u8])>> {
-        let section = match self.raw_section_by_name(".gnu_debugaltlink") {
+        let section = match self.raw_section_by_name(b".gnu_debugaltlink") {
             Some(section) => section,
             None => return Ok(None),
         };

@@ -1,8 +1,7 @@
 // Parse system-deps metadata from Cargo.toml
 
-use std::{fs, io::Read, path::Path};
+use std::{fmt, fs, io::Read, path::Path};
 
-use anyhow::{anyhow, bail, Error};
 use toml::{map::Map, Value};
 
 #[derive(Debug, PartialEq)]
@@ -49,6 +48,85 @@ impl Default for Dependency {
 }
 
 #[derive(Debug, PartialEq)]
+enum VersionOverrideBuilderError {
+    MissingVersionField,
+}
+
+impl fmt::Display for VersionOverrideBuilderError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Self::MissingVersionField => write!(f, "missing version field"),
+        }
+    }
+}
+
+impl std::error::Error for VersionOverrideBuilderError {}
+
+#[derive(Debug, PartialEq)]
+enum MetadataError {
+    MissingKey(String),
+    NotATable(String),
+    NestedCfg(String),
+    NotStringOrTable(String),
+    CfgExpr(cfg_expr::ParseError),
+    Toml(toml::de::Error),
+    UnexpectedVersionSetting(String, String, String),
+    UnexpectedKey(String, String, String),
+    VersionOverrideBuilder(VersionOverrideBuilderError),
+}
+
+impl fmt::Display for MetadataError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::MissingKey(k) => write!(f, "missing key `{}`", k),
+            Self::NotATable(k) => write!(f, "`{}` is not a table", k),
+            Self::NestedCfg(k) => write!(f, "`{}`: cfg() cannot be nested", k),
+            Self::NotStringOrTable(k) => write!(f, "`{}`: not a string or a table", k),
+            Self::CfgExpr(e) => write!(f, "{}", e),
+            Self::Toml(e) => write!(f, "error parsing TOML: {}", e),
+            Self::UnexpectedVersionSetting(n, k, t) => {
+                write!(
+                    f,
+                    "{}: unexpected version settings key: {} type: {}",
+                    n, k, t
+                )
+            }
+            Self::UnexpectedKey(n, k, t) => write!(f, "{}: unexpected key {} type {}", n, k, t),
+            Self::VersionOverrideBuilder(e) => write!(f, "{}", e),
+        }
+    }
+}
+
+impl std::error::Error for MetadataError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::CfgExpr(e) => Some(e),
+            Self::Toml(e) => Some(e),
+            Self::VersionOverrideBuilder(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+impl From<cfg_expr::ParseError> for MetadataError {
+    fn from(err: cfg_expr::ParseError) -> Self {
+        Self::CfgExpr(err)
+    }
+}
+
+impl From<toml::de::Error> for MetadataError {
+    fn from(err: toml::de::Error) -> Self {
+        Self::Toml(err)
+    }
+}
+
+impl From<VersionOverrideBuilderError> for MetadataError {
+    fn from(err: VersionOverrideBuilderError) -> Self {
+        Self::VersionOverrideBuilder(err)
+    }
+}
+
+#[derive(Debug, PartialEq)]
 pub(crate) struct VersionOverride {
     pub(crate) key: String,
     pub(crate) version: String,
@@ -73,10 +151,10 @@ impl VersionOverrideBuilder {
         }
     }
 
-    fn build(self) -> Result<VersionOverride, Error> {
+    fn build(self) -> Result<VersionOverride, VersionOverrideBuilderError> {
         let version = self
             .version
-            .ok_or_else(|| anyhow!("missing version field"))?;
+            .ok_or(VersionOverrideBuilderError::MissingVersionField)?;
 
         Ok(VersionOverride {
             key: self.version_id,
@@ -102,17 +180,14 @@ impl MetaData {
             .map_err(|e| crate::Error::InvalidMetadata(format!("{}: {}", path.display(), e)))
     }
 
-    fn from_str(manifest_str: String) -> Result<Self, Error> {
-        let toml = manifest_str
-            .parse::<toml::Value>()
-            .map_err(|e| anyhow!("error parsing TOML: {:?}", e))?;
-
+    fn from_str(manifest_str: String) -> Result<Self, MetadataError> {
+        let toml = manifest_str.parse::<toml::Value>()?;
         let key = "package.metadata.system-deps";
         let meta = toml
             .get("package")
             .and_then(|v| v.get("metadata"))
             .and_then(|v| v.get("system-deps"))
-            .ok_or_else(|| anyhow!("no {}", key))?;
+            .ok_or_else(|| MetadataError::MissingKey(key.to_owned()))?;
 
         let deps = Self::parse_deps_table(meta, key, true)?;
 
@@ -123,10 +198,10 @@ impl MetaData {
         table: &Value,
         key: &str,
         allow_cfg: bool,
-    ) -> Result<Vec<Dependency>, Error> {
+    ) -> Result<Vec<Dependency>, MetadataError> {
         let table = table
             .as_table()
-            .ok_or_else(|| anyhow!("{} not a table", key))?;
+            .ok_or_else(|| MetadataError::NotATable(key.to_owned()))?;
 
         let mut deps = Vec::new();
 
@@ -142,11 +217,10 @@ impl MetaData {
                         deps.push(dep);
                     }
                 } else {
-                    bail!("{}.{}: cfg() cannot be nested", key, name);
+                    return Err(MetadataError::NestedCfg(format!("{}.{}", key, name)));
                 }
             } else {
-                let dep =
-                    Self::parse_dep(name, value).map_err(|e| anyhow!("{}.{}: {}", key, name, e))?;
+                let dep = Self::parse_dep(key, name, value)?;
                 deps.push(dep);
             }
         }
@@ -154,7 +228,7 @@ impl MetaData {
         Ok(deps)
     }
 
-    fn parse_dep(name: &str, value: &Value) -> Result<Dependency, Error> {
+    fn parse_dep(key: &str, name: &str, value: &Value) -> Result<Dependency, MetadataError> {
         let mut dep = Dependency::new(name);
 
         match value {
@@ -163,17 +237,22 @@ impl MetaData {
                 dep.version = Some(s.clone());
             }
             toml::Value::Table(ref t) => {
-                Self::parse_dep_table(&mut dep, t)?;
+                Self::parse_dep_table(key, name, &mut dep, t)?;
             }
             _ => {
-                bail!("not a string or table");
+                return Err(MetadataError::NotStringOrTable(format!("{}.{}", key, name)));
             }
         }
 
         Ok(dep)
     }
 
-    fn parse_dep_table(dep: &mut Dependency, t: &Map<String, Value>) -> Result<(), Error> {
+    fn parse_dep_table(
+        p_key: &str,
+        name: &str,
+        dep: &mut Dependency,
+        t: &Map<String, Value>,
+    ) -> Result<(), MetadataError> {
         for (key, value) in t {
             match (key.as_str(), value) {
                 ("feature", &toml::Value::String(ref s)) => {
@@ -205,11 +284,11 @@ impl MetaData {
                                 builder.optional = Some(optional);
                             }
                             _ => {
-                                bail!(
-                                    "unexpected version settings key: {} type: {}",
-                                    k,
-                                    v.type_str()
-                                )
+                                return Err(MetadataError::UnexpectedVersionSetting(
+                                    format!("{}.{}", p_key, name),
+                                    k.to_owned(),
+                                    v.type_str().to_owned(),
+                                ));
                             }
                         }
                     }
@@ -217,7 +296,11 @@ impl MetaData {
                     dep.version_overrides.push(builder.build()?);
                 }
                 _ => {
-                    bail!("unexpected key {} type {}", key, value.type_str());
+                    return Err(MetadataError::UnexpectedKey(
+                        format!("{}.{}", p_key, name),
+                        key.to_owned(),
+                        value.type_str().to_owned(),
+                    ));
                 }
             }
         }

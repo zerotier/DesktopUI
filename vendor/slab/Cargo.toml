@@ -12,7 +12,7 @@
 [package]
 edition = "2018"
 name = "slab"
-version = "0.4.4"
+version = "0.4.5"
 authors = ["Carl Lerche <me@carllerche.com>"]
 exclude = ["/.*"]
 description = "Pre-allocated storage for a uniform data type"

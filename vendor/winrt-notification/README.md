@@ -8,16 +8,16 @@ An incomplete wrapper over the WinRT toast api
 
 Tested in Windows 10 and 8.1. Untested in Windows 8, might work.
 
-[Documentation](https://allenbenz.github.io/winrt-notification/0_2_0/winrt_notification/)
+[0.5 Documentation](https://allenbenz.github.io/winrt-notification/0_5_0/winrt_notification/index.html)
+
+[0.2 Documentation](https://allenbenz.github.io/winrt-notification/0_2_0/winrt_notification/index.html)
 
 Todo:
 * Add support for Adaptive Content
 * Add support for Actions
-* A method of generating a valid app id
 
 Known Issues:
 * Will not work for Windows 7.
-* Will not build when targeting the 32-bit gnu toolchain (i686-pc-windows-gnu).
 
 Limitations:
 * Windows 8.1 only supports a single image, the last image (icon, hero, image) will be the one on the toast
@@ -27,7 +27,7 @@ Limitations:
 ```toml
 #Cargo.toml
 [dependencies]
-winrt-notification = "0.2.2"
+winrt-notification = "0.5.0"
 ```
 
 ## Examples

@@ -12,7 +12,7 @@
 [package]
 edition = "2018"
 name = "cairo-rs"
-version = "0.14.7"
+version = "0.14.9"
 authors = ["The gtk-rs Project Developers"]
 description = "Rust bindings for the Cairo library"
 homepage = "https://gtk-rs.org/"

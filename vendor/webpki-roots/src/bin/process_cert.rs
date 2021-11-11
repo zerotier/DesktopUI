@@ -15,7 +15,7 @@ fn main() {
   io::stdin().read_to_end(&mut der)
     .expect("cannot read stdin");
 
-  let ta = webpki::trust_anchor_util::cert_der_as_trust_anchor(&der)
+  let ta = webpki::TrustAnchor::try_from_cert_der(&der)
     .expect("cannot parse certificate");
 
   dumphex("Subject", ta.subject);

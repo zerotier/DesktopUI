@@ -1,14 +1,10 @@
-use crate::error::TLSError;
+use crate::error::Error;
 use crate::key;
 use crate::msgs::enums::{SignatureAlgorithm, SignatureScheme};
 
-use ring::{
-    self,
-    signature::{self, EcdsaKeyPair, Ed25519KeyPair, RsaKeyPair},
-};
-use webpki;
+use ring::signature::{self, EcdsaKeyPair, Ed25519KeyPair, RsaKeyPair};
 
-use std::mem;
+use std::convert::TryFrom;
 use std::sync::Arc;
 
 /// An abstract signing key.
@@ -26,10 +22,10 @@ pub trait SigningKey: Send + Sync {
 /// A thing that can sign a message.
 pub trait Signer: Send + Sync {
     /// Signs `message` using the selected scheme.
-    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, TLSError>;
+    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error>;
 
     /// Reveals which scheme will be used when you call `sign()`.
-    fn get_scheme(&self) -> SignatureScheme;
+    fn scheme(&self) -> SignatureScheme;
 }
 
 /// A packaged-together certificate chain, matching `SigningKey` and
@@ -40,7 +36,7 @@ pub struct CertifiedKey {
     pub cert: Vec<key::Certificate>,
 
     /// The certified key.
-    pub key: Arc<Box<dyn SigningKey>>,
+    pub key: Arc<dyn SigningKey>,
 
     /// An optional OCSP response from the certificate issuer,
     /// attesting to its continued validity.
@@ -57,8 +53,8 @@ impl CertifiedKey {
     ///
     /// The cert chain must not be empty. The first certificate in the chain
     /// must be the end-entity certificate.
-    pub fn new(cert: Vec<key::Certificate>, key: Arc<Box<dyn SigningKey>>) -> CertifiedKey {
-        CertifiedKey {
+    pub fn new(cert: Vec<key::Certificate>, key: Arc<dyn SigningKey>) -> Self {
+        Self {
             cert,
             key,
             ocsp: None,
@@ -67,33 +63,8 @@ impl CertifiedKey {
     }
 
     /// The end-entity certificate.
-    pub fn end_entity_cert(&self) -> Result<&key::Certificate, ()> {
-        self.cert.get(0).ok_or(())
-    }
-
-    /// Steal ownership of the certificate chain.
-    pub fn take_cert(&mut self) -> Vec<key::Certificate> {
-        mem::replace(&mut self.cert, Vec::new())
-    }
-
-    /// Return true if there's an OCSP response.
-    pub fn has_ocsp(&self) -> bool {
-        self.ocsp.is_some()
-    }
-
-    /// Steal ownership of the OCSP response.
-    pub fn take_ocsp(&mut self) -> Option<Vec<u8>> {
-        mem::replace(&mut self.ocsp, None)
-    }
-
-    /// Return true if there's an SCT list.
-    pub fn has_sct_list(&self) -> bool {
-        self.sct_list.is_some()
-    }
-
-    /// Steal ownership of the SCT list.
-    pub fn take_sct_list(&mut self) -> Option<Vec<u8>> {
-        mem::replace(&mut self.sct_list, None)
+    pub fn end_entity_cert(&self) -> Result<&key::Certificate, SignError> {
+        self.cert.get(0).ok_or(SignError(()))
     }
 
     /// Check the certificate chain for validity:
@@ -104,19 +75,21 @@ impl CertifiedKey {
     ///
     /// These checks are not security-sensitive.  They are the
     /// *server* attempting to detect accidental misconfiguration.
-    pub fn cross_check_end_entity_cert(
+    pub(crate) fn cross_check_end_entity_cert(
         &self,
-        name: Option<webpki::DNSNameRef>,
-    ) -> Result<(), TLSError> {
+        name: Option<webpki::DnsNameRef>,
+    ) -> Result<(), Error> {
         // Always reject an empty certificate chain.
-        let end_entity_cert = self.end_entity_cert().map_err(|()| {
-            TLSError::General("No end-entity certificate in certificate chain".to_string())
-        })?;
+        let end_entity_cert = self
+            .end_entity_cert()
+            .map_err(|SignError(())| {
+                Error::General("No end-entity certificate in certificate chain".to_string())
+            })?;
 
         // Reject syntactically-invalid end-entity certificates.
         let end_entity_cert =
-            webpki::EndEntityCert::from(end_entity_cert.as_ref()).map_err(|_| {
-                TLSError::General(
+            webpki::EndEntityCert::try_from(end_entity_cert.as_ref()).map_err(|_| {
+                Error::General(
                     "End-entity certificate in certificate \
                                   chain is syntactically invalid"
                         .to_string(),
@@ -133,7 +106,7 @@ impl CertifiedKey {
                 .verify_is_valid_for_dns_name(name)
                 .is_err()
             {
-                return Err(TLSError::General(
+                return Err(Error::General(
                     "The server certificate is not \
                                              valid for the given name"
                         .to_string(),
@@ -147,9 +120,9 @@ impl CertifiedKey {
 
 /// Parse `der` as any supported key encoding/type, returning
 /// the first which works.
-pub fn any_supported_type(der: &key::PrivateKey) -> Result<Box<dyn SigningKey>, ()> {
-    if let Ok(rsa) = RSASigningKey::new(der) {
-        Ok(Box::new(rsa))
+pub fn any_supported_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, SignError> {
+    if let Ok(rsa) = RsaSigningKey::new(der) {
+        Ok(Arc::new(rsa))
     } else if let Ok(ecdsa) = any_ecdsa_type(der) {
         Ok(ecdsa)
     } else {
@@ -158,39 +131,39 @@ pub fn any_supported_type(der: &key::PrivateKey) -> Result<Box<dyn SigningKey>, 
 }
 
 /// Parse `der` as any ECDSA key type, returning the first which works.
-pub fn any_ecdsa_type(der: &key::PrivateKey) -> Result<Box<dyn SigningKey>, ()> {
-    if let Ok(ecdsa_p256) = ECDSASigningKey::new(
+pub fn any_ecdsa_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, SignError> {
+    if let Ok(ecdsa_p256) = EcdsaSigningKey::new(
         der,
         SignatureScheme::ECDSA_NISTP256_SHA256,
         &signature::ECDSA_P256_SHA256_ASN1_SIGNING,
     ) {
-        return Ok(Box::new(ecdsa_p256));
+        return Ok(Arc::new(ecdsa_p256));
     }
 
-    if let Ok(ecdsa_p384) = ECDSASigningKey::new(
+    if let Ok(ecdsa_p384) = EcdsaSigningKey::new(
         der,
         SignatureScheme::ECDSA_NISTP384_SHA384,
         &signature::ECDSA_P384_SHA384_ASN1_SIGNING,
     ) {
-        return Ok(Box::new(ecdsa_p384));
+        return Ok(Arc::new(ecdsa_p384));
     }
 
-    Err(())
+    Err(SignError(()))
 }
 
 /// Parse `der` as any EdDSA key type, returning the first which works.
-pub fn any_eddsa_type(der: &key::PrivateKey) -> Result<Box<dyn SigningKey>, ()> {
+pub fn any_eddsa_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, SignError> {
     if let Ok(ed25519) = Ed25519SigningKey::new(der, SignatureScheme::ED25519) {
-        return Ok(Box::new(ed25519));
+        return Ok(Arc::new(ed25519));
     }
 
     // TODO: Add support for Ed448
 
-    Err(())
+    Err(SignError(()))
 }
 
 /// A `SigningKey` for RSA-PKCS1 or RSA-PSS
-pub struct RSASigningKey {
+pub struct RsaSigningKey {
     key: Arc<RsaKeyPair>,
 }
 
@@ -203,24 +176,23 @@ static ALL_RSA_SCHEMES: &[SignatureScheme] = &[
     SignatureScheme::RSA_PKCS1_SHA256,
 ];
 
-impl RSASigningKey {
+impl RsaSigningKey {
     /// Make a new `RSASigningKey` from a DER encoding, in either
     /// PKCS#1 or PKCS#8 format.
-    pub fn new(der: &key::PrivateKey) -> Result<RSASigningKey, ()> {
+    pub fn new(der: &key::PrivateKey) -> Result<Self, SignError> {
         RsaKeyPair::from_der(&der.0)
             .or_else(|_| RsaKeyPair::from_pkcs8(&der.0))
-            .map(|s| RSASigningKey { key: Arc::new(s) })
-            .map_err(|_| ())
+            .map(|s| Self { key: Arc::new(s) })
+            .map_err(|_| SignError(()))
     }
 }
 
-impl SigningKey for RSASigningKey {
+impl SigningKey for RsaSigningKey {
     fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
         ALL_RSA_SCHEMES
             .iter()
-            .filter(|scheme| offered.contains(scheme))
-            .nth(0)
-            .map(|scheme| RSASigner::new(self.key.clone(), *scheme))
+            .find(|scheme| offered.contains(scheme))
+            .map(|scheme| RsaSigner::new(Arc::clone(&self.key), *scheme))
     }
 
     fn algorithm(&self) -> SignatureAlgorithm {
@@ -228,13 +200,18 @@ impl SigningKey for RSASigningKey {
     }
 }
 
-struct RSASigner {
+#[allow(clippy::upper_case_acronyms)]
+#[doc(hidden)]
+#[deprecated(since = "0.20.0", note = "Use RsaSigningKey")]
+pub type RSASigningKey = RsaSigningKey;
+
+struct RsaSigner {
     key: Arc<RsaKeyPair>,
     scheme: SignatureScheme,
     encoding: &'static dyn signature::RsaEncoding,
 }
 
-impl RSASigner {
+impl RsaSigner {
     fn new(key: Arc<RsaKeyPair>, scheme: SignatureScheme) -> Box<dyn Signer> {
         let encoding: &dyn signature::RsaEncoding = match scheme {
             SignatureScheme::RSA_PKCS1_SHA256 => &signature::RSA_PKCS1_SHA256,
@@ -246,7 +223,7 @@ impl RSASigner {
             _ => unreachable!(),
         };
 
-        Box::new(RSASigner {
+        Box::new(Self {
             key,
             scheme,
             encoding,
@@ -254,18 +231,18 @@ impl RSASigner {
     }
 }
 
-impl Signer for RSASigner {
-    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, TLSError> {
+impl Signer for RsaSigner {
+    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error> {
         let mut sig = vec![0; self.key.public_modulus_len()];
 
         let rng = ring::rand::SystemRandom::new();
         self.key
             .sign(self.encoding, &rng, message, &mut sig)
             .map(|_| sig)
-            .map_err(|_| TLSError::General("signing failed".to_string()))
+            .map_err(|_| Error::General("signing failed".to_string()))
     }
 
-    fn get_scheme(&self) -> SignatureScheme {
+    fn scheme(&self) -> SignatureScheme {
         self.scheme
     }
 }
@@ -281,21 +258,21 @@ impl Signer for RSASigner {
 /// different protocol versions.
 ///
 /// Currently this is only implemented for ECDSA keys.
-struct ECDSASigningKey {
+struct EcdsaSigningKey {
     key: Arc<EcdsaKeyPair>,
     scheme: SignatureScheme,
 }
 
-impl ECDSASigningKey {
+impl EcdsaSigningKey {
     /// Make a new `ECDSASigningKey` from a DER encoding in PKCS#8 format,
     /// expecting a key usable with precisely the given signature scheme.
-    pub fn new(
+    fn new(
         der: &key::PrivateKey,
         scheme: SignatureScheme,
         sigalg: &'static signature::EcdsaSigningAlgorithm,
-    ) -> Result<ECDSASigningKey, ()> {
+    ) -> Result<Self, ()> {
         EcdsaKeyPair::from_pkcs8(sigalg, &der.0)
-            .map(|kp| ECDSASigningKey {
+            .map(|kp| Self {
                 key: Arc::new(kp),
                 scheme,
             })
@@ -303,11 +280,11 @@ impl ECDSASigningKey {
     }
 }
 
-impl SigningKey for ECDSASigningKey {
+impl SigningKey for EcdsaSigningKey {
     fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
         if offered.contains(&self.scheme) {
-            Some(Box::new(ECDSASigner {
-                key: self.key.clone(),
+            Some(Box::new(EcdsaSigner {
+                key: Arc::clone(&self.key),
                 scheme: self.scheme,
             }))
         } else {
@@ -321,21 +298,21 @@ impl SigningKey for ECDSASigningKey {
     }
 }
 
-struct ECDSASigner {
+struct EcdsaSigner {
     key: Arc<EcdsaKeyPair>,
     scheme: SignatureScheme,
 }
 
-impl Signer for ECDSASigner {
-    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, TLSError> {
+impl Signer for EcdsaSigner {
+    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error> {
         let rng = ring::rand::SystemRandom::new();
         self.key
             .sign(&rng, message)
-            .map_err(|_| TLSError::General("signing failed".into()))
+            .map_err(|_| Error::General("signing failed".into()))
             .map(|sig| sig.as_ref().into())
     }
 
-    fn get_scheme(&self) -> SignatureScheme {
+    fn scheme(&self) -> SignatureScheme {
         self.scheme
     }
 }
@@ -359,13 +336,13 @@ struct Ed25519SigningKey {
 impl Ed25519SigningKey {
     /// Make a new `Ed25519SigningKey` from a DER encoding in PKCS#8 format,
     /// expecting a key usable with precisely the given signature scheme.
-    pub fn new(der: &key::PrivateKey, scheme: SignatureScheme) -> Result<Ed25519SigningKey, ()> {
+    fn new(der: &key::PrivateKey, scheme: SignatureScheme) -> Result<Self, SignError> {
         Ed25519KeyPair::from_pkcs8_maybe_unchecked(&der.0)
-            .map(|kp| Ed25519SigningKey {
+            .map(|kp| Self {
                 key: Arc::new(kp),
                 scheme,
             })
-            .map_err(|_| ())
+            .map_err(|_| SignError(()))
     }
 }
 
@@ -373,7 +350,7 @@ impl SigningKey for Ed25519SigningKey {
     fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
         if offered.contains(&self.scheme) {
             Some(Box::new(Ed25519Signer {
-                key: self.key.clone(),
+                key: Arc::clone(&self.key),
                 scheme: self.scheme,
             }))
         } else {
@@ -393,11 +370,11 @@ struct Ed25519Signer {
 }
 
 impl Signer for Ed25519Signer {
-    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, TLSError> {
+    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error> {
         Ok(self.key.sign(message).as_ref().into())
     }
 
-    fn get_scheme(&self) -> SignatureScheme {
+    fn scheme(&self) -> SignatureScheme {
         self.scheme
     }
 }
@@ -414,3 +391,7 @@ pub fn supported_sign_tls13() -> &'static [SignatureScheme] {
         SignatureScheme::ED25519,
     ]
 }
+
+/// Errors while signing
+#[derive(Debug)]
+pub struct SignError(());

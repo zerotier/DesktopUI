@@ -10,7 +10,7 @@ use std::fmt;
 /// This struct wraps `&[u8]` just to override `fmt::Debug`.
 ///
 /// `BsDebug` is not a part of public API of bytes crate.
-pub struct BsDebug<'a>(pub &'a [u8]);
+pub(crate) struct BsDebug<'a>(pub(crate) &'a [u8]);
 
 impl<'a> fmt::Debug for BsDebug<'a> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
@@ -28,7 +28,7 @@ impl<'a> fmt::Debug for BsDebug<'a> {
             } else if c == b'\0' {
                 write!(fmt, "\\0")?;
                 // ASCII printable
-            } else if c >= 0x20 && c < 0x7f {
+            } else if (0x20..0x7f).contains(&c) {
                 write!(fmt, "{}", c as char)?;
             } else {
                 write!(fmt, "\\x{:02x}", c)?;

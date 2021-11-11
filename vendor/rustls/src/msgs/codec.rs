@@ -1,3 +1,4 @@
+use std::convert::TryInto;
 use std::fmt::Debug;
 
 /// Read from a byte slice.
@@ -72,26 +73,27 @@ pub trait Codec: Debug + Sized {
 }
 
 // Encoding functions.
-pub fn decode_u8(bytes: &[u8]) -> Option<u8> {
-    Some(bytes[0])
+fn decode_u8(bytes: &[u8]) -> Option<u8> {
+    let [value]: [u8; 1] = bytes.try_into().ok()?;
+    Some(value)
 }
 
 impl Codec for u8 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         bytes.push(*self);
     }
-    fn read(r: &mut Reader) -> Option<u8> {
+    fn read(r: &mut Reader) -> Option<Self> {
         r.take(1).and_then(decode_u8)
     }
 }
 
 pub fn put_u16(v: u16, out: &mut [u8]) {
-    out[0] = (v >> 8) as u8;
-    out[1] = v as u8;
+    let out: &mut [u8; 2] = (&mut out[..2]).try_into().unwrap();
+    *out = u16::to_be_bytes(v);
 }
 
 pub fn decode_u16(bytes: &[u8]) -> Option<u16> {
-    Some((u16::from(bytes[0]) << 8) | u16::from(bytes[1]))
+    Some(u16::from_be_bytes(bytes.try_into().ok()?))
 }
 
 impl Codec for u16 {
@@ -101,80 +103,63 @@ impl Codec for u16 {
         bytes.extend_from_slice(&b16);
     }
 
-    fn read(r: &mut Reader) -> Option<u16> {
+    fn read(r: &mut Reader) -> Option<Self> {
         r.take(2).and_then(decode_u16)
     }
 }
 
 // Make a distinct type for u24, even though it's a u32 underneath
 #[allow(non_camel_case_types)]
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct u24(pub u32);
 
 impl u24 {
-    pub fn decode(bytes: &[u8]) -> Option<u24> {
-        Some(u24((u32::from(bytes[0]) << 16)
-            | (u32::from(bytes[1]) << 8)
-            | u32::from(bytes[2])))
+    pub fn decode(bytes: &[u8]) -> Option<Self> {
+        let [a, b, c]: [u8; 3] = bytes.try_into().ok()?;
+        Some(Self(u32::from_be_bytes([0, a, b, c])))
+    }
+}
+
+#[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
+impl From<u24> for usize {
+    #[inline]
+    fn from(v: u24) -> Self {
+        v.0 as Self
     }
 }
 
 impl Codec for u24 {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        bytes.push((self.0 >> 16) as u8);
-        bytes.push((self.0 >> 8) as u8);
-        bytes.push(self.0 as u8);
+        let be_bytes = u32::to_be_bytes(self.0);
+        bytes.extend_from_slice(&be_bytes[1..])
     }
 
-    fn read(r: &mut Reader) -> Option<u24> {
-        r.take(3).and_then(u24::decode)
+    fn read(r: &mut Reader) -> Option<Self> {
+        r.take(3).and_then(Self::decode)
     }
 }
 
 pub fn decode_u32(bytes: &[u8]) -> Option<u32> {
-    Some(
-        (u32::from(bytes[0]) << 24)
-            | (u32::from(bytes[1]) << 16)
-            | (u32::from(bytes[2]) << 8)
-            | u32::from(bytes[3]),
-    )
+    Some(u32::from_be_bytes(bytes.try_into().ok()?))
 }
 
 impl Codec for u32 {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        bytes.push((*self >> 24) as u8);
-        bytes.push((*self >> 16) as u8);
-        bytes.push((*self >> 8) as u8);
-        bytes.push(*self as u8);
+        bytes.extend(&Self::to_be_bytes(*self))
     }
 
-    fn read(r: &mut Reader) -> Option<u32> {
+    fn read(r: &mut Reader) -> Option<Self> {
         r.take(4).and_then(decode_u32)
     }
 }
 
 pub fn put_u64(v: u64, bytes: &mut [u8]) {
-    bytes[0] = (v >> 56) as u8;
-    bytes[1] = (v >> 48) as u8;
-    bytes[2] = (v >> 40) as u8;
-    bytes[3] = (v >> 32) as u8;
-    bytes[4] = (v >> 24) as u8;
-    bytes[5] = (v >> 16) as u8;
-    bytes[6] = (v >> 8) as u8;
-    bytes[7] = v as u8;
+    let bytes: &mut [u8; 8] = (&mut bytes[..8]).try_into().unwrap();
+    *bytes = u64::to_be_bytes(v)
 }
 
 pub fn decode_u64(bytes: &[u8]) -> Option<u64> {
-    Some(
-        (u64::from(bytes[0]) << 56)
-            | (u64::from(bytes[1]) << 48)
-            | (u64::from(bytes[2]) << 40)
-            | (u64::from(bytes[3]) << 32)
-            | (u64::from(bytes[4]) << 24)
-            | (u64::from(bytes[5]) << 16)
-            | (u64::from(bytes[6]) << 8)
-            | u64::from(bytes[7]),
-    )
+    Some(u64::from_be_bytes(bytes.try_into().ok()?))
 }
 
 impl Codec for u64 {
@@ -184,7 +169,7 @@ impl Codec for u64 {
         bytes.extend_from_slice(&b64);
     }
 
-    fn read(r: &mut Reader) -> Option<u64> {
+    fn read(r: &mut Reader) -> Option<Self> {
         r.take(8).and_then(decode_u64)
     }
 }

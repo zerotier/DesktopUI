@@ -2,14 +2,14 @@
 
 The `object` crate provides a unified interface to working with object files
 across platforms. It supports reading object files and executable files,
-and writing object files.
+and writing COFF/ELF/Mach-O object files and ELF/PE executable files.
 
 For reading files, it provides multiple levels of support:
 
 * raw struct definitions suitable for zero copy access
-* low level APIs for accessing the raw structs
+* low level APIs for accessing the raw structs ([example](crates/examples/src/readobj/))
 * a higher level unified API for accessing common features of object files, such
-  as sections and symbols
+  as sections and symbols ([example](crates/examples/src/objdump.rs))
 
 Supported file formats: ELF, Mach-O, Windows PE/COFF, Wasm, and Unix archive.
 
@@ -32,12 +32,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 ```
 
+See [`crates/examples`](crates/examples) for more examples.
+
 ## License
 
 Licensed under either of
 
-  * Apache License, Version 2.0 ([`LICENSE-APACHE`](./LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-  * MIT license ([`LICENSE-MIT`](./LICENSE-MIT) or http://opensource.org/licenses/MIT)
+  * Apache License, Version 2.0 ([`LICENSE-APACHE`](./LICENSE-APACHE) or https://www.apache.org/licenses/LICENSE-2.0)
+  * MIT license ([`LICENSE-MIT`](./LICENSE-MIT) or https://opensource.org/licenses/MIT)
 
 at your option.
 

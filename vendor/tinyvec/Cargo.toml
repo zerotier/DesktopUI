@@ -12,7 +12,7 @@
 [package]
 edition = "2018"
 name = "tinyvec"
-version = "1.5.0"
+version = "1.5.1"
 authors = ["Lokathor <zefria@gmail.com>"]
 description = "`tinyvec` provides 100% safe vec-like data structures."
 keywords = ["vec", "no_std", "no-std"]
@@ -25,6 +25,9 @@ rustdoc-args = ["--cfg", "docs_rs"]
 
 [package.metadata.playground]
 features = ["alloc", "std", "grab_spare_slice", "rustc_1_40", "rustc_1_55", "serde"]
+[profile.bench]
+debug = 2
+
 [profile.test]
 opt-level = 3
 
@@ -36,6 +39,11 @@ required-features = ["alloc", "std"]
 name = "macros"
 harness = false
 required-features = ["alloc"]
+
+[[bench]]
+name = "smallvec"
+harness = false
+required-features = ["alloc", "real_blackbox"]
 [dependencies.arbitrary]
 version = "1"
 optional = true
@@ -54,12 +62,16 @@ version = "0.3.0"
 [dev-dependencies.serde_test]
 version = "1.0"
 
+[dev-dependencies.smallvec]
+version = "1"
+
 [features]
 alloc = ["tinyvec_macros"]
 default = []
 experimental_write_impl = []
 grab_spare_slice = []
 nightly_slice_partition_dedup = []
+real_blackbox = ["criterion/real_blackbox"]
 rustc_1_40 = []
 rustc_1_55 = ["rustc_1_40"]
 std = []

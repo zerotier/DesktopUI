@@ -724,6 +724,14 @@ pub const POLLSTANDARD: ::c_short = ::POLLIN
     | ::POLLHUP
     | ::POLLNVAL;
 
+pub const AI_PASSIVE: ::c_int = 0x00000001;
+pub const AI_CANONNAME: ::c_int = 0x00000002;
+pub const AI_NUMERICHOST: ::c_int = 0x00000004;
+pub const AI_NUMERICSERV: ::c_int = 0x00000008;
+pub const AI_ALL: ::c_int = 0x00000100;
+pub const AI_ADDRCONFIG: ::c_int = 0x00000400;
+pub const AI_V4MAPPED: ::c_int = 0x00000800;
+
 pub const EAI_AGAIN: ::c_int = 2;
 pub const EAI_BADFLAGS: ::c_int = 3;
 pub const EAI_FAIL: ::c_int = 4;
@@ -1167,7 +1175,6 @@ pub const ST_NOSUID: ::c_ulong = 2;
 
 pub const NI_MAXHOST: ::size_t = 1025;
 
-pub const XU_NGROUPS: ::c_int = 16;
 pub const XUCRED_VERSION: ::c_uint = 0;
 
 pub const RTLD_LOCAL: ::c_int = 0;
@@ -1253,7 +1260,6 @@ pub const BIOCGRTIMEOUT: ::c_ulong = 0x4010426e;
 
 pub const FIODTYPE: ::c_ulong = 0x4004667a;
 pub const FIOGETLBA: ::c_ulong = 0x40046679;
-pub const FIODGNAME: ::c_ulong = 0x80106678;
 
 pub const B0: speed_t = 0;
 pub const B50: speed_t = 50;
@@ -1436,6 +1442,11 @@ extern "C" {
     pub fn duplocale(base: ::locale_t) -> ::locale_t;
     pub fn endutxent();
     pub fn fchflags(fd: ::c_int, flags: ::c_ulong) -> ::c_int;
+    pub fn fexecve(
+        fd: ::c_int,
+        argv: *const *const ::c_char,
+        envp: *const *const ::c_char,
+    ) -> ::c_int;
     pub fn futimens(fd: ::c_int, times: *const ::timespec) -> ::c_int;
     pub fn getdomainname(name: *mut ::c_char, len: ::c_int) -> ::c_int;
     pub fn getgrent_r(
@@ -1466,6 +1477,8 @@ extern "C" {
         flags: ::c_int,
     ) -> ::c_int;
     pub fn getpriority(which: ::c_int, who: ::c_int) -> ::c_int;
+    pub fn getresgid(rgid: *mut ::gid_t, egid: *mut ::gid_t, sgid: *mut ::gid_t) -> ::c_int;
+    pub fn getresuid(ruid: *mut ::uid_t, euid: *mut ::uid_t, suid: *mut ::uid_t) -> ::c_int;
     pub fn getutxent() -> *mut utmpx;
     pub fn getutxid(ut: *const utmpx) -> *mut utmpx;
     pub fn getutxline(ut: *const utmpx) -> *mut utmpx;
@@ -1721,6 +1734,13 @@ extern "C" {
         winp: *mut ::winsize,
     ) -> ::pid_t;
     pub fn login_tty(fd: ::c_int) -> ::c_int;
+    pub fn fparseln(
+        stream: *mut ::FILE,
+        len: *mut ::size_t,
+        lineno: *mut ::size_t,
+        delim: *const ::c_char,
+        flags: ::c_int,
+    ) -> *mut ::c_char;
 }
 
 #[link(name = "execinfo")]

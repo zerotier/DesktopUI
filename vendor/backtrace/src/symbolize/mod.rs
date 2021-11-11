@@ -66,7 +66,7 @@ pub fn resolve<F: FnMut(&Symbol)>(addr: *mut c_void, cb: F) {
 /// Resolve a previously capture frame to a symbol, passing the symbol to the
 /// specified closure.
 ///
-/// This functin performs the same function as `resolve` except that it takes a
+/// This function performs the same function as `resolve` except that it takes a
 /// `Frame` as an argument instead of an address. This can allow some platform
 /// implementations of backtracing to provide more accurate symbol information
 /// or information about inline frames for example. It's recommended to use this
@@ -474,6 +474,7 @@ cfg_if::cfg_if! {
         any(unix, windows),
         not(target_vendor = "uwp"),
         not(target_os = "emscripten"),
+        any(not(backtrace_in_libstd), feature = "backtrace"),
     ))] {
         mod gimli;
         use gimli as imp;

@@ -237,6 +237,21 @@ pub struct ImageVxdHeader {
     pub e32_ddkver: U16<LE>,
 }
 
+/// A PE rich header entry.
+///
+/// Rich headers have no official documentation, but have been heavily
+/// reversed-engineered and documented in the wild, e.g.:
+/// * `http://www.ntcore.com/files/richsign.htm`
+/// * `https://www.researchgate.net/figure/Structure-of-the-Rich-Header_fig1_318145388`
+///
+/// This data is "masked", i.e. XORed with a checksum derived from the file data.
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+pub struct MaskedRichHeaderEntry {
+    pub masked_comp_id: U32<LE>,
+    pub masked_count: U32<LE>,
+}
+
 //
 // File header format.
 //
@@ -663,7 +678,7 @@ pub const IMAGE_SIZEOF_SHORT_NAME: usize = 8;
 // Section header format.
 //
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 #[repr(C)]
 pub struct ImageSectionHeader {
     pub name: [u8; IMAGE_SIZEOF_SHORT_NAME],
@@ -1701,12 +1716,11 @@ pub struct ImageLinenumber {
 // Based relocation format.
 //
 
-// This struct has alignment 1.
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct ImageBaseRelocation {
-    pub virtual_address: U32Bytes<LE>,
-    pub size_of_block: U32Bytes<LE>,
+    pub virtual_address: U32<LE>,
+    pub size_of_block: U32<LE>,
     //  pub type_offset[1]: U16<LE>,
 }
 
@@ -1813,12 +1827,10 @@ pub struct ImageImportByName {
     //pub name: [i8; 1],
 }
 
-/*
-// TODO? unions
-
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
-pub struct ImageThunkData64 {
+pub struct ImageThunkData64(pub U64<LE>);
+/*
     union {
 /// PBYTE
         pub forwarder_string: U64<LE>,
@@ -1828,11 +1840,12 @@ pub struct ImageThunkData64 {
 /// PIMAGE_IMPORT_BY_NAME
         pub address_of_data: U64<LE>,
     } u1;
-}
+*/
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
-pub struct ImageThunkData32 {
+pub struct ImageThunkData32(pub U32<LE>);
+/*
     union {
 /// PBYTE
         pub forwarder_string: U32<LE>,
@@ -1902,6 +1915,18 @@ pub struct ImageImportDescriptor {
     pub name: U32Bytes<LE>,
     /// RVA to IAT (if bound this IAT has actual addresses)
     pub first_thunk: U32Bytes<LE>,
+}
+
+impl ImageImportDescriptor {
+    /// Tell whether this import descriptor is the null descriptor
+    /// (used to mark the end of the iterator array in a PE)
+    pub fn is_null(&self) -> bool {
+        self.original_first_thunk.get(LE) == 0
+            && self.time_date_stamp.get(LE) == 0
+            && self.forwarder_chain.get(LE) == 0
+            && self.name.get(LE) == 0
+            && self.first_thunk.get(LE) == 0
+    }
 }
 
 //
@@ -2905,8 +2930,8 @@ unsafe_impl_pod!(
     ImageArchiveMemberHeader,
     ImageExportDirectory,
     ImageImportByName,
-    //ImageThunkData64,
-    //ImageThunkData32,
+    ImageThunkData64,
+    ImageThunkData32,
     ImageTlsDirectory64,
     ImageTlsDirectory32,
     ImageImportDescriptor,
@@ -2955,4 +2980,5 @@ unsafe_impl_pod!(
     ImageArchitectureEntry,
     ImportObjectHeader,
     ImageCor20Header,
+    MaskedRichHeaderEntry,
 );

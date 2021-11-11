@@ -59,7 +59,6 @@ environment:
       #cargoflags: --features "unstable"
 
 ### GNU Toolchains ###
-
   # Stable 64-bit GNU
     - channel: stable
       target: x86_64-pc-windows-gnu
@@ -109,3 +108,7 @@ build: false
 # environment variable.
 test_script:
 - cargo test --verbose %cargoflags%
+
+skip_commits:
+  files:
+    - '*.md'

@@ -16,13 +16,16 @@
 //!
 //! ```toml
 //! [dependencies]
-//! strum = "0.21"
-//! strum_macros = "0.21"
+//! strum = "0.22"
+//! strum_macros = "0.22"
 //!
 //! # You can also access strum_macros exports directly through strum using the "derive" feature
-//! strum = { version = "0.21", features = ["derive"] }
+//! strum = { version = "0.22", features = ["derive"] }
 //! ```
 //!
+
+
+#![cfg_attr(not(feature = "std"), no_std)]
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
@@ -36,6 +39,7 @@ pub enum ParseError {
     VariantNotFound,
 }
 
+#[cfg(feature = "std")]
 impl std::fmt::Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
         // We could use our macro here, but this way we don't take a dependency on the
@@ -46,6 +50,7 @@ impl std::fmt::Display for ParseError {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for ParseError {
     fn description(&self) -> &str {
         match self {
@@ -163,7 +168,7 @@ pub trait EnumProperty {
 
 /// A cheap reference-to-reference conversion. Used to convert a value to a
 /// reference value with `'static` lifetime within generic code.
-/// #[deprecated(since="0.13.0", note="please use `#[derive(IntoStaticStr)]` instead")]
+#[deprecated(since="0.22.0", note="please use `#[derive(IntoStaticStr)]` instead")]
 pub trait AsStaticRef<T>
 where
     T: ?Sized,

@@ -183,17 +183,6 @@ s! {
         __unused4: ::c_ulong,
         __unused5: ::c_ulong
     }
-
-    pub struct termios2 {
-        pub c_iflag: ::tcflag_t,
-        pub c_oflag: ::tcflag_t,
-        pub c_cflag: ::tcflag_t,
-        pub c_lflag: ::tcflag_t,
-        pub c_line: ::cc_t,
-        pub c_cc: [::cc_t; 23],
-        pub c_ispeed: ::speed_t,
-        pub c_ospeed: ::speed_t,
-    }
 }
 
 pub const __SIZEOF_PTHREAD_CONDATTR_T: usize = 4;

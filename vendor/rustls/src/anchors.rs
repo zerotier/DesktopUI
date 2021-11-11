@@ -1,16 +1,10 @@
-use webpki;
-
 use crate::key;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
-pub use crate::msgs::handshake::{DistinguishedName, DistinguishedNames};
-use crate::pemfile;
+use crate::msgs::handshake::{DistinguishedName, DistinguishedNames};
 use crate::x509;
-use std::io;
 
-/// This is like a `webpki::TrustAnchor`, except it owns
-/// rather than borrows its memory.  That prevents lifetimes
-/// leaking up the object tree.
+/// A trust anchor, commonly known as a "Root Certificate."
 #[derive(Debug, Clone)]
 pub struct OwnedTrustAnchor {
     subject: Vec<u8>,
@@ -19,37 +13,33 @@ pub struct OwnedTrustAnchor {
 }
 
 impl OwnedTrustAnchor {
-    /// Copy a `webpki::TrustAnchor` into owned memory
-    pub fn from_trust_anchor(t: &webpki::TrustAnchor) -> OwnedTrustAnchor {
-        OwnedTrustAnchor {
-            subject: t.subject.to_vec(),
-            spki: t.spki.to_vec(),
-            name_constraints: t.name_constraints.map(|x| x.to_vec()),
-        }
-    }
-
     /// Get a `webpki::TrustAnchor` by borrowing the owned elements.
-    pub fn to_trust_anchor(&self) -> webpki::TrustAnchor {
+    pub(crate) fn to_trust_anchor(&self) -> webpki::TrustAnchor {
         webpki::TrustAnchor {
             subject: &self.subject,
             spki: &self.spki,
-            name_constraints: self
-                .name_constraints
-                .as_ref()
-                .map(Vec::as_slice),
+            name_constraints: self.name_constraints.as_deref(),
         }
     }
-}
 
-impl From<webpki::TrustAnchor<'_>> for OwnedTrustAnchor {
-    fn from(t: webpki::TrustAnchor) -> OwnedTrustAnchor {
-        Self::from_trust_anchor(&t)
-    }
-}
-
-impl<'a> Into<webpki::TrustAnchor<'a>> for &'a OwnedTrustAnchor {
-    fn into(self) -> webpki::TrustAnchor<'a> {
-        self.to_trust_anchor()
+    /// Constructs an `OwnedTrustAnchor` from its components.
+    ///
+    /// `subject` is the subject field of the trust anchor.
+    ///
+    /// `spki` is the `subjectPublicKeyInfo` field of the trust anchor.
+    ///
+    /// `name_constraints` is the value of a DER-encoded name constraints to
+    /// apply for this trust anchor, if any.
+    pub fn from_subject_spki_name_constraints(
+        subject: impl Into<Vec<u8>>,
+        spki: impl Into<Vec<u8>>,
+        name_constraints: Option<impl Into<Vec<u8>>>,
+    ) -> Self {
+        Self {
+            subject: subject.into(),
+            spki: spki.into(),
+            name_constraints: name_constraints.map(|x| x.into()),
+        }
     }
 }
 
@@ -63,8 +53,8 @@ pub struct RootCertStore {
 
 impl RootCertStore {
     /// Make a new, empty `RootCertStore`.
-    pub fn empty() -> RootCertStore {
-        RootCertStore { roots: Vec::new() }
+    pub fn empty() -> Self {
+        Self { roots: Vec::new() }
     }
 
     /// Return true if there are no certificates.
@@ -78,7 +68,7 @@ impl RootCertStore {
     }
 
     /// Return the Subject Names for certificates in the container.
-    pub fn get_subjects(&self) -> DistinguishedNames {
+    pub fn subjects(&self) -> DistinguishedNames {
         let mut r = DistinguishedNames::new();
 
         for ota in &self.roots {
@@ -93,9 +83,12 @@ impl RootCertStore {
 
     /// Add a single DER-encoded certificate to the store.
     pub fn add(&mut self, der: &key::Certificate) -> Result<(), webpki::Error> {
-        let ta = webpki::trust_anchor_util::cert_der_as_trust_anchor(&der.0)?;
-
-        let ota = OwnedTrustAnchor::from_trust_anchor(&ta);
+        let ta = webpki::TrustAnchor::try_from_cert_der(&der.0)?;
+        let ota = OwnedTrustAnchor::from_subject_spki_name_constraints(
+            ta.subject,
+            ta.spki,
+            ta.name_constraints,
+        );
         self.roots.push(ota);
         Ok(())
     }
@@ -104,35 +97,28 @@ impl RootCertStore {
     /// fail.
     pub fn add_server_trust_anchors(
         &mut self,
-        &webpki::TLSServerTrustAnchors(anchors): &webpki::TLSServerTrustAnchors,
+        trust_anchors: impl Iterator<Item = OwnedTrustAnchor>,
     ) {
-        for ta in anchors {
-            self.roots
-                .push(OwnedTrustAnchor::from_trust_anchor(ta));
-        }
+        self.roots.extend(trust_anchors)
     }
 
-    /// Parse a PEM file and add all certificates found inside.
-    /// Errors are non-specific; they may be io errors in `rd` and
-    /// PEM format errors, but not certificate validity errors.
+    /// Parse the given DER-encoded certificates and add all that can be parsed
+    /// in a best-effort fashion.
     ///
     /// This is because large collections of root certificates often
-    /// include ancient or syntactically invalid certificates.  CAs
-    /// are competent like that.
+    /// include ancient or syntactically invalid certificates.
     ///
-    /// Returns the number of certificates added, and the number
-    /// which were extracted from the PEM but ultimately unsuitable.
-    pub fn add_pem_file(&mut self, rd: &mut dyn io::BufRead) -> Result<(usize, usize), ()> {
-        let ders = pemfile::certs(rd)?;
+    /// Returns the number of certificates added, and the number that were ignored.
+    pub fn add_parsable_certificates(&mut self, der_certs: &[Vec<u8>]) -> (usize, usize) {
         let mut valid_count = 0;
         let mut invalid_count = 0;
 
-        for der in ders {
+        for der_cert in der_certs {
             #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
-            match self.add(&der) {
+            match self.add(&key::Certificate(der_cert.clone())) {
                 Ok(_) => valid_count += 1,
                 Err(err) => {
-                    trace!("invalid cert der {:?}", der);
+                    trace!("invalid cert der {:?}", der_cert);
                     debug!("certificate parsing failed: {:?}", err);
                     invalid_count += 1
                 }
@@ -140,10 +126,10 @@ impl RootCertStore {
         }
 
         debug!(
-            "add_pem_file processed {} valid and {} invalid certs",
+            "add_parsable_certificates processed {} valid and {} invalid certs",
             valid_count, invalid_count
         );
 
-        Ok((valid_count, invalid_count))
+        (valid_count, invalid_count)
     }
 }

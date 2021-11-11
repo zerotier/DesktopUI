@@ -1,16 +1,22 @@
 use crate::common::Register;
 
 macro_rules! registers {
-    ($struct_name:ident, { $($name:ident = ($val:expr, $disp:expr)),+ $(,)? }) => {
+    ($struct_name:ident, { $($name:ident = ($val:expr, $disp:expr)),+ $(,)? }
+        $(, aliases { $($alias_name:ident = ($alias_val:expr, $alias_disp:expr)),+ $(,)? })?) => {
         #[allow(missing_docs)]
         impl $struct_name {
             $(
                 pub const $name: Register = Register($val);
             )+
+            $(
+                $(pub const $alias_name: Register = Register($alias_val);)+
+            )*
         }
 
         impl $struct_name {
             /// The name of a register, or `None` if the register number is unknown.
+            ///
+            /// Only returns the primary name for registers that alias with others.
             pub fn register_name(register: Register) -> Option<&'static str> {
                 match register {
                     $(
@@ -26,6 +32,9 @@ macro_rules! registers {
                     $(
                         $disp => Some(Self::$name),
                     )+
+                    $(
+                        $($alias_disp => Some(Self::$alias_name),)+
+                    )*
                     _ => return None,
 		}
 	    }
@@ -35,11 +44,10 @@ macro_rules! registers {
 
 /// ARM architecture specific definitions.
 ///
-/// See [DWARF for the ARM Architecture](http://infocenter.arm.com/help/topic/com.arm.doc.ihi0040b/IHI0040B_aadwarf.pdf).
+/// See [DWARF for the ARM Architecture](https://developer.arm.com/documentation/ihi0040/c/).
 #[derive(Debug, Clone, Copy)]
 pub struct Arm;
 
-// TODO: add more registers.
 registers!(Arm, {
     R0 = (0, "R0"),
     R1 = (1, "R1"),
@@ -57,6 +65,371 @@ registers!(Arm, {
     R13 = (13, "R13"),
     R14 = (14, "R14"),
     R15 = (15, "R15"),
+
+    WCGR0 = (104, "wCGR0"),
+    WCGR1 = (105, "wCGR1"),
+    WCGR2 = (106, "wCGR2"),
+    WCGR3 = (107, "wCGR3"),
+    WCGR4 = (108, "wCGR4"),
+    WCGR5 = (109, "wCGR5"),
+    WCGR6 = (110, "wCGR6"),
+    WCGR7 = (111, "wCGR7"),
+
+    WR0 = (112, "wR0"),
+    WR1 = (113, "wR1"),
+    WR2 = (114, "wR2"),
+    WR3 = (115, "wR3"),
+    WR4 = (116, "wR4"),
+    WR5 = (117, "wR5"),
+    WR6 = (118, "wR6"),
+    WR7 = (119, "wR7"),
+    WR8 = (120, "wR8"),
+    WR9 = (121, "wR9"),
+    WR10 = (122, "wR10"),
+    WR11 = (123, "wR11"),
+    WR12 = (124, "wR12"),
+    WR13 = (125, "wR13"),
+    WR14 = (126, "wR14"),
+    WR15 = (127, "wR15"),
+
+    SPSR = (128, "SPSR"),
+    SPSR_FIQ = (129, "SPSR_FIQ"),
+    SPSR_IRQ = (130, "SPSR_IRQ"),
+    SPSR_ABT = (131, "SPSR_ABT"),
+    SPSR_UND = (132, "SPSR_UND"),
+    SPSR_SVC = (133, "SPSR_SVC"),
+
+    R8_USR = (144, "R8_USR"),
+    R9_USR = (145, "R9_USR"),
+    R10_USR = (146, "R10_USR"),
+    R11_USR = (147, "R11_USR"),
+    R12_USR = (148, "R12_USR"),
+    R13_USR = (149, "R13_USR"),
+    R14_USR = (150, "R14_USR"),
+
+    R8_FIQ = (151, "R8_FIQ"),
+    R9_FIQ = (152, "R9_FIQ"),
+    R10_FIQ = (153, "R10_FIQ"),
+    R11_FIQ = (154, "R11_FIQ"),
+    R12_FIQ = (155, "R12_FIQ"),
+    R13_FIQ = (156, "R13_FIQ"),
+    R14_FIQ = (157, "R14_FIQ"),
+
+    R13_IRQ = (158, "R13_IRQ"),
+    R14_IRQ = (159, "R14_IRQ"),
+
+    R13_ABT = (160, "R13_ABT"),
+    R14_ABT = (161, "R14_ABT"),
+
+    R13_UND = (162, "R13_UND"),
+    R14_UND = (163, "R14_UND"),
+
+    R13_SVC = (164, "R13_SVC"),
+    R14_SVC = (165, "R14_SVC"),
+
+    WC0 = (192, "wC0"),
+    WC1 = (193, "wC1"),
+    WC2 = (194, "wC2"),
+    WC3 = (195, "wC3"),
+    WC4 = (196, "wC4"),
+    WC5 = (197, "wC5"),
+    WC6 = (198, "wC6"),
+    WC7 = (199, "wC7"),
+
+    D0 = (256, "D0"),
+    D1 = (257, "D1"),
+    D2 = (258, "D2"),
+    D3 = (259, "D3"),
+    D4 = (260, "D4"),
+    D5 = (261, "D5"),
+    D6 = (262, "D6"),
+    D7 = (263, "D7"),
+    D8 = (264, "D8"),
+    D9 = (265, "D9"),
+    D10 = (266, "D10"),
+    D11 = (267, "D11"),
+    D12 = (268, "D12"),
+    D13 = (269, "D13"),
+    D14 = (270, "D14"),
+    D15 = (271, "D15"),
+    D16 = (272, "D16"),
+    D17 = (273, "D17"),
+    D18 = (274, "D18"),
+    D19 = (275, "D19"),
+    D20 = (276, "D20"),
+    D21 = (277, "D21"),
+    D22 = (278, "D22"),
+    D23 = (279, "D23"),
+    D24 = (280, "D24"),
+    D25 = (281, "D25"),
+    D26 = (282, "D26"),
+    D27 = (283, "D27"),
+    D28 = (284, "D28"),
+    D29 = (285, "D29"),
+    D30 = (286, "D30"),
+    D31 = (287, "D31"),
+},
+aliases {
+    SP = (13, "SP"),
+    LR = (14, "LR"),
+    PC = (15, "PC"),
+
+    ACC0 = (104, "ACC0"),
+    ACC1 = (105, "ACC1"),
+    ACC2 = (106, "ACC2"),
+    ACC3 = (107, "ACC3"),
+    ACC4 = (108, "ACC4"),
+    ACC5 = (109, "ACC5"),
+    ACC6 = (110, "ACC6"),
+    ACC7 = (111, "ACC7"),
+
+    S0 = (256, "S0"),
+    S1 = (256, "S1"),
+    S2 = (257, "S2"),
+    S3 = (257, "S3"),
+    S4 = (258, "S4"),
+    S5 = (258, "S5"),
+    S6 = (259, "S6"),
+    S7 = (259, "S7"),
+    S8 = (260, "S8"),
+    S9 = (260, "S9"),
+    S10 = (261, "S10"),
+    S11 = (261, "S11"),
+    S12 = (262, "S12"),
+    S13 = (262, "S13"),
+    S14 = (263, "S14"),
+    S15 = (263, "S15"),
+    S16 = (264, "S16"),
+    S17 = (264, "S17"),
+    S18 = (265, "S18"),
+    S19 = (265, "S19"),
+    S20 = (266, "S20"),
+    S21 = (266, "S21"),
+    S22 = (267, "S22"),
+    S23 = (267, "S23"),
+    S24 = (268, "S24"),
+    S25 = (268, "S25"),
+    S26 = (269, "S26"),
+    S27 = (269, "S27"),
+    S28 = (270, "S28"),
+    S29 = (270, "S29"),
+    S30 = (271, "S30"),
+    S31 = (271, "S31"),
+});
+
+/// ARM 64-bit (AArch64) architecture specific definitions.
+///
+/// See [DWARF for the ARM 64-bit Architecture](https://developer.arm.com/documentation/ihi0057/b/).
+#[derive(Debug, Clone, Copy)]
+pub struct AArch64;
+
+registers!(AArch64, {
+    X0 = (0, "X0"),
+    X1 = (1, "X1"),
+    X2 = (2, "X2"),
+    X3 = (3, "X3"),
+    X4 = (4, "X4"),
+    X5 = (5, "X5"),
+    X6 = (6, "X6"),
+    X7 = (7, "X7"),
+    X8 = (8, "X8"),
+    X9 = (9, "X9"),
+    X10 = (10, "X10"),
+    X11 = (11, "X11"),
+    X12 = (12, "X12"),
+    X13 = (13, "X13"),
+    X14 = (14, "X14"),
+    X15 = (15, "X15"),
+    X16 = (16, "X16"),
+    X17 = (17, "X17"),
+    X18 = (18, "X18"),
+    X19 = (19, "X19"),
+    X20 = (20, "X20"),
+    X21 = (21, "X21"),
+    X22 = (22, "X22"),
+    X23 = (23, "X23"),
+    X24 = (24, "X24"),
+    X25 = (25, "X25"),
+    X26 = (26, "X26"),
+    X27 = (27, "X27"),
+    X28 = (28, "X28"),
+    X29 = (29, "X29"),
+    X30 = (30, "X30"),
+    SP = (31, "SP"),
+
+    V0 = (64, "V0"),
+    V1 = (65, "V1"),
+    V2 = (66, "V2"),
+    V3 = (67, "V3"),
+    V4 = (68, "V4"),
+    V5 = (69, "V5"),
+    V6 = (70, "V6"),
+    V7 = (71, "V7"),
+    V8 = (72, "V8"),
+    V9 = (73, "V9"),
+    V10 = (74, "V10"),
+    V11 = (75, "V11"),
+    V12 = (76, "V12"),
+    V13 = (77, "V13"),
+    V14 = (78, "V14"),
+    V15 = (79, "V15"),
+    V16 = (80, "V16"),
+    V17 = (81, "V17"),
+    V18 = (82, "V18"),
+    V19 = (83, "V19"),
+    V20 = (84, "V20"),
+    V21 = (85, "V21"),
+    V22 = (86, "V22"),
+    V23 = (87, "V23"),
+    V24 = (88, "V24"),
+    V25 = (89, "V25"),
+    V26 = (90, "V26"),
+    V27 = (91, "V27"),
+    V28 = (92, "V28"),
+    V29 = (93, "V29"),
+    V30 = (94, "V30"),
+    V31 = (95, "V31"),
+});
+
+/// RISC-V architecture specific definitions.
+///
+/// See [RISC-V ELF psABI specification](https://github.com/riscv/riscv-elf-psabi-doc).
+#[derive(Debug, Clone, Copy)]
+pub struct RiscV;
+
+registers!(RiscV, {
+    X0 = (0, "x0"),
+    X1 = (1, "x1"),
+    X2 = (2, "x2"),
+    X3 = (3, "x3"),
+    X4 = (4, "x4"),
+    X5 = (5, "x5"),
+    X6 = (6, "x6"),
+    X7 = (7, "x7"),
+    X8 = (8, "x8"),
+    X9 = (9, "x9"),
+    X10 = (10, "x10"),
+    X11 = (11, "x11"),
+    X12 = (12, "x12"),
+    X13 = (13, "x13"),
+    X14 = (14, "x14"),
+    X15 = (15, "x15"),
+    X16 = (16, "x16"),
+    X17 = (17, "x17"),
+    X18 = (18, "x18"),
+    X19 = (19, "x19"),
+    X20 = (20, "x20"),
+    X21 = (21, "x21"),
+    X22 = (22, "x22"),
+    X23 = (23, "x23"),
+    X24 = (24, "x24"),
+    X25 = (25, "x25"),
+    X26 = (26, "x26"),
+    X27 = (27, "x27"),
+    X28 = (28, "x28"),
+    X29 = (29, "x29"),
+    X30 = (30, "x30"),
+    X31 = (31, "x31"),
+
+    F0 = (32, "f0"),
+    F1 = (33, "f1"),
+    F2 = (34, "f2"),
+    F3 = (35, "f3"),
+    F4 = (36, "f4"),
+    F5 = (37, "f5"),
+    F6 = (38, "f6"),
+    F7 = (39, "f7"),
+    F8 = (40, "f8"),
+    F9 = (41, "f9"),
+    F10 = (42, "f10"),
+    F11 = (43, "f11"),
+    F12 = (44, "f12"),
+    F13 = (45, "f13"),
+    F14 = (46, "f14"),
+    F15 = (47, "f15"),
+    F16 = (48, "f16"),
+    F17 = (49, "f17"),
+    F18 = (50, "f18"),
+    F19 = (51, "f19"),
+    F20 = (52, "f20"),
+    F21 = (53, "f21"),
+    F22 = (54, "f22"),
+    F23 = (55, "f23"),
+    F24 = (56, "f24"),
+    F25 = (57, "f25"),
+    F26 = (58, "f26"),
+    F27 = (59, "f27"),
+    F28 = (60, "f28"),
+    F29 = (61, "f29"),
+    F30 = (62, "f30"),
+    F31 = (63, "f31"),
+},
+aliases {
+    ZERO = (0, "zero"),
+    RA = (1, "ra"),
+    SP = (2, "sp"),
+    GP = (3, "gp"),
+    TP = (4, "tp"),
+    T0 = (5, "t0"),
+    T1 = (6, "t1"),
+    T2 = (7, "t2"),
+    S0 = (8, "s0"),
+    S1 = (9, "s1"),
+    A0 = (10, "a0"),
+    A1 = (11, "a1"),
+    A2 = (12, "a2"),
+    A3 = (13, "a3"),
+    A4 = (14, "a4"),
+    A5 = (15, "a5"),
+    A6 = (16, "a6"),
+    A7 = (17, "a7"),
+    S2 = (18, "s2"),
+    S3 = (19, "s3"),
+    S4 = (20, "s4"),
+    S5 = (21, "s5"),
+    S6 = (22, "s6"),
+    S7 = (23, "s7"),
+    S8 = (24, "s8"),
+    S9 = (25, "s9"),
+    S10 = (26, "s10"),
+    S11 = (27, "s11"),
+    T3 = (28, "t3"),
+    T4 = (29, "t4"),
+    T5 = (30, "t5"),
+    T6 = (31, "t6"),
+
+    FT0 = (32, "ft0"),
+    FT1 = (33, "ft1"),
+    FT2 = (34, "ft2"),
+    FT3 = (35, "ft3"),
+    FT4 = (36, "ft4"),
+    FT5 = (37, "ft5"),
+    FT6 = (38, "ft6"),
+    FT7 = (39, "ft7"),
+    FS0 = (40, "fs0"),
+    FS1 = (41, "fs1"),
+    FA0 = (42, "fa0"),
+    FA1 = (43, "fa1"),
+    FA2 = (44, "fa2"),
+    FA3 = (45, "fa3"),
+    FA4 = (46, "fa4"),
+    FA5 = (47, "fa5"),
+    FA6 = (48, "fa6"),
+    FA7 = (49, "fa7"),
+    FS2 = (50, "fs2"),
+    FS3 = (51, "fs3"),
+    FS4 = (52, "fs4"),
+    FS5 = (53, "fs5"),
+    FS6 = (54, "fs6"),
+    FS7 = (55, "fs7"),
+    FS8 = (56, "fs8"),
+    FS9 = (57, "fs9"),
+    FS10 = (58, "fs10"),
+    FS11 = (59, "fs11"),
+    FT8 = (60, "ft8"),
+    FT9 = (61, "ft9"),
+    FT10 = (62, "ft10"),
+    FT11 = (63, "ft11"),
 });
 
 /// Intel i386 architecture specific definitions.

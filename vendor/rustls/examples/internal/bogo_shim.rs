@@ -7,22 +7,22 @@
 use base64;
 use env_logger;
 use rustls;
-use sct;
-use webpki;
 
 use rustls::internal::msgs::enums::ProtocolVersion;
-use rustls::quic::ClientQuicExt;
-use rustls::quic::ServerQuicExt;
-use rustls::ClientHello;
+use rustls::quic::{self, ClientQuicExt, QuicExt, ServerQuicExt};
+use rustls::server::ClientHello;
+use rustls::{ClientConnection, Connection};
+
+use std::convert::TryInto;
 use std::env;
 use std::fs;
 use std::io;
 use std::io::BufReader;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::net;
-use std::ops::{Deref, DerefMut};
 use std::process;
 use std::sync::Arc;
+use std::time::SystemTime;
 
 static BOGO_NACK: i32 = 89;
 
@@ -36,7 +36,7 @@ macro_rules! println_err(
 struct Options {
     port: u16,
     server: bool,
-    mtu: Option<usize>,
+    max_fragment: Option<usize>,
     resumes: usize,
     verify_peer: bool,
     require_any_client_cert: bool,
@@ -44,6 +44,9 @@ struct Options {
     tickets: bool,
     resume_with_tickets_disabled: bool,
     queue_data: bool,
+    queue_data_on_resume: bool,
+    only_write_one_byte_after_handshake: bool,
+    only_write_one_byte_after_handshake_on_resume: bool,
     shut_down_after_handshake: bool,
     check_close_notify: bool,
     host_name: String,
@@ -60,6 +63,7 @@ struct Options {
     server_sct_list: Vec<u8>,
     use_signing_scheme: u16,
     expect_curve: u16,
+    curves: Option<Vec<u16>>,
     export_keying_material: usize,
     export_keying_material_label: String,
     export_keying_material_context: String,
@@ -71,16 +75,15 @@ struct Options {
     expect_ticket_supports_early_data: bool,
     expect_accept_early_data: bool,
     expect_reject_early_data: bool,
-    queue_data_on_resume: bool,
     expect_version: u16,
 }
 
 impl Options {
-    fn new() -> Options {
+    fn new() -> Self {
         Options {
             port: 0,
             server: false,
-            mtu: None,
+            max_fragment: None,
             resumes: 0,
             verify_peer: false,
             tickets: true,
@@ -89,6 +92,9 @@ impl Options {
             use_sni: false,
             send_sct: false,
             queue_data: false,
+            queue_data_on_resume: false,
+            only_write_one_byte_after_handshake: false,
+            only_write_one_byte_after_handshake_on_resume: false,
             shut_down_after_handshake: false,
             check_close_notify: false,
             require_any_client_cert: false,
@@ -104,6 +110,7 @@ impl Options {
             server_sct_list: vec![],
             use_signing_scheme: 0,
             expect_curve: 0,
+            curves: None,
             export_keying_material: 0,
             export_keying_material_label: "".to_string(),
             export_keying_material_context: "".to_string(),
@@ -115,7 +122,6 @@ impl Options {
             expect_ticket_supports_early_data: false,
             expect_accept_early_data: false,
             expect_reject_early_data: false,
-            queue_data_on_resume: false,
             expect_version: 0,
         }
     }
@@ -126,28 +132,43 @@ impl Options {
     }
 
     fn tls13_supported(&self) -> bool {
-        self.support_tls13
-            && (self.version_allowed(ProtocolVersion::TLSv1_3)
-                || self.version_allowed(ProtocolVersion::Unknown(0x7f17)))
+        self.support_tls13 && self.version_allowed(ProtocolVersion::TLSv1_3)
     }
 
     fn tls12_supported(&self) -> bool {
         self.support_tls12 && self.version_allowed(ProtocolVersion::TLSv1_2)
+    }
+
+    fn supported_versions(&self) -> Vec<&'static rustls::SupportedProtocolVersion> {
+        let mut versions = vec![];
+
+        if self.tls12_supported() {
+            versions.push(&rustls::version::TLS12);
+        }
+
+        if self.tls13_supported() {
+            versions.push(&rustls::version::TLS13);
+        }
+        versions
     }
 }
 
 fn load_cert(filename: &str) -> Vec<rustls::Certificate> {
     let certfile = fs::File::open(filename).expect("cannot open certificate file");
     let mut reader = BufReader::new(certfile);
-    rustls::internal::pemfile::certs(&mut reader).unwrap()
+    rustls_pemfile::certs(&mut reader)
+        .unwrap()
+        .iter()
+        .map(|v| rustls::Certificate(v.clone()))
+        .collect()
 }
 
 fn load_key(filename: &str) -> rustls::PrivateKey {
     let keyfile = fs::File::open(filename).expect("cannot open private key file");
     let mut reader = BufReader::new(keyfile);
-    let keys = rustls::internal::pemfile::pkcs8_private_keys(&mut reader).unwrap();
+    let keys = rustls_pemfile::pkcs8_private_keys(&mut reader).unwrap();
     assert!(keys.len() == 1);
-    keys[0].clone()
+    rustls::PrivateKey(keys[0].clone())
 }
 
 fn split_protocols(protos: &str) -> Vec<String> {
@@ -168,47 +189,53 @@ struct DummyClientAuth {
     mandatory: bool,
 }
 
-impl rustls::ClientCertVerifier for DummyClientAuth {
+impl rustls::server::ClientCertVerifier for DummyClientAuth {
     fn offer_client_auth(&self) -> bool {
         true
     }
 
-    fn client_auth_mandatory(&self, _sni: Option<&webpki::DNSName>) -> Option<bool> {
+    fn client_auth_mandatory(&self) -> Option<bool> {
         Some(self.mandatory)
     }
 
-    fn client_auth_root_subjects(
-        &self,
-        _sni: Option<&webpki::DNSName>,
-    ) -> Option<rustls::DistinguishedNames> {
+    fn client_auth_root_subjects(&self) -> Option<rustls::DistinguishedNames> {
         Some(rustls::DistinguishedNames::new())
     }
 
     fn verify_client_cert(
         &self,
-        _certs: &[rustls::Certificate],
-        _sni: Option<&webpki::DNSName>,
-    ) -> Result<rustls::ClientCertVerified, rustls::TLSError> {
-        Ok(rustls::ClientCertVerified::assertion())
+        _end_entity: &rustls::Certificate,
+        _intermediates: &[rustls::Certificate],
+        _now: SystemTime,
+    ) -> Result<rustls::server::ClientCertVerified, rustls::Error> {
+        Ok(rustls::server::ClientCertVerified::assertion())
     }
 }
 
-struct DummyServerAuth {}
+struct DummyServerAuth {
+    send_sct: bool,
+}
 
-impl rustls::ServerCertVerifier for DummyServerAuth {
+impl rustls::client::ServerCertVerifier for DummyServerAuth {
     fn verify_server_cert(
         &self,
-        _roots: &rustls::RootCertStore,
+        _end_entity: &rustls::Certificate,
         _certs: &[rustls::Certificate],
-        _hostname: webpki::DNSNameRef<'_>,
+        _hostname: &rustls::ServerName,
+        _scts: &mut dyn Iterator<Item = &[u8]>,
         _ocsp: &[u8],
-    ) -> Result<rustls::ServerCertVerified, rustls::TLSError> {
-        Ok(rustls::ServerCertVerified::assertion())
+        _now: SystemTime,
+    ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
+        Ok(rustls::client::ServerCertVerified::assertion())
+    }
+
+    fn request_scts(&self) -> bool {
+        self.send_sct
     }
 }
 
 struct FixedSignatureSchemeSigningKey {
-    key: Arc<Box<dyn rustls::sign::SigningKey>>,
+    key: Arc<dyn rustls::sign::SigningKey>,
     scheme: rustls::SignatureScheme,
 }
 
@@ -229,42 +256,42 @@ impl rustls::sign::SigningKey for FixedSignatureSchemeSigningKey {
 }
 
 struct FixedSignatureSchemeServerCertResolver {
-    resolver: Arc<dyn rustls::ResolvesServerCert>,
+    resolver: Arc<dyn rustls::server::ResolvesServerCert>,
     scheme: rustls::SignatureScheme,
 }
 
-impl rustls::ResolvesServerCert for FixedSignatureSchemeServerCertResolver {
-    fn resolve(&self, client_hello: ClientHello) -> Option<rustls::sign::CertifiedKey> {
+impl rustls::server::ResolvesServerCert for FixedSignatureSchemeServerCertResolver {
+    fn resolve(&self, client_hello: ClientHello) -> Option<Arc<rustls::sign::CertifiedKey>> {
         let mut certkey = self.resolver.resolve(client_hello)?;
-        certkey.key = Arc::new(Box::new(FixedSignatureSchemeSigningKey {
+        Arc::make_mut(&mut certkey).key = Arc::new(FixedSignatureSchemeSigningKey {
             key: certkey.key.clone(),
             scheme: self.scheme,
-        }));
+        });
         Some(certkey)
     }
 }
 
 struct FixedSignatureSchemeClientCertResolver {
-    resolver: Arc<dyn rustls::ResolvesClientCert>,
+    resolver: Arc<dyn rustls::client::ResolvesClientCert>,
     scheme: rustls::SignatureScheme,
 }
 
-impl rustls::ResolvesClientCert for FixedSignatureSchemeClientCertResolver {
+impl rustls::client::ResolvesClientCert for FixedSignatureSchemeClientCertResolver {
     fn resolve(
         &self,
         acceptable_issuers: &[&[u8]],
         sigschemes: &[rustls::SignatureScheme],
-    ) -> Option<rustls::sign::CertifiedKey> {
+    ) -> Option<Arc<rustls::sign::CertifiedKey>> {
         if !sigschemes.contains(&self.scheme) {
             quit(":NO_COMMON_SIGNATURE_ALGORITHMS:");
         }
         let mut certkey = self
             .resolver
             .resolve(acceptable_issuers, sigschemes)?;
-        certkey.key = Arc::new(Box::new(FixedSignatureSchemeSigningKey {
+        Arc::make_mut(&mut certkey).key = Arc::new(FixedSignatureSchemeSigningKey {
             key: certkey.key.clone(),
             scheme: self.scheme,
-        }));
+        });
         Some(certkey)
     }
 
@@ -293,6 +320,18 @@ fn lookup_scheme(scheme: u16) -> rustls::SignatureScheme {
     }
 }
 
+fn lookup_kx_group(group: u16) -> &'static rustls::SupportedKxGroup {
+    match group {
+        0x001d => &rustls::kx_group::X25519,
+        0x0017 => &rustls::kx_group::SECP256R1,
+        0x0018 => &rustls::kx_group::SECP384R1,
+        _ => {
+            println_err!("Unsupported kx group {:04x}", group);
+            process::exit(BOGO_NACK);
+        }
+    }
+}
+
 fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
     let client_auth =
         if opts.verify_peer || opts.offer_no_client_cas || opts.require_any_client_cert {
@@ -300,24 +339,38 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
                 mandatory: opts.require_any_client_cert,
             })
         } else {
-            rustls::NoClientAuth::new()
+            rustls::server::NoClientAuth::new()
         };
-
-    let mut cfg = rustls::ServerConfig::new(client_auth);
-    let persist = rustls::ServerSessionMemoryCache::new(32);
-    cfg.set_persistence(persist);
-
-    cfg.mtu = opts.mtu;
 
     let cert = load_cert(&opts.cert_file);
     let key = load_key(&opts.key_file);
-    cfg.set_single_cert_with_ocsp_and_sct(
-        cert.clone(),
-        key,
-        opts.server_ocsp_response.clone(),
-        opts.server_sct_list.clone(),
-    )
-    .unwrap();
+
+    let kx_groups = if let Some(curves) = &opts.curves {
+        curves
+            .iter()
+            .map(|curveid| lookup_kx_group(*curveid))
+            .collect()
+    } else {
+        rustls::ALL_KX_GROUPS.to_vec()
+    };
+
+    let mut cfg = rustls::ServerConfig::builder()
+        .with_safe_default_cipher_suites()
+        .with_kx_groups(&kx_groups)
+        .with_protocol_versions(&opts.supported_versions())
+        .unwrap()
+        .with_client_cert_verifier(client_auth)
+        .with_single_cert_with_ocsp_and_sct(
+            cert.clone(),
+            key,
+            opts.server_ocsp_response.clone(),
+            opts.server_sct_list.clone(),
+        )
+        .unwrap();
+
+    cfg.session_storage = rustls::server::ServerSessionMemoryCache::new(32);
+    cfg.max_fragment_size = opts.max_fragment;
+
     if opts.use_signing_scheme > 0 {
         let scheme = lookup_scheme(opts.use_signing_scheme);
         cfg.cert_resolver = Arc::new(FixedSignatureSchemeServerCertResolver {
@@ -327,49 +380,33 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
     }
 
     if opts.tickets {
-        cfg.ticketer = rustls::Ticketer::new();
+        cfg.ticketer = rustls::Ticketer::new().unwrap();
     } else if opts.resumes == 0 {
-        cfg.set_persistence(Arc::new(rustls::NoServerSessionStorage {}));
+        cfg.session_storage = Arc::new(rustls::server::NoServerSessionStorage {});
     }
 
     if !opts.protocols.is_empty() {
-        cfg.set_protocols(
-            &opts
-                .protocols
-                .iter()
-                .map(|proto| proto.as_bytes().to_vec())
-                .collect::<Vec<_>>()[..],
-        );
-    }
-
-    cfg.versions.clear();
-
-    if opts.tls12_supported() {
-        cfg.versions
-            .push(ProtocolVersion::TLSv1_2);
-    }
-
-    if opts.tls13_supported() {
-        cfg.versions
-            .push(ProtocolVersion::TLSv1_3);
+        cfg.alpn_protocols = opts
+            .protocols
+            .iter()
+            .map(|proto| proto.as_bytes().to_vec())
+            .collect::<Vec<_>>();
     }
 
     Arc::new(cfg)
 }
 
-static EMPTY_LOGS: [&sct::Log<'_>; 0] = [];
-
-struct ClientCacheWithoutKxHints(Arc<rustls::ClientSessionMemoryCache>);
+struct ClientCacheWithoutKxHints(Arc<rustls::client::ClientSessionMemoryCache>);
 
 impl ClientCacheWithoutKxHints {
     fn new() -> Arc<ClientCacheWithoutKxHints> {
         Arc::new(ClientCacheWithoutKxHints(
-            rustls::ClientSessionMemoryCache::new(32),
+            rustls::client::ClientSessionMemoryCache::new(32),
         ))
     }
 }
 
-impl rustls::StoresClientSessions for ClientCacheWithoutKxHints {
+impl rustls::client::StoresClientSessions for ClientCacheWithoutKxHints {
     fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool {
         if key.len() > 2 && key[0] == b'k' && key[1] == b'x' {
             true
@@ -384,25 +421,31 @@ impl rustls::StoresClientSessions for ClientCacheWithoutKxHints {
 }
 
 fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
-    let mut cfg = rustls::ClientConfig::new();
-    let persist = ClientCacheWithoutKxHints::new();
-    cfg.set_persistence(persist);
-    cfg.root_store
-        .add(&load_cert("cert.pem")[0])
-        .unwrap();
-    cfg.enable_sni = opts.use_sni;
-    cfg.mtu = opts.mtu;
+    let kx_groups = if let Some(curves) = &opts.curves {
+        curves
+            .iter()
+            .map(|curveid| lookup_kx_group(*curveid))
+            .collect()
+    } else {
+        rustls::ALL_KX_GROUPS.to_vec()
+    };
 
-    if opts.send_sct {
-        cfg.ct_logs = Some(&EMPTY_LOGS);
-    }
+    let cfg = rustls::ClientConfig::builder()
+        .with_safe_default_cipher_suites()
+        .with_kx_groups(&kx_groups)
+        .with_protocol_versions(&opts.supported_versions())
+        .expect("inconsistent settings")
+        .with_custom_certificate_verifier(Arc::new(DummyServerAuth {
+            send_sct: opts.send_sct,
+        }));
 
-    if !opts.cert_file.is_empty() && !opts.key_file.is_empty() {
+    let mut cfg = if !opts.cert_file.is_empty() && !opts.key_file.is_empty() {
         let cert = load_cert(&opts.cert_file);
         let key = load_key(&opts.key_file);
-        cfg.set_single_client_cert(cert, key)
-            .unwrap();
-    }
+        cfg.with_single_cert(cert, key).unwrap()
+    } else {
+        cfg.with_no_client_auth()
+    };
 
     if !opts.cert_file.is_empty() && opts.use_signing_scheme > 0 {
         let scheme = lookup_scheme(opts.use_signing_scheme);
@@ -412,29 +455,17 @@ fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
         });
     }
 
-    cfg.dangerous()
-        .set_certificate_verifier(Arc::new(DummyServerAuth {}));
+    let persist = ClientCacheWithoutKxHints::new();
+    cfg.session_storage = persist;
+    cfg.enable_sni = opts.use_sni;
+    cfg.max_fragment_size = opts.max_fragment;
 
     if !opts.protocols.is_empty() {
-        cfg.set_protocols(
-            &opts
-                .protocols
-                .iter()
-                .map(|proto| proto.as_bytes().to_vec())
-                .collect::<Vec<_>>()[..],
-        );
-    }
-
-    cfg.versions.clear();
-
-    if opts.tls12_supported() {
-        cfg.versions
-            .push(ProtocolVersion::TLSv1_2);
-    }
-
-    if opts.tls13_supported() {
-        cfg.versions
-            .push(ProtocolVersion::TLSv1_3);
+        cfg.alpn_protocols = opts
+            .protocols
+            .iter()
+            .map(|proto| proto.as_bytes().to_vec())
+            .collect();
     }
 
     if opts.enable_early_data {
@@ -454,49 +485,45 @@ fn quit_err(why: &str) -> ! {
     process::exit(1)
 }
 
-fn handle_err(err: rustls::TLSError) -> ! {
+fn handle_err(err: rustls::Error) -> ! {
     use rustls::internal::msgs::enums::{AlertDescription, ContentType};
-    use rustls::TLSError;
+    use rustls::Error;
     use std::{thread, time};
 
     println!("TLS error: {:?}", err);
     thread::sleep(time::Duration::from_millis(100));
 
     match err {
-        TLSError::InappropriateHandshakeMessage { .. } | TLSError::InappropriateMessage { .. } => {
+        Error::InappropriateHandshakeMessage { .. } | Error::InappropriateMessage { .. } => {
             quit(":UNEXPECTED_MESSAGE:")
         }
-        TLSError::AlertReceived(AlertDescription::RecordOverflow) => {
+        Error::AlertReceived(AlertDescription::RecordOverflow) => {
             quit(":TLSV1_ALERT_RECORD_OVERFLOW:")
         }
-        TLSError::AlertReceived(AlertDescription::HandshakeFailure) => quit(":HANDSHAKE_FAILURE:"),
-        TLSError::AlertReceived(AlertDescription::ProtocolVersion) => quit(":WRONG_VERSION:"),
-        TLSError::AlertReceived(AlertDescription::InternalError) => {
+        Error::AlertReceived(AlertDescription::HandshakeFailure) => quit(":HANDSHAKE_FAILURE:"),
+        Error::AlertReceived(AlertDescription::ProtocolVersion) => quit(":WRONG_VERSION:"),
+        Error::AlertReceived(AlertDescription::InternalError) => {
             quit(":PEER_ALERT_INTERNAL_ERROR:")
         }
-        TLSError::CorruptMessagePayload(ContentType::Alert) => quit(":BAD_ALERT:"),
-        TLSError::CorruptMessagePayload(ContentType::ChangeCipherSpec) => {
+        Error::CorruptMessagePayload(ContentType::Alert) => quit(":BAD_ALERT:"),
+        Error::CorruptMessagePayload(ContentType::ChangeCipherSpec) => {
             quit(":BAD_CHANGE_CIPHER_SPEC:")
         }
-        TLSError::CorruptMessagePayload(ContentType::Handshake) => quit(":BAD_HANDSHAKE_MSG:"),
-        TLSError::CorruptMessagePayload(ContentType::Unknown(42)) => quit(":GARBAGE:"),
-        TLSError::CorruptMessage => quit(":GARBAGE:"),
-        TLSError::DecryptError => quit(":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:"),
-        TLSError::PeerIncompatibleError(_) => quit(":INCOMPATIBLE:"),
-        TLSError::PeerMisbehavedError(_) => quit(":PEER_MISBEHAVIOUR:"),
-        TLSError::NoCertificatesPresented => quit(":NO_CERTS:"),
-        TLSError::AlertReceived(AlertDescription::UnexpectedMessage) => quit(":BAD_ALERT:"),
-        TLSError::AlertReceived(AlertDescription::DecompressionFailure) => {
+        Error::CorruptMessagePayload(ContentType::Handshake) => quit(":BAD_HANDSHAKE_MSG:"),
+        Error::CorruptMessagePayload(ContentType::Unknown(42)) => quit(":GARBAGE:"),
+        Error::CorruptMessage => quit(":GARBAGE:"),
+        Error::DecryptError => quit(":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:"),
+        Error::PeerIncompatibleError(_) => quit(":INCOMPATIBLE:"),
+        Error::PeerMisbehavedError(_) => quit(":PEER_MISBEHAVIOUR:"),
+        Error::NoCertificatesPresented => quit(":NO_CERTS:"),
+        Error::AlertReceived(AlertDescription::UnexpectedMessage) => quit(":BAD_ALERT:"),
+        Error::AlertReceived(AlertDescription::DecompressionFailure) => {
             quit_err(":SSLV3_ALERT_DECOMPRESSION_FAILURE:")
         }
-        TLSError::WebPKIError(webpki::Error::BadDER) => quit(":CANNOT_PARSE_LEAF_CERT:"),
-        TLSError::WebPKIError(webpki::Error::InvalidSignatureForPublicKey) => {
-            quit(":BAD_SIGNATURE:")
-        }
-        TLSError::WebPKIError(webpki::Error::UnsupportedSignatureAlgorithmForPublicKey) => {
-            quit(":WRONG_SIGNATURE_TYPE:")
-        }
-        TLSError::PeerSentOversizedRecord => quit(":DATA_LENGTH_TOO_LONG:"),
+        Error::InvalidCertificateEncoding => quit(":CANNOT_PARSE_LEAF_CERT:"),
+        Error::InvalidCertificateSignature => quit(":BAD_SIGNATURE:"),
+        Error::InvalidCertificateSignatureType => quit(":WRONG_SIGNATURE_TYPE:"),
+        Error::PeerSentOversizedRecord => quit(":DATA_LENGTH_TOO_LONG:"),
         _ => {
             println_err!("unhandled error: {:?}", err);
             quit(":FIXME:")
@@ -504,7 +531,7 @@ fn handle_err(err: rustls::TLSError) -> ! {
     }
 }
 
-fn flush(sess: &mut ClientOrServer, conn: &mut net::TcpStream) {
+fn flush(sess: &mut Connection, conn: &mut net::TcpStream) {
     while sess.wants_write() {
         match sess.write_tls(conn) {
             Err(err) => {
@@ -517,87 +544,50 @@ fn flush(sess: &mut ClientOrServer, conn: &mut net::TcpStream) {
     conn.flush().unwrap();
 }
 
-enum ClientOrServer {
-    Client(rustls::ClientSession),
-    Server(rustls::ServerSession),
+fn client(conn: &mut Connection) -> &mut ClientConnection {
+    conn.try_into().unwrap()
 }
 
-impl Deref for ClientOrServer {
-    type Target = dyn rustls::Session;
+fn exec(opts: &Options, mut sess: Connection, count: usize) {
+    let mut sent_message = false;
 
-    fn deref(&self) -> &Self::Target {
-        match &self {
-            ClientOrServer::Client(ref c) => c,
-            ClientOrServer::Server(ref s) => s,
-        }
-    }
-}
-
-impl DerefMut for ClientOrServer {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        match self {
-            ClientOrServer::Client(ref mut c) => c,
-            ClientOrServer::Server(ref mut s) => s,
-        }
-    }
-}
-
-impl ClientOrServer {
-    fn client(&mut self) -> &mut rustls::ClientSession {
-        match self {
-            ClientOrServer::Client(ref mut c) => c,
-            ClientOrServer::Server(_) => panic!("ClientSession required here"),
-        }
-    }
-}
-
-fn exec(opts: &Options, mut sess: ClientOrServer, count: usize) {
     if opts.queue_data || (opts.queue_data_on_resume && count > 0) {
         if count > 0 && opts.enable_early_data {
-            let len = sess
-                .client()
+            let len = client(&mut sess)
                 .early_data()
                 .expect("0rtt not available")
                 .write(b"hello")
                 .expect("0rtt write failed");
-            sess.write_all(&b"hello"[len..])
+            sess.writer()
+                .write_all(&b"hello"[len..])
                 .unwrap();
-        } else {
-            let _ = sess.write_all(b"hello");
+            sent_message = true;
+        } else if !opts.only_write_one_byte_after_handshake {
+            let _ = sess.writer().write_all(b"hello");
+            sent_message = true;
         }
     }
 
     let addrs = [
-        net::SocketAddr::from((net::Ipv4Addr::LOCALHOST, opts.port)),
         net::SocketAddr::from((net::Ipv6Addr::LOCALHOST, opts.port)),
+        net::SocketAddr::from((net::Ipv4Addr::LOCALHOST, opts.port)),
     ];
     let mut conn = net::TcpStream::connect(&addrs[..]).expect("cannot connect");
     let mut sent_shutdown = false;
-    let mut seen_eof = false;
     let mut sent_exporter = false;
+    let mut quench_writes = false;
 
     loop {
-        flush(&mut sess, &mut conn);
+        if !quench_writes {
+            flush(&mut sess, &mut conn);
+        }
 
         if sess.wants_read() {
-            let len = match sess.read_tls(&mut conn) {
-                Ok(len) => len,
-                Err(ref err) if err.kind() == io::ErrorKind::ConnectionReset => 0,
-                err @ Err(_) => err.expect("read failed"),
+            match sess.read_tls(&mut conn) {
+                Ok(_) => {}
+                Err(ref err) if err.kind() == io::ErrorKind::ConnectionReset => {}
+                Err(err) => panic!("invalid read: {}", err),
             };
-
-            if len == 0 {
-                if opts.check_close_notify {
-                    if !seen_eof {
-                        seen_eof = true;
-                    } else {
-                        quit_err(":CLOSE_WITHOUT_CLOSE_NOTIFY:");
-                    }
-                } else {
-                    println!("EOF (plain)");
-                    return;
-                }
-            }
 
             if let Err(err) = sess.process_new_packets() {
                 flush(&mut sess, &mut conn); /* send any alerts before exiting */
@@ -622,18 +612,37 @@ fn exec(opts: &Options, mut sess: ClientOrServer, count: usize) {
                 },
             )
             .unwrap();
-            sess.write_all(&export).unwrap();
+            sess.writer()
+                .write_all(&export)
+                .unwrap();
             sent_exporter = true;
         }
 
+        if !sess.is_handshaking() && opts.only_write_one_byte_after_handshake && !sent_message {
+            println!("writing message and then only one byte of its tls frame");
+            flush(&mut sess, &mut conn);
+
+            sess.writer()
+                .write_all(b"hello")
+                .unwrap();
+            sent_message = true;
+
+            let mut one_byte = [0u8];
+            let mut cursor = io::Cursor::new(&mut one_byte[..]);
+            sess.write_tls(&mut cursor).unwrap();
+            conn.write(&one_byte).expect("IO error");
+
+            quench_writes = true;
+        }
+
         if opts.enable_early_data && !sess.is_handshaking() && count > 0 {
-            if opts.expect_accept_early_data && !sess.client().is_early_data_accepted() {
+            if opts.expect_accept_early_data && !client(&mut sess).is_early_data_accepted() {
                 quit_err("Early data was not accepted, but we expect the opposite");
-            } else if opts.expect_reject_early_data && sess.client().is_early_data_accepted() {
+            } else if opts.expect_reject_early_data && client(&mut sess).is_early_data_accepted() {
                 quit_err("Early data was accepted, but we expect the opposite");
             }
             if opts.expect_version == 0x0304 {
-                match sess.get_protocol_version() {
+                match sess.protocol_version() {
                     Some(ProtocolVersion::TLSv1_3) | Some(ProtocolVersion::Unknown(0x7f17)) => {}
                     _ => quit_err("wrong protocol version"),
                 }
@@ -646,19 +655,30 @@ fn exec(opts: &Options, mut sess: ClientOrServer, count: usize) {
                 .is_empty()
         {
             let their_transport_params = sess
-                .get_quic_transport_parameters()
+                .quic_transport_parameters()
                 .expect("missing peer quic transport params");
             assert_eq!(opts.expect_quic_transport_params, their_transport_params);
         }
 
         let mut buf = [0u8; 1024];
-        let len = match sess.read(&mut buf[..opts.read_size]) {
-            Ok(len) => len,
-            Err(ref err) if err.kind() == io::ErrorKind::ConnectionAborted => {
+        let len = match sess
+            .reader()
+            .read(&mut buf[..opts.read_size])
+        {
+            Ok(0) => {
                 if opts.check_close_notify {
                     println!("close notify ok");
                 }
                 println!("EOF (tls)");
+                return;
+            }
+            Ok(len) => len,
+            Err(err) if err.kind() == io::ErrorKind::WouldBlock => 0,
+            Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => {
+                if opts.check_close_notify {
+                    quit_err(":CLOSE_WITHOUT_CLOSE_NOTIFY:");
+                }
+                println!("EOF (tcp)");
                 return;
             }
             Err(err) => panic!("unhandled read error {:?}", err),
@@ -669,11 +689,18 @@ fn exec(opts: &Options, mut sess: ClientOrServer, count: usize) {
             sent_shutdown = true;
         }
 
+        if quench_writes && len > 0 {
+            println!("unquenching writes after {:?}", len);
+            quench_writes = false;
+        }
+
         for b in buf.iter_mut() {
             *b ^= 0xff;
         }
 
-        sess.write_all(&buf[..len]).unwrap();
+        sess.writer()
+            .write_all(&buf[..len])
+            .unwrap();
     }
 }
 
@@ -724,8 +751,8 @@ fn main() {
                 opts.max_version = Some(ProtocolVersion::Unknown(max));
             }
             "-max-send-fragment" => {
-                let mtu = args.remove(0).parse::<usize>().unwrap();
-                opts.mtu = Some(mtu);
+                let max_fragment = args.remove(0).parse::<usize>().unwrap();
+                opts.max_fragment = Some(max_fragment + 5); // ours includes header
             }
             "-read-size" => {
                 let rdsz = args.remove(0).parse::<usize>().unwrap();
@@ -766,7 +793,11 @@ fn main() {
             "-on-retry-expect-early-data-reason" |
             "-on-resume-expect-early-data-reason" |
             "-on-initial-expect-early-data-reason" |
+            "-on-initial-expect-cipher" |
+            "-on-resume-expect-cipher" |
+            "-on-retry-expect-cipher" |
             "-handshaker-path" |
+            "-application-settings" |
             "-expect-msg-callback" => {
                 println!("not checking {} {}; NYI", arg, args.remove(0));
             }
@@ -830,6 +861,10 @@ fn main() {
             "-shim-writes-first" => {
                 opts.queue_data = true;
             }
+            "-read-with-unfinished-write" => {
+                opts.queue_data = true;
+                opts.only_write_one_byte_after_handshake = true;
+            }
             "-shim-shuts-down" => {
                 opts.shut_down_after_handshake = true;
             }
@@ -855,6 +890,10 @@ fn main() {
             }
             "-on-resume-shim-writes-first" => {
                 opts.queue_data_on_resume = true;
+            }
+            "-on-resume-read-with-unfinished-write" => {
+                opts.queue_data_on_resume = true;
+                opts.only_write_one_byte_after_handshake_on_resume = true;
             }
             "-expect-ticket-supports-early-data" => {
                 opts.expect_ticket_supports_early_data = true;
@@ -882,6 +921,14 @@ fn main() {
             }
             "-expect-version" => {
                 opts.expect_version = args.remove(0).parse::<u16>().unwrap();
+            }
+            "-curves" => {
+                let curve = args.remove(0).parse::<u16>().unwrap();
+                if let Some(mut curves) = opts.curves.take() {
+                    curves.push(curve);
+                } else {
+                    opts.curves = Some(vec![ curve ]);
+                }
             }
 
             // defaults:
@@ -918,14 +965,12 @@ fn main() {
             "-expect-channel-id" |
             "-send-channel-id" |
             "-select-next-proto" |
-            "-p384-only" |
             "-expect-verify-result" |
             "-send-alert" |
             "-digest-prefs" |
             "-use-exporter-between-reads" |
             "-ticket-key" |
             "-tls-unique" |
-            "-curves" |
             "-enable-server-custom-extension" |
             "-enable-client-custom-extension" |
             "-expect-dhe-group-size" |
@@ -948,8 +993,6 @@ fn main() {
             "-reverify-on-resume" |
             "-verify-prefs" |
             "-no-op-extra-handshake" |
-            "-read-with-unfinished-write" |
-            "-on-resume-read-with-unfinished-write" |
             "-expect-peer-cert-file" |
             "-no-rsa-pss-rsae-certs" |
             "-ignore-tls13-downgrade" |
@@ -987,29 +1030,39 @@ fn main() {
         opts: &Options,
         scfg: &Option<Arc<rustls::ServerConfig>>,
         ccfg: &Option<Arc<rustls::ClientConfig>>,
-    ) -> ClientOrServer {
+    ) -> Connection {
         if opts.server {
+            let scfg = Arc::clone(scfg.as_ref().unwrap());
             let s = if opts.quic_transport_params.is_empty() {
-                rustls::ServerSession::new(scfg.as_ref().unwrap())
+                rustls::ServerConnection::new(scfg).unwrap()
             } else {
-                rustls::ServerSession::new_quic(
-                    scfg.as_ref().unwrap(),
+                rustls::ServerConnection::new_quic(
+                    scfg,
+                    quic::Version::V1,
                     opts.quic_transport_params.clone(),
                 )
+                .unwrap()
             };
-            ClientOrServer::Server(s)
+            s.into()
         } else {
-            let dns_name = webpki::DNSNameRef::try_from_ascii_str(&opts.host_name).unwrap();
+            let server_name = opts
+                .host_name
+                .as_str()
+                .try_into()
+                .unwrap();
+            let ccfg = Arc::clone(ccfg.as_ref().unwrap());
             let c = if opts.quic_transport_params.is_empty() {
-                rustls::ClientSession::new(ccfg.as_ref().unwrap(), dns_name)
+                rustls::ClientConnection::new(ccfg, server_name)
             } else {
-                rustls::ClientSession::new_quic(
-                    ccfg.as_ref().unwrap(),
-                    dns_name,
+                rustls::ClientConnection::new_quic(
+                    ccfg,
+                    quic::Version::V1,
+                    server_name,
                     opts.quic_transport_params.clone(),
                 )
-            };
-            ClientOrServer::Client(c)
+            }
+            .unwrap();
+            c.into()
         }
     }
 
@@ -1018,12 +1071,8 @@ fn main() {
         exec(&opts, sess, i);
 
         if opts.resume_with_tickets_disabled {
-            server_cfg = {
-                let mut newcfg = server_cfg.unwrap();
-                let default = rustls::ServerConfig::new(rustls::NoClientAuth::new());
-                Arc::make_mut(&mut newcfg).ticketer = default.ticketer.clone();
-                Some(newcfg)
-            };
+            opts.tickets = false;
+            server_cfg = Some(make_server_cfg(&opts));
         }
     }
 }

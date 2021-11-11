@@ -12,14 +12,14 @@
 
 [package]
 name = "addr2line"
-version = "0.16.0"
-exclude = ["/benches/*", "/fixtures/*"]
+version = "0.17.0"
+exclude = ["/benches/*", "/fixtures/*", ".github"]
 description = "A cross-platform symbolication library written in Rust, using `gimli`"
 documentation = "https://docs.rs/addr2line"
 readme = "./README.md"
 keywords = ["DWARF", "debug", "elf", "symbolicate", "atos"]
 categories = ["development-tools::debugging"]
-license = "Apache-2.0/MIT"
+license = "Apache-2.0 OR MIT"
 repository = "https://github.com/gimli-rs/addr2line"
 [profile.bench]
 codegen-units = 1
@@ -77,12 +77,12 @@ optional = true
 default-features = false
 
 [dependencies.gimli]
-version = "0.25"
+version = "0.26"
 features = ["read"]
 default-features = false
 
 [dependencies.object]
-version = "0.26"
+version = "0.27.1"
 features = ["read"]
 optional = true
 default-features = false
@@ -102,7 +102,7 @@ version = "0.3.13"
 version = "2"
 
 [dev-dependencies.findshlibs]
-version = "0.8"
+version = "0.10"
 
 [dev-dependencies.memmap]
 version = "0.7"
@@ -118,5 +118,3 @@ default = ["rustc-demangle", "cpp_demangle", "std-object", "fallible-iterator", 
 rustc-dep-of-std = ["core", "alloc", "compiler_builtins", "gimli/rustc-dep-of-std"]
 std = ["gimli/std"]
 std-object = ["std", "object", "object/std", "object/compression", "gimli/endian-reader"]
-[badges.travis-ci]
-repository = "gimli-rs/addr2line"

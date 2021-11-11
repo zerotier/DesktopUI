@@ -26,6 +26,16 @@ s! {
         pub udata: *mut ::c_void,
         pub ext: [u64; 4],
     }
+
+    pub struct kvm_page {
+        pub version: ::c_uint,
+        pub paddr: ::c_ulong,
+        pub kmap_vaddr: ::c_ulong,
+        pub dmap_vaddr: ::c_ulong,
+        pub prot: ::vm_prot_t,
+        pub offset: ::u_long,
+        pub len: ::size_t,
+    }
 }
 
 s_no_extra_traits! {
@@ -190,27 +200,12 @@ cfg_if! {
     }
 }
 
-pub const F_ADD_SEALS: ::c_int = 19;
-pub const F_GET_SEALS: ::c_int = 20;
-pub const F_SEAL_SEAL: ::c_int = 0x0001;
-pub const F_SEAL_SHRINK: ::c_int = 0x0002;
-pub const F_SEAL_GROW: ::c_int = 0x0004;
-pub const F_SEAL_WRITE: ::c_int = 0x0008;
-
-pub const GRND_NONBLOCK: ::c_uint = 0x1;
-pub const GRND_RANDOM: ::c_uint = 0x2;
-
 pub const RAND_MAX: ::c_int = 0x7fff_fffd;
-
-pub const PROC_ASLR_CTL: ::c_int = 13;
-pub const PROC_ASLR_STATUS: ::c_int = 14;
-
-pub const PROC_PROCCTL_MD_MIN: ::c_int = 0x10000000;
-
-pub const SO_DOMAIN: ::c_int = 0x1019;
-
-pub const EINTEGRITY: ::c_int = 97;
 pub const ELAST: ::c_int = 97;
+
+/// max length of devicename
+pub const SPECNAMELEN: ::c_int = 63;
+pub const KI_NSPARE_PTR: usize = 6;
 
 extern "C" {
     pub fn setgrent();

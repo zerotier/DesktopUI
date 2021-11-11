@@ -250,7 +250,7 @@
 //!   dynamic library libproc_macro from rustc toolchain.
 
 // Syn types in rustdoc of other crates get linked to here.
-#![doc(html_root_url = "https://docs.rs/syn/1.0.80")]
+#![doc(html_root_url = "https://docs.rs/syn/1.0.81")]
 #![cfg_attr(doc_cfg, feature(doc_cfg))]
 #![allow(non_camel_case_types)]
 // Ignored clippy lints.
@@ -824,6 +824,7 @@ mod verbatim;
 #[cfg(all(any(feature = "full", feature = "derive"), feature = "printing"))]
 mod print;
 
+#[cfg(any(feature = "full", feature = "derive"))]
 use crate::__private::private;
 
 ////////////////////////////////////////////////////////////////////////////////

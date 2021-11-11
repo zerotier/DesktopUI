@@ -183,7 +183,7 @@ if __name__ == '__main__':
         certs[our_hash] = (cert, data)
 
     print(HEADER)
-    print("""pub static TLS_SERVER_ROOTS: webpki::TLSServerTrustAnchors = webpki::TLSServerTrustAnchors(&[""")
+    print("""pub static TLS_SERVER_ROOTS: webpki::TlsServerTrustAnchors = webpki::TlsServerTrustAnchors(&[""")
 
     # emit in sorted hash order for deterministic builds
     for hash in sorted(certs):

@@ -211,13 +211,13 @@ sct.id = keyhash(pub)
 
 emit_test(name, 'junk',
         sct.encode() + 'a',
-        expect = 'Err(Error::MalformedSCT)')
+        expect = 'Err(Error::MalformedSct)')
 emit_test(name, 'wrongid',
         sct.having(id = '\x00' * 32).encode(),
         expect = 'Err(Error::UnknownLog)')
 emit_test(name, 'version',
         sct.having(version = 1).encode(),
-        expect = 'Err(Error::UnsupportedSCTVersion)')
+        expect = 'Err(Error::UnsupportedSctVersion)')
 emit_test(name, 'future',
         sct.encode(),
         timestamp = 1233,
@@ -235,4 +235,4 @@ sct_short.sign(priv, algs[name], 'cert')
 
 emit_short_test(name, 'short',
         sct_short.encode(),
-        expect = 'Err(Error::MalformedSCT)')
+        expect = 'Err(Error::MalformedSct)')

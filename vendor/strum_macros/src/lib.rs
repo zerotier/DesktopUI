@@ -43,7 +43,7 @@ fn debug_print_generated(ast: &DeriveInput, toks: &TokenStream) {
 /// variant. There is an option to match on different case conversions through the
 /// `#[strum(serialize_all = "snake_case")]` type attribute.
 ///
-/// See the [Additional Attributes](https://docs.rs/strum/0.21/strum/additional_attributes/index.html)
+/// See the [Additional Attributes](https://docs.rs/strum/0.22/strum/additional_attributes/index.html)
 /// Section for more information on using this feature.
 ///
 /// # Example howto use EnumString
@@ -191,6 +191,7 @@ pub fn variant_names(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 }
 
 #[proc_macro_derive(AsStaticStr, attributes(strum))]
+#[deprecated(since="0.22.0", note="please use `#[derive(IntoStaticStr)]` instead")]
 pub fn as_static_str(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let ast = syn::parse_macro_input!(input as DeriveInput);
 
@@ -270,6 +271,7 @@ pub fn into_static_str(input: proc_macro::TokenStream) -> proc_macro::TokenStrea
 /// let yellow = Color::Yellow;
 /// assert_eq!(String::from("Yellow"), yellow.to_string());
 /// ```
+#[deprecated(since="0.22.0", note="please use `#[derive(Display)]` instead. See issue https://github.com/Peternator7/strum/issues/132")]
 #[proc_macro_derive(ToString, attributes(strum))]
 pub fn to_string(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let ast = syn::parse_macro_input!(input as DeriveInput);

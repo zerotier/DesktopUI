@@ -11,9 +11,10 @@ use wasmparser as wp;
 
 use crate::read::{
     self, Architecture, ComdatKind, CompressedData, CompressedFileRange, Error, Export, FileFlags,
-    Import, NoDynamicRelocationIterator, Object, ObjectComdat, ObjectSection, ObjectSegment,
-    ObjectSymbol, ObjectSymbolTable, ReadError, ReadRef, Relocation, Result, SectionFlags,
-    SectionIndex, SectionKind, SymbolFlags, SymbolIndex, SymbolKind, SymbolScope, SymbolSection,
+    Import, NoDynamicRelocationIterator, Object, ObjectComdat, ObjectKind, ObjectSection,
+    ObjectSegment, ObjectSymbol, ObjectSymbolTable, ReadError, ReadRef, Relocation, Result,
+    SectionFlags, SectionIndex, SectionKind, SymbolFlags, SymbolIndex, SymbolKind, SymbolScope,
+    SymbolSection,
 };
 
 const SECTION_CUSTOM: usize = 0;
@@ -235,7 +236,7 @@ impl<'data, R: ReadRef<'data>> WasmFile<'data, R> {
                                 });
                             }
                             LocalFunctionKind::Exported { symbol_ids } => {
-                                for symbol_id in core::mem::replace(symbol_ids, Vec::new()) {
+                                for symbol_id in core::mem::take(symbol_ids) {
                                     let export_symbol = &mut file.symbols[symbol_id as usize];
                                     export_symbol.address = address;
                                     export_symbol.size = size;
@@ -326,13 +327,21 @@ where
         false
     }
 
+    fn kind(&self) -> ObjectKind {
+        // TODO: check for `linking` custom section
+        ObjectKind::Unknown
+    }
+
     fn segments(&'file self) -> Self::SegmentIterator {
         WasmSegmentIterator { file: self }
     }
 
-    fn section_by_name(&'file self, section_name: &str) -> Option<WasmSection<'data, 'file, R>> {
+    fn section_by_name_bytes(
+        &'file self,
+        section_name: &[u8],
+    ) -> Option<WasmSection<'data, 'file, R>> {
         self.sections()
-            .find(|section| section.name() == Ok(section_name))
+            .find(|section| section.name_bytes() == Ok(section_name))
     }
 
     fn section_by_index(&'file self, index: SectionIndex) -> Result<WasmSection<'data, 'file, R>> {
@@ -479,6 +488,11 @@ impl<'data, 'file, R> ObjectSegment<'data> for WasmSegment<'data, 'file, R> {
     }
 
     #[inline]
+    fn name_bytes(&self) -> Result<Option<&[u8]>> {
+        unreachable!()
+    }
+
+    #[inline]
     fn name(&self) -> Result<Option<&str>> {
         unreachable!()
     }
@@ -567,6 +581,11 @@ impl<'data, 'file, R> ObjectSection<'data> for WasmSection<'data, 'file, R> {
     }
 
     #[inline]
+    fn name_bytes(&self) -> Result<&[u8]> {
+        self.name().map(str::as_bytes)
+    }
+
+    #[inline]
     fn name(&self) -> Result<&str> {
         Ok(match self.section.code {
             wp::SectionCode::Custom { name, .. } => name,
@@ -583,6 +602,11 @@ impl<'data, 'file, R> ObjectSection<'data> for WasmSection<'data, 'file, R> {
             wp::SectionCode::Data => "<data>",
             wp::SectionCode::DataCount => "<data_count>",
         })
+    }
+
+    #[inline]
+    fn segment_name_bytes(&self) -> Result<Option<&[u8]>> {
+        Ok(None)
     }
 
     #[inline]
@@ -658,6 +682,11 @@ impl<'data, 'file, R> ObjectComdat<'data> for WasmComdat<'data, 'file, R> {
 
     #[inline]
     fn symbol(&self) -> SymbolIndex {
+        unreachable!();
+    }
+
+    #[inline]
+    fn name_bytes(&self) -> Result<&[u8]> {
         unreachable!();
     }
 
@@ -757,6 +786,11 @@ impl<'data, 'file> ObjectSymbol<'data> for WasmSymbol<'data, 'file> {
     #[inline]
     fn index(&self) -> SymbolIndex {
         self.index
+    }
+
+    #[inline]
+    fn name_bytes(&self) -> read::Result<&'data [u8]> {
+        Ok(self.symbol.name.as_bytes())
     }
 
     #[inline]

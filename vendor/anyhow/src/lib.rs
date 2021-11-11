@@ -210,7 +210,7 @@
 //! will require an explicit `.map_err(Error::msg)` when working with a
 //! non-Anyhow error type inside a function that returns Anyhow's error type.
 
-#![doc(html_root_url = "https://docs.rs/anyhow/1.0.44")]
+#![doc(html_root_url = "https://docs.rs/anyhow/1.0.45")]
 #![cfg_attr(backtrace, feature(backtrace))]
 #![cfg_attr(doc_cfg, feature(doc_cfg))]
 #![cfg_attr(not(feature = "std"), no_std)]
@@ -233,7 +233,7 @@
 
 mod alloc {
     #[cfg(not(feature = "std"))]
-    extern crate alloc;
+    pub extern crate alloc;
 
     #[cfg(not(feature = "std"))]
     pub use alloc::boxed::Box;
@@ -613,9 +613,6 @@ pub trait Context<T, E>: context::private::Sealed {
 // Not public API. Referenced by macro-generated code.
 #[doc(hidden)]
 pub mod private {
-    use crate::Error;
-    use core::fmt::{Debug, Display};
-
     pub use core::result::Result::Err;
 
     #[doc(hidden)]
@@ -626,18 +623,17 @@ pub mod private {
         pub use crate::kind::BoxedKind;
     }
 
-    #[cold]
-    pub fn new_adhoc<M>(message: M) -> Error
-    where
-        M: Display + Debug + Send + Sync + 'static,
-    {
-        Error::from_adhoc(message, backtrace!())
-    }
-
     #[cfg(anyhow_no_macro_reexport)]
-    pub use crate::{__anyhow_concat as concat, __anyhow_stringify as stringify};
+    pub use crate::{
+        __anyhow_concat as concat, __anyhow_format as format, __anyhow_stringify as stringify,
+    };
     #[cfg(not(anyhow_no_macro_reexport))]
     pub use core::{concat, stringify};
+
+    #[cfg(all(not(anyhow_no_macro_reexport), not(feature = "std")))]
+    pub use crate::alloc::alloc::format;
+    #[cfg(all(not(anyhow_no_macro_reexport), feature = "std"))]
+    pub use std::format;
 
     #[cfg(anyhow_no_macro_reexport)]
     #[doc(hidden)]
@@ -645,6 +641,15 @@ pub mod private {
     macro_rules! __anyhow_concat {
         ($($tt:tt)*) => {
             concat!($($tt)*)
+        };
+    }
+
+    #[cfg(anyhow_no_macro_reexport)]
+    #[doc(hidden)]
+    #[macro_export]
+    macro_rules! __anyhow_format {
+        ($($tt:tt)*) => {
+            format!($($tt)*)
         };
     }
 

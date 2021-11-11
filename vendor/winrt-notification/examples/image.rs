@@ -1,6 +1,9 @@
 extern crate winrt_notification;
 use std::path::Path;
-use winrt_notification::{IconCrop, Toast};
+use winrt_notification::{
+    IconCrop,
+    Toast,
+};
 
 fn main() {
     Toast::new("application that needs a toast with an image")

@@ -13,38 +13,14 @@
 [package]
 edition = "2018"
 name = "object"
-version = "0.26.2"
-exclude = ["/.coveralls.yml", "/.travis.yml"]
+version = "0.27.1"
+exclude = ["/.github", "/testfiles"]
 description = "A unified interface for reading and writing object file formats."
 keywords = ["object", "elf", "mach-o", "pe", "coff"]
 license = "Apache-2.0/MIT"
 repository = "https://github.com/gimli-rs/object"
 [package.metadata.docs.rs]
-features = ["all"]
-
-[[example]]
-name = "ar"
-required-features = ["read_core", "archive"]
-
-[[example]]
-name = "objcopy"
-required-features = ["read", "write"]
-
-[[example]]
-name = "objdump"
-required-features = ["read"]
-
-[[example]]
-name = "objectmap"
-required-features = ["read_core"]
-
-[[example]]
-name = "nm"
-required-features = ["read"]
-
-[[example]]
-name = "readobj"
-required-features = ["read"]
+features = ["doc"]
 [dependencies.alloc]
 version = "1.0.0"
 optional = true
@@ -78,8 +54,6 @@ default-features = false
 [dependencies.wasmparser]
 version = "0.57"
 optional = true
-[dev-dependencies.memmap2]
-version = "0.3"
 
 [features]
 all = ["read", "write", "std", "compression", "wasm"]
@@ -88,6 +62,7 @@ cargo-all = []
 coff = []
 compression = ["flate2", "std"]
 default = ["read", "compression"]
+doc = ["read_core", "write_core", "std", "compression", "archive", "coff", "elf", "macho", "pe", "wasm"]
 elf = []
 macho = []
 pe = ["coff"]
@@ -97,5 +72,5 @@ rustc-dep-of-std = ["core", "compiler_builtins", "alloc", "memchr/rustc-dep-of-s
 std = ["memchr/std"]
 unaligned = []
 wasm = ["wasmparser"]
-write = ["write_core", "coff", "elf", "macho"]
-write_core = ["crc32fast", "indexmap", "std"]
+write = ["write_core", "coff", "elf", "macho", "pe"]
+write_core = ["crc32fast", "indexmap/std", "std"]

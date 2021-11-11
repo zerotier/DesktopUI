@@ -153,17 +153,6 @@ s! {
         pub l_pid: ::pid_t,
         pad: [::c_long; 4],
     }
-
-    pub struct termios2 {
-        pub c_iflag: ::tcflag_t,
-        pub c_oflag: ::tcflag_t,
-        pub c_cflag: ::tcflag_t,
-        pub c_lflag: ::tcflag_t,
-        pub c_line: ::cc_t,
-        pub c_cc: [::cc_t; 23],
-        pub c_ispeed: ::speed_t,
-        pub c_ospeed: ::speed_t,
-    }
 }
 
 pub const O_LARGEFILE: ::c_int = 0x2000;

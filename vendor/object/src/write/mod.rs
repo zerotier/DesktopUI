@@ -1,9 +1,11 @@
 //! Interface for writing object files.
 
+use std::borrow::Cow;
+use std::boxed::Box;
 use std::collections::HashMap;
 use std::string::String;
 use std::vec::Vec;
-use std::{error, fmt, result, str};
+use std::{error, fmt, io, result, str};
 
 use crate::endian::{Endianness, U32, U64};
 use crate::{
@@ -13,11 +15,19 @@ use crate::{
 
 #[cfg(feature = "coff")]
 mod coff;
+
 #[cfg(feature = "elf")]
-mod elf;
+pub mod elf;
+
 #[cfg(feature = "macho")]
 mod macho;
+
+#[cfg(feature = "pe")]
+pub mod pe;
+
 mod string;
+pub use string::StringId;
+
 mod util;
 pub use util::*;
 
@@ -39,11 +49,11 @@ pub type Result<T> = result::Result<T, Error>;
 
 /// A writable object file.
 #[derive(Debug)]
-pub struct Object {
+pub struct Object<'a> {
     format: BinaryFormat,
     architecture: Architecture,
     endian: Endianness,
-    sections: Vec<Section>,
+    sections: Vec<Section<'a>>,
     standard_sections: HashMap<StandardSection, SectionId>,
     symbols: Vec<Symbol>,
     symbol_map: HashMap<Vec<u8>, SymbolId>,
@@ -57,9 +67,9 @@ pub struct Object {
     tlv_bootstrap: Option<SymbolId>,
 }
 
-impl Object {
+impl<'a> Object<'a> {
     /// Create an empty object file.
-    pub fn new(format: BinaryFormat, architecture: Architecture, endian: Endianness) -> Object {
+    pub fn new(format: BinaryFormat, architecture: Architecture, endian: Endianness) -> Object<'a> {
         Object {
             format,
             architecture,
@@ -118,14 +128,24 @@ impl Object {
 
     /// Get the section with the given `SectionId`.
     #[inline]
-    pub fn section(&self, section: SectionId) -> &Section {
+    pub fn section(&self, section: SectionId) -> &Section<'a> {
         &self.sections[section.0]
     }
 
     /// Mutably get the section with the given `SectionId`.
     #[inline]
-    pub fn section_mut(&mut self, section: SectionId) -> &mut Section {
+    pub fn section_mut(&mut self, section: SectionId) -> &mut Section<'a> {
         &mut self.sections[section.0]
+    }
+
+    /// Set the data for an existing section.
+    ///
+    /// Must not be called for sections that already have data, or that contain uninitialized data.
+    pub fn set_section_data<T>(&mut self, section: SectionId, data: T, align: u64)
+    where
+        T: Into<Cow<'a, [u8]>>,
+    {
+        self.sections[section.0].set_data(data, align)
     }
 
     /// Append data to an existing section. Returns the section offset of the data.
@@ -162,7 +182,7 @@ impl Object {
             kind,
             size: 0,
             align: 1,
-            data: Vec::new(),
+            data: Cow::Borrowed(&[]),
             relocations: Vec::new(),
             symbol: None,
             flags: SectionFlags::None,
@@ -496,7 +516,7 @@ impl Object {
         relocation: &Relocation,
         addend: i64,
     ) -> Result<()> {
-        let data = &mut self.sections[section.0].data;
+        let data = self.sections[section.0].data_mut();
         let offset = relocation.offset as usize;
         match relocation.size {
             32 => data.write_at(offset, &U32::new(self.endian, addend as u32)),
@@ -523,6 +543,20 @@ impl Object {
         let mut buffer = Vec::new();
         self.emit(&mut buffer)?;
         Ok(buffer)
+    }
+
+    /// Write the object to a `Write` implementation.
+    ///
+    /// Also flushes the writer.
+    ///
+    /// It is advisable to use a buffered writer like [`BufWriter`](std::io::BufWriter)
+    /// instead of an unbuffered writer like [`File`](std::fs::File).
+    pub fn write_stream<W: io::Write>(&self, w: W) -> result::Result<(), Box<dyn error::Error>> {
+        let mut stream = StreamingBuffer::new(w);
+        self.emit(&mut stream)?;
+        stream.result()?;
+        stream.into_inner().flush()?;
+        Ok(())
     }
 
     /// Write the object to a `WritableBuffer`.
@@ -610,20 +644,20 @@ pub struct SectionId(usize);
 
 /// A section in an object file.
 #[derive(Debug)]
-pub struct Section {
+pub struct Section<'a> {
     segment: Vec<u8>,
     name: Vec<u8>,
     kind: SectionKind,
     size: u64,
     align: u64,
-    data: Vec<u8>,
+    data: Cow<'a, [u8]>,
     relocations: Vec<Relocation>,
     symbol: Option<SymbolId>,
     /// Section flags that are specific to each file format.
     pub flags: SectionFlags,
 }
 
-impl Section {
+impl<'a> Section<'a> {
     /// Try to convert the name to a utf8 string.
     #[inline]
     pub fn name(&self) -> Option<&str> {
@@ -645,32 +679,36 @@ impl Section {
     /// Set the data for a section.
     ///
     /// Must not be called for sections that already have data, or that contain uninitialized data.
-    pub fn set_data(&mut self, data: Vec<u8>, align: u64) {
+    pub fn set_data<T>(&mut self, data: T, align: u64)
+    where
+        T: Into<Cow<'a, [u8]>>,
+    {
         debug_assert!(!self.is_bss());
         debug_assert_eq!(align & (align - 1), 0);
         debug_assert!(self.data.is_empty());
-        self.size = data.len() as u64;
-        self.data = data;
+        self.data = data.into();
+        self.size = self.data.len() as u64;
         self.align = align;
     }
 
     /// Append data to a section.
     ///
     /// Must not be called for sections that contain uninitialized data.
-    pub fn append_data(&mut self, data: &[u8], align: u64) -> u64 {
+    pub fn append_data(&mut self, append_data: &[u8], align: u64) -> u64 {
         debug_assert!(!self.is_bss());
         debug_assert_eq!(align & (align - 1), 0);
         if self.align < align {
             self.align = align;
         }
         let align = align as usize;
-        let mut offset = self.data.len();
+        let data = self.data.to_mut();
+        let mut offset = data.len();
         if offset & (align - 1) != 0 {
             offset += align - (offset & (align - 1));
-            self.data.resize(offset, 0);
+            data.resize(offset, 0);
         }
-        self.data.extend_from_slice(data);
-        self.size = self.data.len() as u64;
+        data.extend_from_slice(append_data);
+        self.size = data.len() as u64;
         offset as u64
     }
 
@@ -690,6 +728,22 @@ impl Section {
         }
         self.size += size;
         offset as u64
+    }
+
+    /// Returns the section as-built so far.
+    ///
+    /// This requires that the section is not a bss section.
+    pub fn data(&self) -> &[u8] {
+        debug_assert!(!self.is_bss());
+        &self.data
+    }
+
+    /// Returns the section as-built so far.
+    ///
+    /// This requires that the section is not a bss section.
+    pub fn data_mut(&mut self) -> &mut [u8] {
+        debug_assert!(!self.is_bss());
+        self.data.to_mut()
     }
 }
 

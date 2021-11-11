@@ -1,14 +1,17 @@
 use super::codec::{Codec, Reader};
 use super::enums::*;
-use super::handshake::*;
 use super::persist::*;
+
 use crate::key::Certificate;
-use webpki::DNSNameRef;
+use crate::ticketer::TimeBase;
+use crate::tls13::TLS13_AES_128_GCM_SHA256;
+
+use std::convert::TryInto;
 
 #[test]
 fn clientsessionkey_is_debug() {
-    let name = DNSNameRef::try_from_ascii_str("hello").unwrap();
-    let csk = ClientSessionKey::session_for_dns_name(name);
+    let name = "hello".try_into().unwrap();
+    let csk = ClientSessionKey::session_for_server_name(&name);
     println!("{:?}", csk);
 }
 
@@ -21,14 +24,18 @@ fn clientsessionkey_cannot_be_read() {
 
 #[test]
 fn clientsessionvalue_is_debug() {
-    let csv = ClientSessionValue::new(
-        ProtocolVersion::TLSv1_2,
-        CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-        &SessionID::new(&[1u8]),
+    let csv = ClientSessionValue::from(Tls13ClientSessionValue::new(
+        TLS13_AES_128_GCM_SHA256
+            .tls13()
+            .unwrap(),
         vec![],
         vec![1, 2, 3],
-        &vec![Certificate(b"abc".to_vec()), Certificate(b"def".to_vec())],
-    );
+        vec![Certificate(b"abc".to_vec()), Certificate(b"def".to_vec())],
+        TimeBase::now().unwrap(),
+        15,
+        10,
+        128,
+    ));
     println!("{:?}", csv);
 }
 
@@ -36,10 +43,10 @@ fn clientsessionvalue_is_debug() {
 fn serversessionvalue_is_debug() {
     let ssv = ServerSessionValue::new(
         None,
-        ProtocolVersion::TLSv1_2,
-        CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+        ProtocolVersion::TLSv1_3,
+        CipherSuite::TLS13_AES_128_GCM_SHA256,
         vec![1, 2, 3],
-        &None,
+        None,
         None,
         vec![4, 5, 6],
     );

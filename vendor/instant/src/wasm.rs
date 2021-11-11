@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 use std::time::Duration;
 
@@ -159,4 +160,81 @@ pub fn now() -> f64 {
     return unsafe { js::now() };
     #[cfg(target_os = "emscripten")]
     return unsafe { js::_emscripten_get_now() };
+}
+
+/// Returns the number of millisecods elapsed since January 1, 1970 00:00:00 UTC.
+#[cfg(any(feature = "wasm-bindgen", feature = "stdweb"))]
+fn get_time() -> f64 {
+    #[cfg(feature = "wasm-bindgen")]
+    return js_sys::Date::now();
+    #[cfg(all(feature = "stdweb", not(feature = "wasm-bindgen")))]
+    {
+        let v = js! { return Date.now(); };
+        return v.try_into().unwrap();
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
+pub struct SystemTime(f64);
+
+impl SystemTime {
+    pub const UNIX_EPOCH: SystemTime = SystemTime(0.0);
+
+    pub fn now() -> SystemTime {
+        cfg_if::cfg_if! {
+            if #[cfg(any(feature = "wasm-bindgen", feature = "stdweb"))] {
+                SystemTime(get_time())
+            } else {
+                SystemTime(now())
+            }
+        }
+    }
+
+    pub fn duration_since(&self, earlier: SystemTime) -> Result<Duration, ()> {
+        let dur_ms = self.0 - earlier.0;
+        if dur_ms < 0.0 {
+            return Err(());
+        }
+        Ok(Duration::from_millis(dur_ms as u64))
+    }
+
+    pub fn elapsed(&self) -> Result<Duration, ()> {
+        self.duration_since(SystemTime::now())
+    }
+
+    pub fn checked_add(&self, duration: Duration) -> Option<SystemTime> {
+        Some(*self + duration)
+    }
+
+    pub fn checked_sub(&self, duration: Duration) -> Option<SystemTime> {
+        Some(*self - duration)
+    }
+}
+
+impl Add<Duration> for SystemTime {
+    type Output = SystemTime;
+
+    fn add(self, other: Duration) -> SystemTime {
+        SystemTime(self.0 + other.as_millis() as f64)
+    }
+}
+
+impl Sub<Duration> for SystemTime {
+    type Output = SystemTime;
+
+    fn sub(self, other: Duration) -> SystemTime {
+        SystemTime(self.0 - other.as_millis() as f64)
+    }
+}
+
+impl AddAssign<Duration> for SystemTime {
+    fn add_assign(&mut self, rhs: Duration) {
+        *self = *self + rhs;
+    }
+}
+
+impl SubAssign<Duration> for SystemTime {
+    fn sub_assign(&mut self, rhs: Duration) {
+        *self = *self - rhs;
+    }
 }

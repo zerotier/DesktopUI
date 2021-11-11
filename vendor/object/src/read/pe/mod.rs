@@ -13,4 +13,19 @@ pub use file::*;
 mod section;
 pub use section::*;
 
+mod data_directory;
+pub use data_directory::*;
+
+mod export;
+pub use export::*;
+
+mod import;
+pub use import::*;
+
+mod relocation;
+pub use relocation::*;
+
+mod rich;
+pub use rich::*;
+
 pub use super::coff::{SectionTable, SymbolTable};

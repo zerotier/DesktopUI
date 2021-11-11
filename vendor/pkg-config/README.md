@@ -1,6 +1,6 @@
 # pkg-config-rs
 
-[![Build Status](https://travis-ci.com/rust-lang/pkg-config-rs.svg?branch=master)](https://travis-ci.com/rust-lang/pkg-config-rs)
+[![Build Status](https://github.com/rust-lang/pkg-config-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/rust-lang/pkg-config-rs/actions)
 [![Rust](https://img.shields.io/badge/rust-1.30%2B-blue.svg?maxAge=3600)](https://github.com/rust-lang/pkg-config-rs/)
 
 [Documentation](https://docs.rs/pkg-config)
@@ -10,7 +10,7 @@ order to use the system `pkg-config` tool (if available) to determine where a
 library is located.
 
 You can use this crate directly to probe for specific libraries, or use
-[metadeps](https://github.com/joshtriplett/metadeps) to declare all your
+[system-deps](https://github.com/gdesmott/system-deps) to declare all your
 `pkg-config` dependencies in `Cargo.toml`.
 
 This library requires Rust 1.30+.

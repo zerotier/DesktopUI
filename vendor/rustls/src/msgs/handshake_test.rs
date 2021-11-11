@@ -1,9 +1,9 @@
-use super::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
+use super::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
 use super::codec::{put_u16, Codec, Reader};
 use super::enums::*;
 use super::handshake::*;
 use crate::key::Certificate;
-use webpki::DNSNameRef;
+use webpki::DnsNameRef;
 
 use std::mem;
 
@@ -40,8 +40,8 @@ fn rejects_sessionid_with_bad_length() {
 
 #[test]
 fn sessionid_with_different_lengths_are_unequal() {
-    let a = SessionID::new(&[1u8]);
-    let b = SessionID::new(&[1u8, 2u8]);
+    let a = SessionID::read(&mut Reader::init(&[1u8, 1])).unwrap();
+    let b = SessionID::read(&mut Reader::init(&[2u8, 1, 2])).unwrap();
     assert_eq!(a, a);
     assert_eq!(b, b);
     assert_ne!(a, b);
@@ -56,7 +56,6 @@ fn accepts_short_sessionid() {
 
     assert_eq!(sess.is_empty(), false);
     assert_eq!(sess.len(), 1);
-    assert_eq!(sess, SessionID::new(&[1u8]));
     assert_eq!(rd.any_left(), false);
 }
 
@@ -69,7 +68,6 @@ fn accepts_empty_sessionid() {
 
     assert_eq!(sess.is_empty(), true);
     assert_eq!(sess.len(), 0);
-    assert_eq!(sess, SessionID::new(&[]));
     assert_eq!(rd.any_left(), false);
 }
 
@@ -85,8 +83,61 @@ fn can_roundtrip_unknown_client_ext() {
 }
 
 #[test]
+fn refuses_client_ext_with_unparsed_bytes() {
+    let bytes = [0x00u8, 0x0b, 0x00, 0x04, 0x02, 0xf8, 0x01, 0x02];
+    let mut rd = Reader::init(&bytes);
+    assert!(ClientExtension::read(&mut rd).is_none());
+}
+
+#[test]
+fn refuses_server_ext_with_unparsed_bytes() {
+    let bytes = [0x00u8, 0x0b, 0x00, 0x04, 0x02, 0xf8, 0x01, 0x02];
+    let mut rd = Reader::init(&bytes);
+    assert!(ServerExtension::read(&mut rd).is_none());
+}
+
+#[test]
+fn refuses_certificate_ext_with_unparsed_bytes() {
+    let bytes = [0x00u8, 0x12, 0x00, 0x03, 0x00, 0x00, 0x01];
+    let mut rd = Reader::init(&bytes);
+    assert!(CertificateExtension::read(&mut rd).is_none());
+}
+
+#[test]
+fn refuses_certificate_req_ext_with_unparsed_bytes() {
+    let bytes = [0x00u8, 0x0d, 0x00, 0x05, 0x00, 0x02, 0x01, 0x02, 0xff];
+    let mut rd = Reader::init(&bytes);
+    assert!(CertReqExtension::read(&mut rd).is_none());
+}
+
+#[test]
+fn refuses_helloreq_ext_with_unparsed_bytes() {
+    let bytes = [0x00u8, 0x2b, 0x00, 0x03, 0x00, 0x00, 0x01];
+    let mut rd = Reader::init(&bytes);
+    assert!(HelloRetryExtension::read(&mut rd).is_none());
+}
+
+#[test]
+fn refuses_newsessionticket_ext_with_unparsed_bytes() {
+    let bytes = [0x00u8, 0x2a, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x01];
+    let mut rd = Reader::init(&bytes);
+    assert!(NewSessionTicketExtension::read(&mut rd).is_none());
+}
+
+#[test]
 fn can_roundtrip_single_sni() {
     let bytes = [0, 0, 0, 7, 0, 5, 0, 0, 2, 0x6c, 0x6f];
+    let mut rd = Reader::init(&bytes);
+    let ext = ClientExtension::read(&mut rd).unwrap();
+    println!("{:?}", ext);
+
+    assert_eq!(ext.get_type(), ExtensionType::ServerName);
+    assert_eq!(bytes.to_vec(), ext.get_encoding());
+}
+
+#[test]
+fn can_round_trip_mixed_case_sni() {
+    let bytes = [0, 0, 0, 7, 0, 5, 0, 0, 2, 0x4c, 0x6f];
     let mut rd = Reader::init(&bytes);
     let ext = ClientExtension::read(&mut rd).unwrap();
     println!("{:?}", ext);
@@ -309,7 +360,7 @@ fn decomposed_signature_scheme_has_correct_mappings() {
 fn get_sample_clienthellopayload() -> ClientHelloPayload {
     ClientHelloPayload {
         client_version: ProtocolVersion::TLSv1_2,
-        random: Random::from_slice(&[0; 32]),
+        random: Random::from([0; 32]),
         session_id: SessionID::empty(),
         cipher_suites: vec![CipherSuite::TLS_NULL_WITH_NULL_NULL],
         compression_methods: vec![Compression::Null],
@@ -317,9 +368,9 @@ fn get_sample_clienthellopayload() -> ClientHelloPayload {
             ClientExtension::ECPointFormats(ECPointFormatList::supported()),
             ClientExtension::NamedGroups(vec![NamedGroup::X25519]),
             ClientExtension::SignatureAlgorithms(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
-            ClientExtension::make_sni(DNSNameRef::try_from_ascii_str("hello").unwrap()),
-            ClientExtension::SessionTicketRequest,
-            ClientExtension::SessionTicketOffer(Payload(vec![])),
+            ClientExtension::make_sni(DnsNameRef::try_from_ascii_str("hello").unwrap()),
+            ClientExtension::SessionTicket(ClientSessionTicket::Request),
+            ClientExtension::SessionTicket(ClientSessionTicket::Offer(Payload(vec![]))),
             ClientExtension::Protocols(vec![PayloadU8(vec![0])]),
             ClientExtension::SupportedVersions(vec![ProtocolVersion::TLSv1_3]),
             ClientExtension::KeyShare(vec![KeyShareEntry::new(NamedGroup::X25519, &[1, 2, 3])]),
@@ -413,7 +464,7 @@ fn test_truncated_client_extension_is_detected() {
         let mut enc = ext.get_encoding();
         println!("testing {:?} enc {:?}", ext, enc);
 
-        // "outer" truncation, ie, where the extension-level length is longer than
+        // "outer" truncation, i.e., where the extension-level length is longer than
         // the input
         for l in 0..enc.len() {
             assert!(ClientExtension::read_bytes(&enc[..l]).is_none());
@@ -532,7 +583,7 @@ fn test_truncated_helloretry_extension_is_detected() {
         let mut enc = ext.get_encoding();
         println!("testing {:?} enc {:?}", ext, enc);
 
-        // "outer" truncation, ie, where the extension-level length is longer than
+        // "outer" truncation, i.e., where the extension-level length is longer than
         // the input
         for l in 0..enc.len() {
             assert!(HelloRetryExtension::read_bytes(&enc[..l]).is_none());
@@ -601,7 +652,7 @@ fn test_truncated_server_extension_is_detected() {
         let mut enc = ext.get_encoding();
         println!("testing {:?} enc {:?}", ext, enc);
 
-        // "outer" truncation, ie, where the extension-level length is longer than
+        // "outer" truncation, i.e., where the extension-level length is longer than
         // the input
         for l in 0..enc.len() {
             assert!(ServerExtension::read_bytes(&enc[..l]).is_none());
@@ -707,7 +758,7 @@ fn certentry_get_scts() {
 fn get_sample_serverhellopayload() -> ServerHelloPayload {
     ServerHelloPayload {
         legacy_version: ProtocolVersion::TLSv1_2,
-        random: Random::from_slice(&[0; 32]),
+        random: Random::from([0; 32]),
         session_id: SessionID::empty(),
         cipher_suite: CipherSuite::TLS_NULL_WITH_NULL_NULL,
         compression_method: Compression::Null,
@@ -970,13 +1021,11 @@ fn can_detect_truncation_of_all_tls12_handshake_payloads() {
                 _ => {}
             };
 
-            assert!(
-                HandshakeMessagePayload::read_version(
-                    &mut Reader::init(&enc),
-                    ProtocolVersion::TLSv1_2
-                )
-                .is_none()
-            );
+            assert!(HandshakeMessagePayload::read_version(
+                &mut Reader::init(&enc),
+                ProtocolVersion::TLSv1_2
+            )
+            .is_none());
             assert!(HandshakeMessagePayload::read_bytes(&enc).is_none());
         }
     }
@@ -1119,13 +1168,11 @@ fn can_detect_truncation_of_all_tls13_handshake_payloads() {
                 _ => {}
             };
 
-            assert!(
-                HandshakeMessagePayload::read_version(
-                    &mut Reader::init(&enc),
-                    ProtocolVersion::TLSv1_3
-                )
-                .is_none()
-            );
+            assert!(HandshakeMessagePayload::read_version(
+                &mut Reader::init(&enc),
+                ProtocolVersion::TLSv1_3
+            )
+            .is_none());
         }
     }
 }

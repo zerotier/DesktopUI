@@ -817,7 +817,7 @@ pub const ELFCOMPRESS_HIPROC: u32 = 0x7fff_ffff;
 pub const GRP_COMDAT: u32 = 1;
 
 /// Symbol table entry.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 #[repr(C)]
 pub struct Sym32<E: Endian> {
     /// Symbol name.
@@ -867,7 +867,7 @@ impl<E: Endian> Sym32<E> {
 }
 
 /// Symbol table entry.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 #[repr(C)]
 pub struct Sym64<E: Endian> {
     /// Symbol name.
@@ -1694,6 +1694,11 @@ pub const DF_1_PIE: u32 = 0x0800_0000;
 #[repr(C)]
 pub struct Versym<E: Endian>(pub U16<E>);
 
+/// Symbol is hidden.
+pub const VERSYM_HIDDEN: u16 = 0x8000;
+/// Symbol version index.
+pub const VERSYM_VERSION: u16 = 0x7fff;
+
 /// Version definition sections
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
@@ -1720,9 +1725,10 @@ pub const VER_DEF_NONE: u16 = 0;
 /// Current version
 pub const VER_DEF_CURRENT: u16 = 1;
 
-// Legal values for vd_flags and vna_flags (version information flags).
+// Legal values for vd_flags (version information flags).
 /// Version definition of file itself
 pub const VER_FLG_BASE: u16 = 0x1;
+// Legal values for vd_flags and vna_flags (version information flags).
 /// Weak version identifier
 pub const VER_FLG_WEAK: u16 = 0x2;
 
@@ -1731,8 +1737,6 @@ pub const VER_FLG_WEAK: u16 = 0x2;
 pub const VER_NDX_LOCAL: u16 = 0;
 /// Symbol is global.
 pub const VER_NDX_GLOBAL: u16 = 1;
-/// Symbol is hidden.
-pub const VER_NDX_HIDDEN: u16 = 0x8000;
 
 /// Auxiliary version information.
 #[derive(Debug, Clone, Copy)]
@@ -2387,6 +2391,10 @@ pub const EF_MIPS_ARCH_64: u32 = 0x6000_0000;
 pub const EF_MIPS_ARCH_32R2: u32 = 0x7000_0000;
 /// MIPS64r2 code.
 pub const EF_MIPS_ARCH_64R2: u32 = 0x8000_0000;
+/// MIPS32r6 code
+pub const EF_MIPS_ARCH_32R6: u32 = 0x9000_0000;
+/// MIPS64r6 code
+pub const EF_MIPS_ARCH_64R6: u32 = 0xa000_0000;
 
 // MIPS values for `Sym32::st_shndx`.
 
@@ -2572,7 +2580,7 @@ pub const OHW_R4KEOP: u32 = 0x1;
 pub const OHW_R8KPFETCH: u32 = 0x2;
 /// R5000 end-of-page patch.
 pub const OHW_R5KEOP: u32 = 0x4;
-/// R5000 cvt.[ds].l bug.  clean=1.
+/// R5000 cvt.\[ds\].l bug.  clean=1.
 pub const OHW_R5KCVTL: u32 = 0x8;
 
 #[allow(missing_docs)]

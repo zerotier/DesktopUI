@@ -1,6 +1,6 @@
 # `gimli`
 
-[![](http://meritbadge.herokuapp.com/gimli) ![](https://img.shields.io/crates/d/gimli.svg)](https://crates.io/crates/gimli)
+[![](https://img.shields.io/crates/v/gimli.svg) ![](https://img.shields.io/crates/d/gimli.svg)](https://crates.io/crates/gimli)
 [![](https://docs.rs/gimli/badge.svg)](https://docs.rs/gimli/)
 [![Build Status](https://github.com/gimli-rs/gimli/workflows/Rust/badge.svg)](https://github.com/gimli-rs/gimli/actions)
 [![Coverage Status](https://coveralls.io/repos/github/gimli-rs/gimli/badge.svg?branch=master)](https://coveralls.io/github/gimli-rs/gimli?branch=master)
@@ -30,7 +30,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-gimli = "0.25.0"
+gimli = "0.26.1"
 ```
 
 The minimum supported Rust version is 1.42.0.
@@ -64,8 +64,8 @@ The minimum supported Rust version is 1.42.0.
 
 Licensed under either of
 
-  * Apache License, Version 2.0 ([`LICENSE-APACHE`](./LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-  * MIT license ([`LICENSE-MIT`](./LICENSE-MIT) or http://opensource.org/licenses/MIT)
+  * Apache License, Version 2.0 ([`LICENSE-APACHE`](./LICENSE-APACHE) or https://www.apache.org/licenses/LICENSE-2.0)
+  * MIT license ([`LICENSE-MIT`](./LICENSE-MIT) or https://opensource.org/licenses/MIT)
 
 at your option.
 

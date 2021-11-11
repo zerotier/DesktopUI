@@ -102,6 +102,16 @@ s! {
         pub ai_next: *mut addrinfo,
     }
 
+    pub struct ifaddrs {
+        pub ifa_next: *mut ifaddrs,
+        pub ifa_name: *mut ::c_char,
+        pub ifa_flags: ::c_uint,
+        pub ifa_addr: *mut ::sockaddr,
+        pub ifa_netmask: *mut ::sockaddr,
+        pub ifa_dstaddr: *mut ::sockaddr,
+        pub ida_data: *mut ::c_void,
+    }
+
     pub struct fd_set {
         // size for 1024 bits, and a fd_mask with size u32
         fds_bits: [fd_mask; 32],
@@ -364,10 +374,63 @@ s_no_extra_traits! {
         __unused1: *mut ::c_void, // actually a function pointer
         pub sigev_notify_attributes: *mut ::pthread_attr_t,
     }
+
+    pub struct utmpx {
+        pub ut_type: ::c_short,
+        pub ut_tv: ::timeval,
+        pub ut_id: [::c_char; 8],
+        pub ut_pid: ::pid_t,
+        pub ut_user: [::c_char; 32],
+        pub ut_line: [::c_char; 16],
+        pub ut_host: [::c_char; 128],
+        __ut_reserved: [::c_char; 64],
+    }
 }
 
 cfg_if! {
     if #[cfg(feature = "extra_traits")] {
+        impl PartialEq for utmpx {
+            fn eq(&self, other: &utmpx) -> bool {
+                self.ut_type == other.ut_type
+                    && self.ut_tv == other.ut_tv
+                    && self.ut_id == other.ut_id
+                    && self.ut_pid == other.ut_pid
+                    && self.ut_user == other.ut_user
+                    && self.ut_line == other.ut_line
+                    && self.ut_host.iter().zip(other.ut_host.iter()).all(|(a,b)| a == b)
+                    && self.__ut_reserved == other.__ut_reserved
+            }
+        }
+
+        impl Eq for utmpx {}
+
+        impl ::fmt::Debug for utmpx {
+            fn fmt(&self, f: &mut ::fmt::Formatter) -> ::fmt::Result {
+                f.debug_struct("utmpx")
+                    .field("ut_type", &self.ut_type)
+                    .field("ut_tv", &self.ut_tv)
+                    .field("ut_id", &self.ut_id)
+                    .field("ut_pid", &self.ut_pid)
+                    .field("ut_user", &self.ut_user)
+                    .field("ut_line", &self.ut_line)
+                    .field("ut_host", &self.ut_host)
+                    .field("__ut_reserved", &self.__ut_reserved)
+                    .finish()
+            }
+        }
+
+        impl ::hash::Hash for utmpx {
+            fn hash<H: ::hash::Hasher>(&self, state: &mut H) {
+                self.ut_type.hash(state);
+                self.ut_tv.hash(state);
+                self.ut_id.hash(state);
+                self.ut_pid.hash(state);
+                self.ut_user.hash(state);
+                self.ut_line.hash(state);
+                self.ut_host.hash(state);
+                self.__ut_reserved.hash(state);
+            }
+        }
         impl PartialEq for sockaddr_un {
             fn eq(&self, other: &sockaddr_un) -> bool {
                 self.sun_len == other.sun_len
@@ -1265,6 +1328,16 @@ pub const PRIO_PROCESS: ::c_int = 0;
 pub const PRIO_PGRP: ::c_int = 1;
 pub const PRIO_USER: ::c_int = 2;
 
+// utmpx entry types
+pub const EMPTY: ::c_short = 0;
+pub const BOOT_TIME: ::c_short = 1;
+pub const OLD_TIME: ::c_short = 2;
+pub const NEW_TIME: ::c_short = 3;
+pub const USER_PROCESS: ::c_short = 4;
+pub const INIT_PROCESS: ::c_short = 5;
+pub const LOGIN_PROCESS: ::c_short = 6;
+pub const DEAD_PROCESS: ::c_short = 7;
+
 pub const LOG_PID: ::c_int = 1 << 12;
 pub const LOG_CONS: ::c_int = 2 << 12;
 pub const LOG_ODELAY: ::c_int = 4 << 12;
@@ -1402,6 +1475,8 @@ extern "C" {
     pub fn labs(i: ::c_long) -> ::c_long;
     pub fn rand() -> ::c_int;
     pub fn srand(seed: ::c_uint);
+    pub fn getifaddrs(ifap: *mut *mut ::ifaddrs) -> ::c_int;
+    pub fn freeifaddrs(ifa: *mut ::ifaddrs);
 }
 
 #[link(name = "bsd")]
@@ -1510,6 +1585,12 @@ extern "C" {
         buflen: ::size_t,
         result: *mut *mut ::group,
     ) -> ::c_int;
+    pub fn getgrouplist(
+        user: *const ::c_char,
+        basegroup: ::gid_t,
+        grouplist: *mut ::gid_t,
+        groupcount: *mut ::c_int,
+    ) -> ::c_int;
     pub fn sigaltstack(ss: *const stack_t, oss: *mut stack_t) -> ::c_int;
     pub fn sem_close(sem: *mut sem_t) -> ::c_int;
     pub fn getdtablesize() -> ::c_int;
@@ -1563,6 +1644,12 @@ extern "C" {
     ) -> ::pid_t;
     pub fn sethostname(name: *const ::c_char, len: ::size_t) -> ::c_int;
     pub fn uname(buf: *mut ::utsname) -> ::c_int;
+    pub fn getutxent() -> *mut utmpx;
+    pub fn getutxid(ut: *const utmpx) -> *mut utmpx;
+    pub fn getutxline(ut: *const utmpx) -> *mut utmpx;
+    pub fn pututxline(ut: *const utmpx) -> *mut utmpx;
+    pub fn setutxent();
+    pub fn endutxent();
 }
 
 cfg_if! {

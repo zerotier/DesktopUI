@@ -186,6 +186,15 @@ pub struct Iter<'a, T> {
     len: usize,
 }
 
+impl<'a, T> Clone for Iter<'a, T> {
+    fn clone(&self) -> Self {
+        Self {
+            entries: self.entries.clone(),
+            len: self.len,
+        }
+    }
+}
+
 /// A mutable iterator over the values stored in the `Slab`
 pub struct IterMut<'a, T> {
     entries: iter::Enumerate<slice::IterMut<'a, Entry<T>>>,
@@ -1253,10 +1262,14 @@ where
     T: fmt::Debug,
 {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt.debug_struct("Slab")
-            .field("len", &self.len)
-            .field("cap", &self.capacity())
-            .finish()
+        if fmt.alternate() {
+            fmt.debug_map().entries(self.iter()).finish()
+        } else {
+            fmt.debug_struct("Slab")
+                .field("len", &self.len)
+                .field("cap", &self.capacity())
+                .finish()
+        }
     }
 }
 
@@ -1265,7 +1278,7 @@ where
     T: fmt::Debug,
 {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt.debug_struct("Iter")
+        fmt.debug_struct("IntoIter")
             .field("remaining", &self.len)
             .finish()
     }

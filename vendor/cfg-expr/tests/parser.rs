@@ -14,17 +14,7 @@ macro_rules! test_validate {
             $(
                 let actual = preds.next().unwrap();
 
-                if actual.1 != $expected {
-                    let actual_str = format!("{:?}", actual.1);
-                    let expected_str = format!("{:?}", $expected);
-
-                    assert!(
-                        false,
-                        "failed @ index {} - {}",
-                        actual.0,
-                        difference::Changeset::new(&expected_str, &actual_str, " ")
-                    );
-                }
+                similar_asserts::assert_eq!($expected, actual.1, "failed @ index {}", actual.0);
             )*
 
             if let Some((_, additional)) = preds.next() {
@@ -44,16 +34,7 @@ macro_rules! err {
             reason: Reason::$reason,
         };
 
-        if act_err != expected {
-            let act_text = format!("{:?}", act_err);
-            let exp_text = format!("{:?}", expected);
-            assert!(
-                false,
-                "\n{}\n{}",
-                act_err,
-                difference::Changeset::new(&exp_text, &act_text, "")
-            );
-        }
+        similar_asserts::assert_eq!(expected, act_err);
     };
 
     ($text:expr => $unexpected:expr; $range:expr) => {
@@ -65,15 +46,7 @@ macro_rules! err {
             reason: Reason::Unexpected($unexpected),
         };
 
-        if act_err != expected {
-            let act_text = format!("{:?}", act_err);
-            let exp_text = format!("{:?}", expected);
-            assert!(
-                false,
-                "{}",
-                difference::Changeset::new(&exp_text, &act_text, "")
-            );
-        }
+        similar_asserts::assert_eq!(expected, act_err);
     };
 }
 

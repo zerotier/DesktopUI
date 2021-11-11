@@ -1,13 +1,13 @@
 use crate::client;
-use crate::error::TLSError;
+use crate::error::Error;
 use crate::key;
+use crate::limited_cache;
 use crate::msgs::enums::SignatureScheme;
 use crate::sign;
 
-use std::collections;
 use std::sync::{Arc, Mutex};
 
-/// An implementor of `StoresClientSessions` which does nothing.
+/// An implementer of `StoresClientSessions` which does nothing.
 pub struct NoClientSessionStorage {}
 
 impl client::StoresClientSessions for NoClientSessionStorage {
@@ -20,31 +20,21 @@ impl client::StoresClientSessions for NoClientSessionStorage {
     }
 }
 
-/// An implementor of `StoresClientSessions` that stores everything
+/// An implementer of `StoresClientSessions` that stores everything
 /// in memory.  It enforces a limit on the number of entries
 /// to bound memory usage.
 pub struct ClientSessionMemoryCache {
-    cache: Mutex<collections::HashMap<Vec<u8>, Vec<u8>>>,
-    max_entries: usize,
+    cache: Mutex<limited_cache::LimitedCache<Vec<u8>, Vec<u8>>>,
 }
 
 impl ClientSessionMemoryCache {
     /// Make a new ClientSessionMemoryCache.  `size` is the
     /// maximum number of stored sessions.
-    pub fn new(size: usize) -> Arc<ClientSessionMemoryCache> {
+    pub fn new(size: usize) -> Arc<Self> {
         debug_assert!(size > 0);
-        Arc::new(ClientSessionMemoryCache {
-            cache: Mutex::new(collections::HashMap::new()),
-            max_entries: size,
+        Arc::new(Self {
+            cache: Mutex::new(limited_cache::LimitedCache::new(size)),
         })
-    }
-
-    fn limit_size(&self) {
-        let mut cache = self.cache.lock().unwrap();
-        while cache.len() > self.max_entries {
-            let k = cache.keys().next().unwrap().clone();
-            cache.remove(&k);
-        }
     }
 }
 
@@ -54,7 +44,6 @@ impl client::StoresClientSessions for ClientSessionMemoryCache {
             .lock()
             .unwrap()
             .insert(key, value);
-        self.limit_size();
         true
     }
 
@@ -67,14 +56,14 @@ impl client::StoresClientSessions for ClientSessionMemoryCache {
     }
 }
 
-pub struct FailResolveClientCert {}
+pub(super) struct FailResolveClientCert {}
 
 impl client::ResolvesClientCert for FailResolveClientCert {
     fn resolve(
         &self,
         _acceptable_issuers: &[&[u8]],
         _sigschemes: &[SignatureScheme],
-    ) -> Option<sign::CertifiedKey> {
+    ) -> Option<Arc<sign::CertifiedKey>> {
         None
     }
 
@@ -83,19 +72,16 @@ impl client::ResolvesClientCert for FailResolveClientCert {
     }
 }
 
-pub struct AlwaysResolvesClientCert(sign::CertifiedKey);
+pub(super) struct AlwaysResolvesClientCert(Arc<sign::CertifiedKey>);
 
 impl AlwaysResolvesClientCert {
-    pub fn new(
+    pub(super) fn new(
         chain: Vec<key::Certificate>,
         priv_key: &key::PrivateKey,
-    ) -> Result<AlwaysResolvesClientCert, TLSError> {
+    ) -> Result<Self, Error> {
         let key = sign::any_supported_type(priv_key)
-            .map_err(|_| TLSError::General("invalid private key".into()))?;
-        Ok(AlwaysResolvesClientCert(sign::CertifiedKey::new(
-            chain,
-            Arc::new(key),
-        )))
+            .map_err(|_| Error::General("invalid private key".into()))?;
+        Ok(Self(Arc::new(sign::CertifiedKey::new(chain, key))))
     }
 }
 
@@ -104,8 +90,8 @@ impl client::ResolvesClientCert for AlwaysResolvesClientCert {
         &self,
         _acceptable_issuers: &[&[u8]],
         _sigschemes: &[SignatureScheme],
-    ) -> Option<sign::CertifiedKey> {
-        Some(self.0.clone())
+    ) -> Option<Arc<sign::CertifiedKey>> {
+        Some(Arc::clone(&self.0))
     }
 
     fn has_certs(&self) -> bool {
@@ -116,7 +102,7 @@ impl client::ResolvesClientCert for AlwaysResolvesClientCert {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::StoresClientSessions;
+    use crate::client::StoresClientSessions;
 
     #[test]
     fn test_noclientsessionstorage_drops_put() {
@@ -157,30 +143,19 @@ mod test {
 
     #[test]
     fn test_clientsessionmemorycache_drops_to_maintain_size_invariant() {
-        let c = ClientSessionMemoryCache::new(4);
+        let c = ClientSessionMemoryCache::new(2);
         assert_eq!(c.put(vec![0x01], vec![0x02]), true);
         assert_eq!(c.put(vec![0x03], vec![0x04]), true);
         assert_eq!(c.put(vec![0x05], vec![0x06]), true);
         assert_eq!(c.put(vec![0x07], vec![0x08]), true);
         assert_eq!(c.put(vec![0x09], vec![0x0a]), true);
 
-        let mut count = 0;
-        if c.get(&[0x01]).is_some() {
-            count += 1;
-        }
-        if c.get(&[0x03]).is_some() {
-            count += 1;
-        }
-        if c.get(&[0x05]).is_some() {
-            count += 1;
-        }
-        if c.get(&[0x07]).is_some() {
-            count += 1;
-        }
-        if c.get(&[0x09]).is_some() {
-            count += 1;
-        }
+        let count = c.get(&[0x01]).iter().count()
+            + c.get(&[0x03]).iter().count()
+            + c.get(&[0x05]).iter().count()
+            + c.get(&[0x07]).iter().count()
+            + c.get(&[0x09]).iter().count();
 
-        assert_eq!(count, 4);
+        assert!(count < 5);
     }
 }

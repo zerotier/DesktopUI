@@ -3,25 +3,24 @@
 # When uploading crates to the registry Cargo will automatically
 # "normalize" Cargo.toml files for maximal compatibility
 # with all versions of Cargo and also rewrite `path` dependencies
-# to registry (e.g., crates.io) dependencies
+# to registry (e.g., crates.io) dependencies.
 #
-# If you believe there's an error in this file please file an
-# issue against the rust-lang/cargo repository. If you're
-# editing this file be aware that the upstream Cargo.toml
-# will likely look very different (and much more reasonable)
+# If you are reading this file be aware that the original Cargo.toml
+# will likely look very different (and much more reasonable).
+# See Cargo.toml.orig for the original contents.
 
 [package]
 edition = "2018"
 name = "rustls"
-version = "0.19.1"
+version = "0.20.0"
 authors = ["Joseph Birr-Pixton <jpixton@gmail.com>"]
 autobenches = false
 description = "Rustls is a modern TLS library written in Rust."
-homepage = "https://github.com/ctz/rustls"
+homepage = "https://github.com/rustls/rustls"
 readme = "../README.md"
 categories = ["network-programming", "cryptography"]
 license = "Apache-2.0/ISC/MIT"
-repository = "https://github.com/ctz/rustls"
+repository = "https://github.com/rustls/rustls"
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
@@ -43,35 +42,40 @@ path = "examples/internal/bench.rs"
 name = "benchmarks"
 path = "tests/benchmarks.rs"
 harness = false
-[dependencies.base64]
-version = "0.13.0"
-
 [dependencies.log]
 version = "0.4.4"
 optional = true
 
 [dependencies.ring]
-version = "0.16.11"
+version = "0.16.20"
 
 [dependencies.sct]
-version = "0.6.0"
+version = "0.7.0"
 
 [dependencies.webpki]
-version = "0.21.0"
+version = "0.22.0"
+features = ["alloc", "std"]
+[dev-dependencies.base64]
+version = "0.13.0"
+
 [dev-dependencies.criterion]
 version = "0.3.0"
 
 [dev-dependencies.env_logger]
-version = "0.8.2"
+version = "0.9.0"
 
 [dev-dependencies.log]
 version = "0.4.4"
 
+[dev-dependencies.rustls-pemfile]
+version = "0.2.0"
+
 [dev-dependencies.webpki-roots]
-version = "0.21"
+version = "0.22.0"
 
 [features]
 dangerous_configuration = []
-default = ["logging"]
+default = ["logging", "tls12"]
 logging = ["log"]
 quic = []
+tls12 = []

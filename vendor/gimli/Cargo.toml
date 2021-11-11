@@ -13,8 +13,8 @@
 [package]
 edition = "2018"
 name = "gimli"
-version = "0.25.0"
-exclude = ["/ci/*", "/releases/*", "/.travis.yml"]
+version = "0.26.1"
+exclude = ["/ci/*", "/releases/*", "/.github"]
 description = "A library for reading and writing the DWARF debugging format."
 documentation = "https://docs.rs/gimli"
 readme = "./README.md"
@@ -85,7 +85,7 @@ version = "0.7"
 version = "1"
 
 [dev-dependencies.object]
-version = "0.26"
+version = "0.27.1"
 features = ["wasm"]
 
 [dev-dependencies.rayon]
@@ -102,8 +102,9 @@ version = "2"
 
 [features]
 default = ["read", "write", "std", "fallible-iterator", "endian-reader"]
-endian-reader = ["stable_deref_trait"]
-read = []
+endian-reader = ["read", "stable_deref_trait"]
+read = ["read-core"]
+read-core = []
 rustc-dep-of-std = ["core", "alloc", "compiler_builtins"]
 std = ["fallible-iterator/std", "stable_deref_trait/std"]
 write = ["indexmap"]

@@ -1490,10 +1490,11 @@ impl Build {
                     cmd.push_cc_arg("-fdata-sections".into());
                 }
                 // Disable generation of PIC on bare-metal for now: rust-lld doesn't support this yet
-                if self
-                    .pic
-                    .unwrap_or(!target.contains("windows") && !target.contains("-none-"))
-                {
+                if self.pic.unwrap_or(
+                    !target.contains("windows")
+                        && !target.contains("-none-")
+                        && !target.contains("uefi"),
+                ) {
                     cmd.push_cc_arg("-fPIC".into());
                     // PLT only applies if code is compiled with PIC support,
                     // and only for ELF targets.
@@ -1556,6 +1557,16 @@ impl Build {
                         cmd.args.push(
                             format!("--target={}", target.replace("riscv64gc", "riscv64")).into(),
                         );
+                    } else if target.starts_with("riscv32gc-") {
+                        cmd.args.push(
+                            format!("--target={}", target.replace("riscv32gc", "riscv32")).into(),
+                        );
+                    } else if target.contains("uefi") {
+                        if target.contains("x86_64") {
+                            cmd.args.push("--target=x86_64-unknown-windows-gnu".into());
+                        } else if target.contains("i686") {
+                            cmd.args.push("--target=i686-unknown-windows-gnu".into())
+                        }
                     } else {
                         cmd.args.push(format!("--target={}", target).into());
                     }
@@ -1613,6 +1624,10 @@ impl Build {
                     }
                 }
 
+                if target.contains("-kmc-solid_") {
+                    cmd.args.push("-finput-charset=utf-8".into());
+                }
+
                 if self.static_flag.is_none() {
                     let features = self
                         .getenv("CARGO_CFG_TARGET_FEATURE")
@@ -1624,9 +1639,14 @@ impl Build {
 
                 // armv7 targets get to use armv7 instructions
                 if (target.starts_with("armv7") || target.starts_with("thumbv7"))
-                    && target.contains("-linux-")
+                    && (target.contains("-linux-") || target.contains("-kmc-solid_"))
                 {
                     cmd.args.push("-march=armv7-a".into());
+
+                    if target.ends_with("eabihf") {
+                        // lowest common denominator FPU
+                        cmd.args.push("-mfpu=vfpv3-d16".into());
+                    }
                 }
 
                 // (x86 Android doesn't say "eabi")
@@ -2180,6 +2200,10 @@ impl Build {
                     } else {
                         "wr-cc".to_string()
                     }
+                } else if target.starts_with("armv7a-kmc-solid_") {
+                    format!("arm-kmc-eabi-{}", gnu)
+                } else if target.starts_with("aarch64-kmc-solid_") {
+                    format!("aarch64-kmc-elf-{}", gnu)
                 } else if self.get_host()? != target {
                     let prefix = self.prefix_for_target(&target);
                     match prefix {
@@ -2355,7 +2379,7 @@ impl Build {
         //
         // It's true that everything here is a bit of a pain, but apparently if
         // you're not literally make or bash then you get a lot of bug reports.
-        let known_wrappers = ["ccache", "distcc", "sccache", "icecc"];
+        let known_wrappers = ["ccache", "distcc", "sccache", "icecc", "cachepot"];
 
         let mut parts = tool.split_whitespace();
         let maybe_wrapper = match parts.next() {
@@ -2504,6 +2528,10 @@ impl Build {
             "i586-unknown-linux-musl" => Some("musl"),
             "i686-pc-windows-gnu" => Some("i686-w64-mingw32"),
             "i686-uwp-windows-gnu" => Some("i686-w64-mingw32"),
+            "i686-unknown-linux-gnu" => self.find_working_gnu_prefix(&[
+                "i686-linux-gnu",
+                "x86_64-linux-gnu", // transparently support gcc-multilib
+            ]), // explicit None if not found, so caller knows to fall back
             "i686-unknown-linux-musl" => Some("musl"),
             "i686-unknown-netbsd" => Some("i486--netbsdelf"),
             "mips-unknown-linux-gnu" => Some("mips-linux-gnu"),
@@ -2571,6 +2599,9 @@ impl Build {
             "x86_64-pc-windows-gnu" => Some("x86_64-w64-mingw32"),
             "x86_64-uwp-windows-gnu" => Some("x86_64-w64-mingw32"),
             "x86_64-rumprun-netbsd" => Some("x86_64-rumprun-netbsd"),
+            "x86_64-unknown-linux-gnu" => self.find_working_gnu_prefix(&[
+                "x86_64-linux-gnu", // rustfmt wrap
+            ]), // explicit None if not found, so caller knows to fall back
             "x86_64-unknown-linux-musl" => Some("musl"),
             "x86_64-unknown-netbsd" => Some("x86_64--netbsd"),
             _ => None,

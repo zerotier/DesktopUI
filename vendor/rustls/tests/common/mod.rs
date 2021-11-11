@@ -1,24 +1,30 @@
+use std::convert::{TryFrom, TryInto};
 use std::io;
+use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
-use rustls;
+use rustls_pemfile;
 
-use rustls::internal::msgs::{codec::Codec, codec::Reader, message::Message};
-use rustls::internal::pemfile;
-use rustls::ProtocolVersion;
-use rustls::Session;
-use rustls::TLSError;
-use rustls::{AllowAnyAuthenticatedClient, NoClientAuth, RootCertStore};
+use rustls::internal::msgs::codec::Reader;
+use rustls::internal::msgs::message::{Message, OpaqueMessage, PlainMessage};
+use rustls::server::AllowAnyAuthenticatedClient;
+use rustls::Connection;
+use rustls::Error;
+use rustls::RootCertStore;
 use rustls::{Certificate, PrivateKey};
-use rustls::{ClientConfig, ClientSession};
-use rustls::{ServerConfig, ServerSession};
+use rustls::{ClientConfig, ClientConnection};
+use rustls::{ConnectionCommon, ServerConfig, ServerConnection, SideData};
 
 #[cfg(feature = "dangerous_configuration")]
-use rustls::{
-    ClientCertVerified, ClientCertVerifier, DistinguishedNames, SignatureScheme, WebPKIVerifier,
+use rustls::client::{
+    HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, WebPkiVerifier,
 };
-
-use webpki;
+#[cfg(feature = "dangerous_configuration")]
+use rustls::server::{ClientCertVerified, ClientCertVerifier};
+#[cfg(feature = "dangerous_configuration")]
+use rustls::{
+    internal::msgs::handshake::DigitallySignedStruct, DistinguishedNames, SignatureScheme,
+};
 
 macro_rules! embed_files {
     (
@@ -99,7 +105,10 @@ embed_files! {
     (RSA_INTER_REQ, "rsa", "inter.req");
 }
 
-pub fn transfer(left: &mut dyn Session, right: &mut dyn Session) -> usize {
+pub fn transfer(
+    left: &mut (impl DerefMut + Deref<Target = ConnectionCommon<impl SideData>>),
+    right: &mut (impl DerefMut + Deref<Target = ConnectionCommon<impl SideData>>),
+) -> usize {
     let mut buf = [0u8; 262144];
     let mut total = 0;
 
@@ -126,7 +135,14 @@ pub fn transfer(left: &mut dyn Session, right: &mut dyn Session) -> usize {
     total
 }
 
-pub fn transfer_altered<F>(left: &mut dyn Session, filter: F, right: &mut dyn Session) -> usize
+pub fn transfer_eof(conn: &mut (impl DerefMut + Deref<Target = ConnectionCommon<impl SideData>>)) {
+    let empty_buf = [0u8; 0];
+    let empty_cursor: &mut dyn io::Read = &mut &empty_buf[..];
+    let sz = conn.read_tls(empty_cursor).unwrap();
+    assert_eq!(sz, 0);
+}
+
+pub fn transfer_altered<F>(left: &mut Connection, filter: F, right: &mut Connection) -> usize
 where
     F: Fn(&mut Message),
 {
@@ -145,10 +161,12 @@ where
 
         let mut reader = Reader::init(&buf[..sz]);
         while reader.any_left() {
-            let mut message = Message::read(&mut reader).unwrap();
-            message.decode_payload();
+            let message = OpaqueMessage::read(&mut reader).unwrap();
+            let mut message = Message::try_from(message.into_plain_message()).unwrap();
             filter(&mut message);
-            let message_enc = message.get_encoding();
+            let message_enc = PlainMessage::from(message)
+                .into_unencrypted_opaque()
+                .encode();
             let message_enc_reader: &mut dyn io::Read = &mut &message_enc[..];
             let len = right
                 .read_tls(message_enc_reader)
@@ -179,31 +197,79 @@ impl KeyType {
     }
 
     pub fn get_chain(&self) -> Vec<Certificate> {
-        pemfile::certs(&mut io::BufReader::new(self.bytes_for("end.fullchain"))).unwrap()
+        rustls_pemfile::certs(&mut io::BufReader::new(self.bytes_for("end.fullchain")))
+            .unwrap()
+            .iter()
+            .map(|v| Certificate(v.clone()))
+            .collect()
     }
 
     pub fn get_key(&self) -> PrivateKey {
-        pemfile::pkcs8_private_keys(&mut io::BufReader::new(self.bytes_for("end.key"))).unwrap()[0]
-            .clone()
+        PrivateKey(
+            rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(self.bytes_for("end.key")))
+                .unwrap()[0]
+                .clone(),
+        )
     }
 
-    fn get_client_chain(&self) -> Vec<Certificate> {
-        pemfile::certs(&mut io::BufReader::new(self.bytes_for("client.fullchain"))).unwrap()
+    pub fn get_client_chain(&self) -> Vec<Certificate> {
+        rustls_pemfile::certs(&mut io::BufReader::new(self.bytes_for("client.fullchain")))
+            .unwrap()
+            .iter()
+            .map(|v| Certificate(v.clone()))
+            .collect()
     }
 
     fn get_client_key(&self) -> PrivateKey {
-        pemfile::pkcs8_private_keys(&mut io::BufReader::new(self.bytes_for("client.key"))).unwrap()
-            [0]
-        .clone()
+        PrivateKey(
+            rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(
+                self.bytes_for("client.key"),
+            ))
+            .unwrap()[0]
+                .clone(),
+        )
     }
 }
 
-pub fn make_server_config(kt: KeyType) -> ServerConfig {
-    let mut cfg = ServerConfig::new(NoClientAuth::new());
-    cfg.set_single_cert(kt.get_chain(), kt.get_key())
-        .unwrap();
+pub fn finish_server_config(
+    kt: KeyType,
+    conf: rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifier>,
+) -> ServerConfig {
+    conf.with_no_client_auth()
+        .with_single_cert(kt.get_chain(), kt.get_key())
+        .unwrap()
+}
 
-    cfg
+pub fn make_server_config(kt: KeyType) -> ServerConfig {
+    finish_server_config(kt, ServerConfig::builder().with_safe_defaults())
+}
+
+pub fn make_server_config_with_versions(
+    kt: KeyType,
+    versions: &[&'static rustls::SupportedProtocolVersion],
+) -> ServerConfig {
+    finish_server_config(
+        kt,
+        ServerConfig::builder()
+            .with_safe_default_cipher_suites()
+            .with_safe_default_kx_groups()
+            .with_protocol_versions(versions)
+            .unwrap(),
+    )
+}
+
+pub fn make_server_config_with_kx_groups(
+    kt: KeyType,
+    kx_groups: &[&'static rustls::SupportedKxGroup],
+) -> ServerConfig {
+    finish_server_config(
+        kt,
+        ServerConfig::builder()
+            .with_safe_default_cipher_suites()
+            .with_kx_groups(kx_groups)
+            .with_safe_default_protocol_versions()
+            .unwrap(),
+    )
 }
 
 pub fn get_client_root_store(kt: KeyType) -> RootCertStore {
@@ -219,53 +285,110 @@ pub fn make_server_config_with_mandatory_client_auth(kt: KeyType) -> ServerConfi
     let client_auth_roots = get_client_root_store(kt);
 
     let client_auth = AllowAnyAuthenticatedClient::new(client_auth_roots);
-    let mut cfg = ServerConfig::new(NoClientAuth::new());
-    cfg.set_client_certificate_verifier(client_auth);
-    cfg.set_single_cert(kt.get_chain(), kt.get_key())
-        .unwrap();
 
-    cfg
+    ServerConfig::builder()
+        .with_safe_defaults()
+        .with_client_cert_verifier(client_auth)
+        .with_single_cert(kt.get_chain(), kt.get_key())
+        .unwrap()
+}
+
+pub fn finish_client_config(
+    kt: KeyType,
+    config: rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier>,
+) -> ClientConfig {
+    let mut root_store = RootCertStore::empty();
+    let mut rootbuf = io::BufReader::new(kt.bytes_for("ca.cert"));
+    root_store.add_parsable_certificates(&rustls_pemfile::certs(&mut rootbuf).unwrap());
+
+    config
+        .with_root_certificates(root_store)
+        .with_no_client_auth()
+}
+
+pub fn finish_client_config_with_creds(
+    kt: KeyType,
+    config: rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier>,
+) -> ClientConfig {
+    let mut root_store = RootCertStore::empty();
+    let mut rootbuf = io::BufReader::new(kt.bytes_for("ca.cert"));
+    root_store.add_parsable_certificates(&rustls_pemfile::certs(&mut rootbuf).unwrap());
+
+    config
+        .with_root_certificates(root_store)
+        .with_single_cert(kt.get_client_chain(), kt.get_client_key())
+        .unwrap()
 }
 
 pub fn make_client_config(kt: KeyType) -> ClientConfig {
-    let mut cfg = ClientConfig::new();
-    let mut rootbuf = io::BufReader::new(kt.bytes_for("ca.cert"));
-    cfg.root_store
-        .add_pem_file(&mut rootbuf)
-        .unwrap();
+    finish_client_config(kt, ClientConfig::builder().with_safe_defaults())
+}
 
-    cfg
+pub fn make_client_config_with_kx_groups(
+    kt: KeyType,
+    kx_groups: &[&'static rustls::SupportedKxGroup],
+) -> ClientConfig {
+    let builder = ClientConfig::builder()
+        .with_safe_default_cipher_suites()
+        .with_kx_groups(kx_groups)
+        .with_safe_default_protocol_versions()
+        .unwrap();
+    finish_client_config(kt, builder)
+}
+
+pub fn make_client_config_with_versions(
+    kt: KeyType,
+    versions: &[&'static rustls::SupportedProtocolVersion],
+) -> ClientConfig {
+    let builder = ClientConfig::builder()
+        .with_safe_default_cipher_suites()
+        .with_safe_default_kx_groups()
+        .with_protocol_versions(versions)
+        .unwrap();
+    finish_client_config(kt, builder)
 }
 
 pub fn make_client_config_with_auth(kt: KeyType) -> ClientConfig {
-    let mut cfg = make_client_config(kt);
-    cfg.set_single_client_cert(kt.get_client_chain(), kt.get_client_key())
-        .unwrap();
-    cfg
+    finish_client_config_with_creds(kt, ClientConfig::builder().with_safe_defaults())
 }
 
-pub fn make_pair(kt: KeyType) -> (ClientSession, ServerSession) {
+pub fn make_client_config_with_versions_with_auth(
+    kt: KeyType,
+    versions: &[&'static rustls::SupportedProtocolVersion],
+) -> ClientConfig {
+    let builder = ClientConfig::builder()
+        .with_safe_default_cipher_suites()
+        .with_safe_default_kx_groups()
+        .with_protocol_versions(versions)
+        .unwrap();
+    finish_client_config_with_creds(kt, builder)
+}
+
+pub fn make_pair(kt: KeyType) -> (ClientConnection, ServerConnection) {
     make_pair_for_configs(make_client_config(kt), make_server_config(kt))
 }
 
 pub fn make_pair_for_configs(
     client_config: ClientConfig,
     server_config: ServerConfig,
-) -> (ClientSession, ServerSession) {
+) -> (ClientConnection, ServerConnection) {
     make_pair_for_arc_configs(&Arc::new(client_config), &Arc::new(server_config))
 }
 
 pub fn make_pair_for_arc_configs(
     client_config: &Arc<ClientConfig>,
     server_config: &Arc<ServerConfig>,
-) -> (ClientSession, ServerSession) {
+) -> (ClientConnection, ServerConnection) {
     (
-        ClientSession::new(client_config, dns_name("localhost")),
-        ServerSession::new(server_config),
+        ClientConnection::new(Arc::clone(&client_config), dns_name("localhost")).unwrap(),
+        ServerConnection::new(Arc::clone(server_config)).unwrap(),
     )
 }
 
-pub fn do_handshake(client: &mut ClientSession, server: &mut ServerSession) -> (usize, usize) {
+pub fn do_handshake(
+    client: &mut (impl DerefMut + Deref<Target = ConnectionCommon<impl SideData>>),
+    server: &mut (impl DerefMut + Deref<Target = ConnectionCommon<impl SideData>>),
+) -> (usize, usize) {
     let (mut to_client, mut to_server) = (0, 0);
     while server.is_handshaking() || client.is_handshaking() {
         to_server += transfer(client, server);
@@ -276,44 +399,143 @@ pub fn do_handshake(client: &mut ClientSession, server: &mut ServerSession) -> (
     (to_server, to_client)
 }
 
-pub struct AllClientVersions {
-    client_config: ClientConfig,
-    index: usize,
+#[cfg(feature = "dangerous_configuration")]
+pub struct MockServerVerifier {
+    cert_rejection_error: Option<Error>,
+    tls12_signature_error: Option<Error>,
+    tls13_signature_error: Option<Error>,
+    wants_scts: bool,
+    signature_schemes: Vec<SignatureScheme>,
 }
 
-impl AllClientVersions {
-    pub fn new(client_config: ClientConfig) -> AllClientVersions {
-        AllClientVersions {
-            client_config,
-            index: 0,
+#[cfg(feature = "dangerous_configuration")]
+impl ServerCertVerifier for MockServerVerifier {
+    fn verify_server_cert(
+        &self,
+        end_entity: &rustls::Certificate,
+        intermediates: &[rustls::Certificate],
+        server_name: &rustls::ServerName,
+        scts: &mut dyn Iterator<Item = &[u8]>,
+        oscp_response: &[u8],
+        now: std::time::SystemTime,
+    ) -> Result<ServerCertVerified, Error> {
+        let scts: Vec<Vec<u8>> = scts.map(|x| x.to_owned()).collect();
+        println!(
+            "verify_server_cert({:?}, {:?}, {:?}, {:?}, {:?}, {:?})",
+            end_entity, intermediates, server_name, scts, oscp_response, now
+        );
+        if let Some(error) = &self.cert_rejection_error {
+            Err(error.clone())
+        } else {
+            Ok(ServerCertVerified::assertion())
+        }
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &Certificate,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        println!(
+            "verify_tls12_signature({:?}, {:?}, {:?})",
+            message, cert, dss
+        );
+        if let Some(error) = &self.tls12_signature_error {
+            Err(error.clone())
+        } else {
+            Ok(HandshakeSignatureValid::assertion())
+        }
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &Certificate,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        println!(
+            "verify_tls13_signature({:?}, {:?}, {:?})",
+            message, cert, dss
+        );
+        if let Some(error) = &self.tls13_signature_error {
+            Err(error.clone())
+        } else {
+            Ok(HandshakeSignatureValid::assertion())
+        }
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        self.signature_schemes.clone()
+    }
+
+    fn request_scts(&self) -> bool {
+        println!("request_scts? {:?}", self.wants_scts);
+        self.wants_scts
+    }
+}
+
+#[cfg(feature = "dangerous_configuration")]
+impl MockServerVerifier {
+    pub fn accepts_anything() -> Self {
+        MockServerVerifier {
+            cert_rejection_error: None,
+            ..Default::default()
+        }
+    }
+
+    pub fn requests_scts() -> Self {
+        MockServerVerifier {
+            wants_scts: true,
+            ..Default::default()
+        }
+    }
+
+    pub fn rejects_certificate(err: Error) -> Self {
+        MockServerVerifier {
+            cert_rejection_error: Some(err),
+            ..Default::default()
+        }
+    }
+
+    pub fn rejects_tls12_signatures(err: Error) -> Self {
+        MockServerVerifier {
+            tls12_signature_error: Some(err),
+            ..Default::default()
+        }
+    }
+
+    pub fn rejects_tls13_signatures(err: Error) -> Self {
+        MockServerVerifier {
+            tls13_signature_error: Some(err),
+            ..Default::default()
+        }
+    }
+
+    pub fn offers_no_signature_schemes() -> Self {
+        MockServerVerifier {
+            signature_schemes: vec![],
+            ..Default::default()
         }
     }
 }
 
-impl Iterator for AllClientVersions {
-    type Item = ClientConfig;
-
-    fn next(&mut self) -> Option<ClientConfig> {
-        let mut config = self.client_config.clone();
-        self.index += 1;
-
-        match self.index {
-            1 => {
-                config.versions = vec![ProtocolVersion::TLSv1_2];
-                Some(config)
-            }
-            2 => {
-                config.versions = vec![ProtocolVersion::TLSv1_3];
-                Some(config)
-            }
-            _ => None,
+#[cfg(feature = "dangerous_configuration")]
+impl Default for MockServerVerifier {
+    fn default() -> Self {
+        MockServerVerifier {
+            cert_rejection_error: None,
+            tls12_signature_error: None,
+            tls13_signature_error: None,
+            wants_scts: false,
+            signature_schemes: WebPkiVerifier::verification_schemes(),
         }
     }
 }
 
 #[cfg(feature = "dangerous_configuration")]
 pub struct MockClientVerifier {
-    pub verified: fn() -> Result<ClientCertVerified, TLSError>,
+    pub verified: fn() -> Result<ClientCertVerified, Error>,
     pub subjects: Option<DistinguishedNames>,
     pub mandatory: Option<bool>,
     pub offered_schemes: Option<Vec<SignatureScheme>>,
@@ -321,27 +543,20 @@ pub struct MockClientVerifier {
 
 #[cfg(feature = "dangerous_configuration")]
 impl ClientCertVerifier for MockClientVerifier {
-    fn client_auth_mandatory(&self, sni: Option<&webpki::DNSName>) -> Option<bool> {
-        // This is just an added 'test' to make sure we plumb through the SNI,
-        // although its valid for it to be None, its just our tests should (as of now) always provide it
-        assert!(sni.is_some());
+    fn client_auth_mandatory(&self) -> Option<bool> {
         self.mandatory
     }
 
-    fn client_auth_root_subjects(
-        &self,
-        sni: Option<&webpki::DNSName>,
-    ) -> Option<DistinguishedNames> {
-        assert!(sni.is_some());
+    fn client_auth_root_subjects(&self) -> Option<DistinguishedNames> {
         self.subjects.as_ref().cloned()
     }
 
     fn verify_client_cert(
         &self,
-        _presented_certs: &[Certificate],
-        sni: Option<&webpki::DNSName>,
-    ) -> Result<ClientCertVerified, TLSError> {
-        assert!(sni.is_some());
+        _end_entity: &Certificate,
+        _intermediates: &[Certificate],
+        _now: std::time::SystemTime,
+    ) -> Result<ClientCertVerified, Error> {
         (self.verified)()
     }
 
@@ -349,57 +564,57 @@ impl ClientCertVerifier for MockClientVerifier {
         if let Some(schemes) = &self.offered_schemes {
             schemes.clone()
         } else {
-            WebPKIVerifier::verification_schemes()
+            WebPkiVerifier::verification_schemes()
         }
     }
 }
 
 #[derive(PartialEq, Debug)]
-pub enum TLSErrorFromPeer {
-    Client(TLSError),
-    Server(TLSError),
+pub enum ErrorFromPeer {
+    Client(Error),
+    Server(Error),
 }
 
 pub fn do_handshake_until_error(
-    client: &mut ClientSession,
-    server: &mut ServerSession,
-) -> Result<(), TLSErrorFromPeer> {
+    client: &mut ClientConnection,
+    server: &mut ServerConnection,
+) -> Result<(), ErrorFromPeer> {
     while server.is_handshaking() || client.is_handshaking() {
         transfer(client, server);
         server
             .process_new_packets()
-            .map_err(|err| TLSErrorFromPeer::Server(err))?;
+            .map_err(|err| ErrorFromPeer::Server(err))?;
         transfer(server, client);
         client
             .process_new_packets()
-            .map_err(|err| TLSErrorFromPeer::Client(err))?;
+            .map_err(|err| ErrorFromPeer::Client(err))?;
     }
 
     Ok(())
 }
 
 pub fn do_handshake_until_both_error(
-    client: &mut ClientSession,
-    server: &mut ServerSession,
-) -> Result<(), Vec<TLSErrorFromPeer>> {
+    client: &mut ClientConnection,
+    server: &mut ServerConnection,
+) -> Result<(), Vec<ErrorFromPeer>> {
     match do_handshake_until_error(client, server) {
-        Err(server_err @ TLSErrorFromPeer::Server(_)) => {
+        Err(server_err @ ErrorFromPeer::Server(_)) => {
             let mut errors = vec![server_err];
             transfer(server, client);
             let client_err = client
                 .process_new_packets()
-                .map_err(|err| TLSErrorFromPeer::Client(err))
+                .map_err(|err| ErrorFromPeer::Client(err))
                 .expect_err("client didn't produce error after server error");
             errors.push(client_err);
             Err(errors)
         }
 
-        Err(client_err @ TLSErrorFromPeer::Client(_)) => {
+        Err(client_err @ ErrorFromPeer::Client(_)) => {
             let mut errors = vec![client_err];
             transfer(client, server);
             let server_err = server
                 .process_new_packets()
-                .map_err(|err| TLSErrorFromPeer::Server(err))
+                .map_err(|err| ErrorFromPeer::Server(err))
                 .expect_err("server didn't produce error after client error");
             errors.push(server_err);
             Err(errors)
@@ -409,8 +624,8 @@ pub fn do_handshake_until_both_error(
     }
 }
 
-pub fn dns_name(name: &'static str) -> webpki::DNSNameRef<'_> {
-    webpki::DNSNameRef::try_from_ascii_str(name).unwrap()
+pub fn dns_name(name: &'static str) -> rustls::ServerName {
+    name.try_into().unwrap()
 }
 
 pub struct FailsReads {
@@ -418,7 +633,7 @@ pub struct FailsReads {
 }
 
 impl FailsReads {
-    pub fn new(errkind: io::ErrorKind) -> FailsReads {
+    pub fn new(errkind: io::ErrorKind) -> Self {
         FailsReads { errkind }
     }
 }

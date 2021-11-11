@@ -3,8 +3,6 @@ vulnerability = "deny"
 unmaintained = "deny"
 notice = "deny"
 ignore = [
-    # difference is unmaintained
-    "RUSTSEC-2020-0095",
 ]
 
 [bans]

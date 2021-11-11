@@ -14,10 +14,10 @@ use crate::read::pe;
 use crate::read::wasm;
 use crate::read::{
     self, Architecture, BinaryFormat, CodeView, ComdatKind, CompressedData, CompressedFileRange,
-    Error, Export, FileFlags, FileKind, Import, Object, ObjectComdat, ObjectMap, ObjectSection,
-    ObjectSegment, ObjectSymbol, ObjectSymbolTable, ReadRef, Relocation, Result, SectionFlags,
-    SectionIndex, SectionKind, SymbolFlags, SymbolIndex, SymbolKind, SymbolMap, SymbolMapName,
-    SymbolScope, SymbolSection,
+    Error, Export, FileFlags, FileKind, Import, Object, ObjectComdat, ObjectKind, ObjectMap,
+    ObjectSection, ObjectSegment, ObjectSymbol, ObjectSymbolTable, ReadRef, Relocation, Result,
+    SectionFlags, SectionIndex, SectionKind, SymbolFlags, SymbolIndex, SymbolKind, SymbolMap,
+    SymbolMapName, SymbolScope, SymbolSection,
 };
 #[allow(unused_imports)]
 use crate::Endianness;
@@ -286,6 +286,10 @@ where
         with_inner!(self.inner, FileInternal, |x| x.is_64())
     }
 
+    fn kind(&self) -> ObjectKind {
+        with_inner!(self.inner, FileInternal, |x| x.kind())
+    }
+
     fn segments(&'file self) -> SegmentIterator<'data, 'file, R> {
         SegmentIterator {
             inner: map_inner!(self.inner, FileInternal, SegmentIteratorInternal, |x| x
@@ -293,9 +297,9 @@ where
         }
     }
 
-    fn section_by_name(&'file self, section_name: &str) -> Option<Section<'data, 'file, R>> {
+    fn section_by_name_bytes(&'file self, section_name: &[u8]) -> Option<Section<'data, 'file, R>> {
         map_inner_option!(self.inner, FileInternal, SectionInternal, |x| x
-            .section_by_name(section_name))
+            .section_by_name_bytes(section_name))
         .map(|inner| Section { inner })
     }
 
@@ -554,6 +558,10 @@ impl<'data, 'file, R: ReadRef<'data>> ObjectSegment<'data> for Segment<'data, 'f
         with_inner!(self.inner, SegmentInternal, |x| x.data_range(address, size))
     }
 
+    fn name_bytes(&self) -> Result<Option<&[u8]>> {
+        with_inner!(self.inner, SegmentInternal, |x| x.name_bytes())
+    }
+
     fn name(&self) -> Result<Option<&str>> {
         with_inner!(self.inner, SegmentInternal, |x| x.name())
     }
@@ -695,8 +703,16 @@ impl<'data, 'file, R: ReadRef<'data>> ObjectSection<'data> for Section<'data, 'f
         with_inner!(self.inner, SectionInternal, |x| x.compressed_data())
     }
 
+    fn name_bytes(&self) -> Result<&[u8]> {
+        with_inner!(self.inner, SectionInternal, |x| x.name_bytes())
+    }
+
     fn name(&self) -> Result<&str> {
         with_inner!(self.inner, SectionInternal, |x| x.name())
+    }
+
+    fn segment_name_bytes(&self) -> Result<Option<&[u8]>> {
+        with_inner!(self.inner, SectionInternal, |x| x.segment_name_bytes())
     }
 
     fn segment_name(&self) -> Result<Option<&str>> {
@@ -815,6 +831,10 @@ impl<'data, 'file, R: ReadRef<'data>> ObjectComdat<'data> for Comdat<'data, 'fil
 
     fn symbol(&self) -> SymbolIndex {
         with_inner!(self.inner, ComdatInternal, |x| x.symbol())
+    }
+
+    fn name_bytes(&self) -> Result<&[u8]> {
+        with_inner!(self.inner, ComdatInternal, |x| x.name_bytes())
     }
 
     fn name(&self) -> Result<&str> {
@@ -1090,6 +1110,10 @@ impl<'data, 'file, R: ReadRef<'data>> read::private::Sealed for Symbol<'data, 'f
 impl<'data, 'file, R: ReadRef<'data>> ObjectSymbol<'data> for Symbol<'data, 'file, R> {
     fn index(&self) -> SymbolIndex {
         with_inner!(self.inner, SymbolInternal, |x| x.0.index())
+    }
+
+    fn name_bytes(&self) -> Result<&'data [u8]> {
+        with_inner!(self.inner, SymbolInternal, |x| x.0.name_bytes())
     }
 
     fn name(&self) -> Result<&'data str> {

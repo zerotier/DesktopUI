@@ -173,57 +173,90 @@ extern crate lazy_static;
 mod test;
 
 use heck::{ShoutySnakeCase, SnakeCase};
-use itertools::Itertools;
 use std::collections::HashMap;
 use std::env;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use strum::IntoEnumIterator;
-use strum_macros::{EnumIter, EnumString};
-use thiserror::Error;
 use version_compare::VersionCompare;
 
 mod metadata;
 use metadata::MetaData;
 
 /// system-deps errors
-#[derive(Error, Debug)]
+#[derive(Debug)]
 pub enum Error {
     /// pkg-config error
-    #[error(transparent)]
-    PkgConfig(#[from] pkg_config::Error),
+    PkgConfig(pkg_config::Error),
     /// One of the `Config::add_build_internal` closures failed
-    #[error("Failed to build {0}: {1}")]
-    BuildInternalClosureError(String, #[source] BuildInternalClosureError),
+    BuildInternalClosureError(String, BuildInternalClosureError),
     /// Failed to read `Cargo.toml`
-    #[error("{0}")]
-    FailToRead(String, #[source] std::io::Error),
+    FailToRead(String, std::io::Error),
     /// Raised when an error is detected in the metadata defined in `Cargo.toml`
-    #[error("{0}")]
     InvalidMetadata(String),
     /// Raised when dependency defined manually using `SYSTEM_DEPS_$NAME_NO_PKG_CONFIG`
     /// did not define at least one lib using `SYSTEM_DEPS_$NAME_LIB` or
     /// `SYSTEM_DEPS_$NAME_LIB_FRAMEWORK`
-    #[error("You should define at least one lib using {} or {}", EnvVariable::new_lib(.0).to_string(), EnvVariable::new_lib_framework(.0))]
     MissingLib(String),
     /// An environment variable in the form of `SYSTEM_DEPS_$NAME_BUILD_INTERNAL`
     /// contained an invalid value (allowed: `auto`, `always`, `never`)
-    #[error("{0}")]
     BuildInternalInvalid(String),
     /// system-deps has been asked to internally build a lib, through
     /// `SYSTEM_DEPS_$NAME_BUILD_INTERNAL=always' or `SYSTEM_DEPS_$NAME_BUILD_INTERNAL=auto',
     /// but not closure has been defined using `Config::add_build_internal` to build
     /// this lib
-    #[error("Missing build internal closure for {0} (version {1})")]
     BuildInternalNoClosure(String, String),
     /// The library which has been build internally does not match the
     /// required version defined in `Cargo.toml`
-    #[error("Internally built {0} {1} but minimum required version is {2}")]
     BuildInternalWrongVersion(String, String, String),
     /// The `cfg()` expression used in `Cargo.toml` is currently not supported
-    #[error("Unsupported cfg() expression: {0}")]
     UnsupportedCfg(String),
+}
+
+impl From<pkg_config::Error> for Error {
+    fn from(err: pkg_config::Error) -> Self {
+        Self::PkgConfig(err)
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::PkgConfig(e) => Some(e),
+            Self::BuildInternalClosureError(_, e) => Some(e),
+            Self::FailToRead(_, e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::PkgConfig(e) => write!(f, "{}", e),
+            Self::BuildInternalClosureError(s, e) => write!(f, "Failed to build {}: {}", s, e),
+            Self::FailToRead(s, _) => write!(f, "{}", s),
+            Self::InvalidMetadata(s) => write!(f, "{}", s),
+            Self::MissingLib(s) => write!(
+                f,
+                "You should define at least one lib using {} or {}",
+                EnvVariable::new_lib(s).to_string(),
+                EnvVariable::new_lib_framework(s),
+            ),
+            Self::BuildInternalInvalid(s) => write!(f, "{}", s),
+            Self::BuildInternalNoClosure(s1, s2) => write!(
+                f,
+                "Missing build internal closure for {} (version {})",
+                s1, s2
+            ),
+            Self::BuildInternalWrongVersion(s1, s2, s3) => write!(
+                f,
+                "Internally built {} {} but minimum required version is {}",
+                s1, s2, s3
+            ),
+            Self::UnsupportedCfg(s) => write!(f, "Unsupported cfg() expression: {}", s),
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -249,65 +282,76 @@ impl Dependencies {
         self.libs.iter().map(|(k, v)| (k.as_str(), v))
     }
 
-    fn aggregate_str<F: Fn(&Library) -> &Vec<String>>(
-        &self,
-        getter: F,
-    ) -> impl Iterator<Item = &str> {
-        self.libs
+    fn aggregate_str<F: Fn(&Library) -> &Vec<String>>(&self, getter: F) -> Vec<&str> {
+        let mut v = self
+            .libs
             .values()
             .map(|l| getter(l))
             .flatten()
             .map(|s| s.as_str())
-            .sorted()
-            .dedup()
+            .collect::<Vec<_>>();
+        v.sort_unstable();
+        v.dedup();
+        v
     }
 
-    fn aggregate_path_buf<F: Fn(&Library) -> &Vec<PathBuf>>(
-        &self,
-        getter: F,
-    ) -> impl Iterator<Item = &PathBuf> {
-        self.libs
+    fn aggregate_path_buf<F: Fn(&Library) -> &Vec<PathBuf>>(&self, getter: F) -> Vec<&PathBuf> {
+        let mut v = self
+            .libs
             .values()
             .map(|l| getter(l))
             .flatten()
-            .sorted()
-            .dedup()
+            .collect::<Vec<_>>();
+        v.sort();
+        v.dedup();
+        v
     }
 
-    /// An iterator returning each [Library::libs] of each library, removing duplicates.
-    pub fn all_libs(&self) -> impl Iterator<Item = &str> {
-        self.aggregate_str(|l| &l.libs)
+    /// Returns a vector of [Library::libs] of each library, removing duplicates.
+    pub fn all_libs(&self) -> Vec<&str> {
+        let mut v = self
+            .libs
+            .values()
+            .map(|l| l.libs.iter().map(|lib| lib.name.as_str()))
+            .flatten()
+            .collect::<Vec<_>>();
+        v.sort_unstable();
+        v.dedup();
+        v
     }
 
-    /// An iterator returning each [Library::link_paths] of each library, removing duplicates.
-    pub fn all_link_paths(&self) -> impl Iterator<Item = &PathBuf> {
+    /// Returns a vector of [Library::link_paths] of each library, removing duplicates.
+    pub fn all_link_paths(&self) -> Vec<&PathBuf> {
         self.aggregate_path_buf(|l| &l.link_paths)
     }
 
-    /// An iterator returning each [Library::frameworks] of each library, removing duplicates.
-    pub fn all_frameworks(&self) -> impl Iterator<Item = &str> {
+    /// Returns a vector of [Library::frameworks] of each library, removing duplicates.
+    pub fn all_frameworks(&self) -> Vec<&str> {
         self.aggregate_str(|l| &l.frameworks)
     }
 
-    /// An iterator returning each [Library::framework_paths] of each library, removing duplicates.
-    pub fn all_framework_paths(&self) -> impl Iterator<Item = &PathBuf> {
+    /// Returns a vector of [Library::framework_paths] of each library, removing duplicates.
+    pub fn all_framework_paths(&self) -> Vec<&PathBuf> {
         self.aggregate_path_buf(|l| &l.framework_paths)
     }
 
-    /// An iterator returning each [Library::include_paths] of each library, removing duplicates.
-    pub fn all_include_paths(&self) -> impl Iterator<Item = &PathBuf> {
+    /// Returns a vector of [Library::include_paths] of each library, removing duplicates.
+    pub fn all_include_paths(&self) -> Vec<&PathBuf> {
         self.aggregate_path_buf(|l| &l.include_paths)
     }
 
-    /// An iterator returning each [Library::defines] of each library, removing duplicates.
-    pub fn all_defines(&self) -> impl Iterator<Item = (&str, &Option<String>)> {
-        self.libs
+    /// Returns a vector of [Library::defines] of each library, removing duplicates.
+    pub fn all_defines(&self) -> Vec<(&str, &Option<String>)> {
+        let mut v = self
+            .libs
             .values()
             .map(|l| l.defines.iter())
             .flatten()
             .map(|(k, v)| (k.as_str(), v))
-            .sorted()
-            .dedup()
+            .collect::<Vec<_>>();
+        v.sort();
+        v.dedup();
+        v
     }
 
     fn add(&mut self, name: &str, lib: Library) {
@@ -323,7 +367,10 @@ impl Dependencies {
                 lib.framework_paths = split_paths(&value);
             }
             if let Some(value) = env.get(&EnvVariable::new_lib(name)) {
-                lib.libs = split_string(&value);
+                lib.libs = split_string(&value)
+                    .into_iter()
+                    .map(|l| InternalLib::new(l, false))
+                    .collect();
             }
             if let Some(value) = env.get(&EnvVariable::new_lib_framework(name)) {
                 lib.frameworks = split_string(&value);
@@ -354,9 +401,12 @@ impl Dependencies {
             lib.framework_paths.iter().for_each(|f| {
                 flags.add(BuildFlag::SearchFramework(f.to_string_lossy().to_string()))
             });
-            lib.libs
-                .iter()
-                .for_each(|l| flags.add(BuildFlag::Lib(l.clone(), lib.statik)));
+            lib.libs.iter().for_each(|l| {
+                flags.add(BuildFlag::Lib(
+                    l.name.clone(),
+                    lib.statik && l.is_static_available,
+                ))
+            });
             lib.frameworks
                 .iter()
                 .for_each(|f| flags.add(BuildFlag::LibFramework(f.clone())));
@@ -377,34 +427,26 @@ impl Dependencies {
         flags.add(BuildFlag::RerunIfEnvChanged(EnvVariable::new_link(None)));
 
         for (name, _lib) in self.libs.iter() {
-            for var in EnvVariable::iter() {
-                let var = match var {
-                    EnvVariable::Lib(_) => EnvVariable::new_lib(name),
-                    EnvVariable::LibFramework(_) => EnvVariable::new_lib_framework(name),
-                    EnvVariable::SearchNative(_) => EnvVariable::new_search_native(name),
-                    EnvVariable::SearchFramework(_) => EnvVariable::new_search_framework(name),
-                    EnvVariable::Include(_) => EnvVariable::new_include(name),
-                    EnvVariable::NoPkgConfig(_) => EnvVariable::new_no_pkg_config(name),
-                    EnvVariable::BuildInternal(_) => EnvVariable::new_build_internal(Some(name)),
-                    EnvVariable::Link(_) => EnvVariable::new_link(Some(name)),
-                };
-                flags.add(BuildFlag::RerunIfEnvChanged(var));
-            }
+            EnvVariable::set_rerun_if_changed_for_all_variants(&mut flags, name);
         }
 
         Ok(flags)
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug)]
 /// Error used in return value of `Config::add_build_internal` closures
 pub enum BuildInternalClosureError {
     /// `pkg-config` error
-    #[error(transparent)]
-    PkgConfig(#[from] pkg_config::Error),
+    PkgConfig(pkg_config::Error),
     /// General failure
-    #[error("{0}")]
     Failed(String),
+}
+
+impl From<pkg_config::Error> for BuildInternalClosureError {
+    fn from(err: pkg_config::Error) -> Self {
+        Self::PkgConfig(err)
+    }
 }
 
 impl BuildInternalClosureError {
@@ -419,8 +461,26 @@ impl BuildInternalClosureError {
     }
 }
 
-// enums representing the environment variables user can define to tune system-deps
-#[derive(Debug, PartialEq, EnumIter)]
+impl std::error::Error for BuildInternalClosureError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::PkgConfig(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+impl fmt::Display for BuildInternalClosureError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::PkgConfig(e) => write!(f, "{}", e),
+            Self::Failed(s) => write!(f, "{}", s),
+        }
+    }
+}
+
+// Enum representing the environment variables user can define to tune system-deps.
+#[derive(Debug, PartialEq)]
 enum EnvVariable {
     Lib(String),
     LibFramework(String),
@@ -476,6 +536,21 @@ impl EnvVariable {
             EnvVariable::BuildInternal(_) => "BUILD_INTERNAL",
             EnvVariable::Link(_) => "LINK",
         }
+    }
+
+    fn set_rerun_if_changed_for_all_variants(flags: &mut BuildFlags, name: &str) {
+        #[inline]
+        fn add_to_flags(flags: &mut BuildFlags, var: EnvVariable) {
+            flags.add(BuildFlag::RerunIfEnvChanged(var));
+        }
+        add_to_flags(flags, EnvVariable::new_lib(name));
+        add_to_flags(flags, EnvVariable::new_lib_framework(name));
+        add_to_flags(flags, EnvVariable::new_search_native(name));
+        add_to_flags(flags, EnvVariable::new_search_framework(name));
+        add_to_flags(flags, EnvVariable::new_include(name));
+        add_to_flags(flags, EnvVariable::new_no_pkg_config(name));
+        add_to_flags(flags, EnvVariable::new_build_internal(Some(name)));
+        add_to_flags(flags, EnvVariable::new_link(Some(name)));
     }
 }
 
@@ -752,6 +827,24 @@ pub enum Source {
     EnvVariables,
 }
 
+#[derive(Debug, PartialEq)]
+/// Internal library name and if a static library is available on the system
+pub struct InternalLib {
+    /// Name of the library
+    pub name: String,
+    /// Indicates if a static library is available on the system
+    pub is_static_available: bool,
+}
+
+impl InternalLib {
+    fn new(name: String, is_static_available: bool) -> Self {
+        InternalLib {
+            name,
+            is_static_available,
+        }
+    }
+}
+
 #[derive(Debug)]
 /// A system dependency
 pub struct Library {
@@ -760,7 +853,7 @@ pub struct Library {
     /// From where the library settings have been retrieved
     pub source: Source,
     /// libraries the linker should link on
-    pub libs: Vec<String>,
+    pub libs: Vec<InternalLib>,
     /// directories where the compiler should look for libraries
     pub link_paths: Vec<PathBuf>,
     /// frameworks the linker should link on
@@ -779,10 +872,41 @@ pub struct Library {
 
 impl Library {
     fn from_pkg_config(name: &str, l: pkg_config::Library) -> Self {
+        // taken from: https://github.com/rust-lang/pkg-config-rs/blob/54325785816695df031cef3b26b6a9a203bbc01b/src/lib.rs#L502
+        let system_roots = if cfg!(target_os = "macos") {
+            vec![PathBuf::from("/Library"), PathBuf::from("/System")]
+        } else {
+            let sysroot = env::var_os("PKG_CONFIG_SYSROOT_DIR")
+                .or_else(|| env::var_os("SYSROOT"))
+                .map(PathBuf::from);
+
+            if cfg!(target_os = "windows") {
+                if let Some(sysroot) = sysroot {
+                    vec![sysroot]
+                } else {
+                    vec![]
+                }
+            } else {
+                vec![sysroot.unwrap_or_else(|| PathBuf::from("/usr"))]
+            }
+        };
+
+        let is_static_available = |name: &String| -> bool {
+            let libname = format!("lib{}.a", name);
+
+            l.link_paths.iter().any(|dir| {
+                !system_roots.iter().any(|sys| dir.starts_with(sys)) && dir.join(&libname).exists()
+            })
+        };
+
         Self {
             name: name.to_string(),
             source: Source::PkgConfig,
-            libs: l.libs,
+            libs: l
+                .libs
+                .iter()
+                .map(|lib| InternalLib::new(lib.to_owned(), is_static_available(lib)))
+                .collect(),
             link_paths: l.link_paths,
             include_paths: l.include_paths,
             frameworks: l.frameworks,
@@ -979,8 +1103,7 @@ fn split_string(value: &str) -> Vec<String> {
     }
 }
 
-#[derive(Debug, PartialEq, EnumString)]
-#[strum(serialize_all = "snake_case")]
+#[derive(Debug, PartialEq)]
 enum BuildInternal {
     Auto,
     Always,
@@ -989,6 +1112,34 @@ enum BuildInternal {
 
 impl Default for BuildInternal {
     fn default() -> Self {
-        BuildInternal::Never
+        Self::Never
+    }
+}
+
+impl FromStr for BuildInternal {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "auto" => Ok(Self::Auto),
+            "always" => Ok(Self::Always),
+            "never" => Ok(Self::Never),
+            v => Err(ParseError::VariantNotFound(v.to_owned())),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+enum ParseError {
+    VariantNotFound(String),
+}
+
+impl std::error::Error for ParseError {}
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::VariantNotFound(v) => write!(f, "Unknown variant: `{}`", v),
+        }
     }
 }

@@ -73,22 +73,25 @@ impl From<object::read::Error> for Error {
 
 pub type Result<T> = result::Result<T, Error>;
 
-fn parallel_output<II, F>(max_workers: usize, iter: II, f: F) -> Result<()>
+fn parallel_output<W, II, F>(w: &mut W, max_workers: usize, iter: II, f: F) -> Result<()>
 where
+    W: Write + Send,
     F: Sync + Fn(II::Item, &mut Vec<u8>) -> Result<()>,
     II: IntoIterator,
     II::IntoIter: Send,
 {
-    struct ParallelOutputState<I: Iterator> {
+    struct ParallelOutputState<I, W> {
         iterator: I,
         current_worker: usize,
         result: Result<()>,
+        w: W,
     }
 
     let state = Mutex::new(ParallelOutputState {
         iterator: iter.into_iter().fuse(),
         current_worker: 0,
         result: Ok(()),
+        w,
     });
     let workers = min(max_workers, num_cpus::get());
     let mut condvars = Vec::new();
@@ -129,8 +132,7 @@ where
                             lock = condvars_ref[i].wait(lock).unwrap();
                         }
                         if lock.result.is_ok() {
-                            let out = io::stdout();
-                            let ret2 = out.lock().write_all(&v);
+                            let ret2 = lock.w.write_all(&v);
                             if ret.is_err() {
                                 lock.result = ret;
                             } else {
@@ -358,6 +360,7 @@ struct Flags<'a> {
     pubtypes: bool,
     aranges: bool,
     dwo: bool,
+    dwp: bool,
     dwo_parent: Option<object::File<'a>>,
     sup: Option<object::File<'a>>,
     raw: bool,
@@ -388,10 +391,15 @@ fn main() {
         "dwo",
         "print the .dwo versions of the selected sections",
     );
+    opts.optflag(
+        "",
+        "dwp",
+        "print the .dwp versions of the selected sections",
+    );
     opts.optopt(
         "",
         "dwo-parent",
-        "use the specified file as the parent of the dwo (e.g. for .debug_addr)",
+        "use the specified file as the parent of the dwo or dwp (e.g. for .debug_addr)",
         "library path",
     );
     opts.optflag("", "raw", "print raw data values");
@@ -446,6 +454,9 @@ fn main() {
     if matches.opt_present("dwo") {
         flags.dwo = true;
     }
+    if matches.opt_present("dwp") {
+        flags.dwp = true;
+    }
     if matches.opt_present("raw") {
         flags.raw = true;
     }
@@ -498,8 +509,12 @@ fn main() {
 
     flags.sup = matches.opt_str("sup").and_then(load_file);
     flags.dwo_parent = matches.opt_str("dwo-parent").and_then(load_file);
-    if flags.dwo_parent.is_some() && !flags.dwo {
-        eprintln!("--dwo-parent also requires --dwo");
+    if flags.dwo_parent.is_some() && !flags.dwo && !flags.dwp {
+        eprintln!("--dwo-parent also requires --dwo or --dwp");
+        process::exit(1);
+    }
+    if flags.dwo_parent.is_none() && flags.dwp {
+        eprintln!("--dwp also requires --dwo-parent");
         process::exit(1);
     }
 
@@ -541,6 +556,21 @@ fn main() {
             Ok(_) => (),
             Err(err) => eprintln!("Failed to dump '{}': {}", file_path, err,),
         }
+    }
+}
+
+fn empty_file_section<'input, 'arena, Endian: gimli::Endianity>(
+    endian: Endian,
+    arena_relocations: &'arena Arena<RelocationMap>,
+) -> Relocate<'arena, gimli::EndianSlice<'arena, Endian>> {
+    let reader = gimli::EndianSlice::new(&[], endian);
+    let section = reader;
+    let relocations = RelocationMap::default();
+    let relocations = (*arena_relocations.alloc(relocations)).borrow();
+    Relocate {
+        relocations,
+        section,
+        reader,
     }
 }
 
@@ -588,29 +618,26 @@ where
     let arena_data = Arena::new();
     let arena_relocations = Arena::new();
 
-    let mut load_section = |id: gimli::SectionId| -> Result<_> {
-        load_file_section(id, file, endian, flags.dwo, &arena_data, &arena_relocations)
+    let dwo_parent = if let Some(dwo_parent_file) = flags.dwo_parent.as_ref() {
+        let mut load_dwo_parent_section = |id: gimli::SectionId| -> Result<_> {
+            load_file_section(
+                id,
+                dwo_parent_file,
+                endian,
+                false,
+                &arena_data,
+                &arena_relocations,
+            )
+        };
+        Some(gimli::Dwarf::load(&mut load_dwo_parent_section)?)
+    } else {
+        None
     };
-    let mut dwarf = gimli::Dwarf::load(&mut load_section)?;
-    let mut dwo_parent_units = HashMap::new();
-    if flags.dwo {
-        dwarf.file_type = gimli::DwarfFileType::Dwo;
+    let dwo_parent = dwo_parent.as_ref();
 
-        if let Some(dwo_parent_file) = flags.dwo_parent.as_ref() {
-            let mut load_dwo_parent_section = |id: gimli::SectionId| -> Result<_> {
-                load_file_section(
-                    id,
-                    dwo_parent_file,
-                    endian,
-                    false,
-                    &arena_data,
-                    &arena_relocations,
-                )
-            };
-            let dwo_parent = gimli::Dwarf::load(&mut load_dwo_parent_section)?;
-            dwarf.debug_addr = dwo_parent.debug_addr.clone();
-            dwarf.ranges = dwo_parent.ranges.clone();
-            dwo_parent_units = match dwo_parent
+    let dwo_parent_units = if let Some(dwo_parent) = dwo_parent {
+        Some(
+            match dwo_parent
                 .units()
                 .map(|unit_header| dwo_parent.unit(unit_header))
                 .filter_map(|unit| Ok(unit.dwo_id.map(|dwo_id| (dwo_id, unit))))
@@ -621,7 +648,41 @@ where
                     eprintln!("Failed to process --dwo-parent units: {}", err);
                     return Ok(());
                 }
-            }
+            },
+        )
+    } else {
+        None
+    };
+    let dwo_parent_units = dwo_parent_units.as_ref();
+
+    let mut load_section = |id: gimli::SectionId| -> Result<_> {
+        load_file_section(
+            id,
+            file,
+            endian,
+            flags.dwo || flags.dwp,
+            &arena_data,
+            &arena_relocations,
+        )
+    };
+
+    let w = &mut BufWriter::new(io::stdout());
+    if flags.dwp {
+        let empty = empty_file_section(endian, &arena_relocations);
+        let dwp = gimli::DwarfPackage::load(&mut load_section, empty)?;
+        dump_dwp(w, &dwp, dwo_parent.unwrap(), dwo_parent_units, flags)?;
+        w.flush()?;
+        return Ok(());
+    }
+
+    let mut dwarf = gimli::Dwarf::load(&mut load_section)?;
+    if flags.dwo {
+        dwarf.file_type = gimli::DwarfFileType::Dwo;
+        if let Some(dwo_parent) = dwo_parent {
+            dwarf.debug_addr = dwo_parent.debug_addr.clone();
+            dwarf
+                .ranges
+                .set_debug_ranges(dwo_parent.ranges.debug_ranges().clone());
         }
     }
 
@@ -634,57 +695,14 @@ where
         dwarf.load_sup(&mut load_sup_section)?;
     }
 
-    let out = io::stdout();
     if flags.eh_frame {
-        // TODO: this might be better based on the file format.
-        let address_size = file
-            .architecture()
-            .address_size()
-            .map(|w| w.bytes())
-            .unwrap_or(mem::size_of::<usize>() as u8);
-
-        fn register_name_none(_: gimli::Register) -> Option<&'static str> {
-            None
-        }
-        let arch_register_name = match file.architecture() {
-            object::Architecture::Arm | object::Architecture::Aarch64 => gimli::Arm::register_name,
-            object::Architecture::I386 => gimli::X86::register_name,
-            object::Architecture::X86_64 => gimli::X86_64::register_name,
-            _ => register_name_none,
-        };
-        let register_name = |register| match arch_register_name(register) {
-            Some(name) => Cow::Borrowed(name),
-            None => Cow::Owned(format!("{}", register.0)),
-        };
-
-        let mut eh_frame = gimli::EhFrame::load(&mut load_section).unwrap();
-        eh_frame.set_address_size(address_size);
-        let mut bases = gimli::BaseAddresses::default();
-        if let Some(section) = file.section_by_name(".eh_frame_hdr") {
-            bases = bases.set_eh_frame_hdr(section.address());
-        }
-        if let Some(section) = file.section_by_name(".eh_frame") {
-            bases = bases.set_eh_frame(section.address());
-        }
-        if let Some(section) = file.section_by_name(".text") {
-            bases = bases.set_text(section.address());
-        }
-        if let Some(section) = file.section_by_name(".got") {
-            bases = bases.set_got(section.address());
-        }
-        dump_eh_frame(
-            &mut BufWriter::new(out.lock()),
-            &eh_frame,
-            &bases,
-            &register_name,
-        )?;
+        let eh_frame = gimli::EhFrame::load(&mut load_section).unwrap();
+        dump_eh_frame(w, file, eh_frame)?;
     }
     if flags.info {
-        dump_info(&dwarf, dwo_parent_units, flags)?;
-        dump_types(&mut BufWriter::new(out.lock()), &dwarf, flags)?;
-        writeln!(&mut out.lock())?;
+        dump_info(w, &dwarf, dwo_parent_units, flags)?;
+        dump_types(w, &dwarf, dwo_parent_units, flags)?;
     }
-    let w = &mut BufWriter::new(out.lock());
     if flags.line {
         dump_line(w, &dwarf)?;
     }
@@ -700,15 +718,51 @@ where
         let debug_pubtypes = &gimli::Section::load(&mut load_section).unwrap();
         dump_pubtypes(w, debug_pubtypes, &dwarf.debug_info)?;
     }
+    w.flush()?;
     Ok(())
 }
 
 fn dump_eh_frame<R: Reader, W: Write>(
     w: &mut W,
-    eh_frame: &gimli::EhFrame<R>,
-    bases: &gimli::BaseAddresses,
-    register_name: &dyn Fn(gimli::Register) -> Cow<'static, str>,
+    file: &object::File,
+    mut eh_frame: gimli::EhFrame<R>,
 ) -> Result<()> {
+    // TODO: this might be better based on the file format.
+    let address_size = file
+        .architecture()
+        .address_size()
+        .map(|w| w.bytes())
+        .unwrap_or(mem::size_of::<usize>() as u8);
+    eh_frame.set_address_size(address_size);
+
+    fn register_name_none(_: gimli::Register) -> Option<&'static str> {
+        None
+    }
+    let arch_register_name = match file.architecture() {
+        object::Architecture::Arm | object::Architecture::Aarch64 => gimli::Arm::register_name,
+        object::Architecture::I386 => gimli::X86::register_name,
+        object::Architecture::X86_64 => gimli::X86_64::register_name,
+        _ => register_name_none,
+    };
+    let register_name = &|register| match arch_register_name(register) {
+        Some(name) => Cow::Borrowed(name),
+        None => Cow::Owned(format!("{}", register.0)),
+    };
+
+    let mut bases = gimli::BaseAddresses::default();
+    if let Some(section) = file.section_by_name(".eh_frame_hdr") {
+        bases = bases.set_eh_frame_hdr(section.address());
+    }
+    if let Some(section) = file.section_by_name(".eh_frame") {
+        bases = bases.set_eh_frame(section.address());
+    }
+    if let Some(section) = file.section_by_name(".text") {
+        bases = bases.set_text(section.address());
+    }
+    if let Some(section) = file.section_by_name(".got") {
+        bases = bases.set_got(section.address());
+    }
+
     // TODO: Print "__eh_frame" here on macOS, and more generally use the
     // section that we're actually looking at, which is what the canonical
     // dwarfdump does.
@@ -719,7 +773,7 @@ fn dump_eh_frame<R: Reader, W: Write>(
 
     let mut cies = HashMap::new();
 
-    let mut entries = eh_frame.entries(bases);
+    let mut entries = eh_frame.entries(&bases);
     loop {
         match entries.next()? {
             None => return Ok(()),
@@ -744,7 +798,8 @@ fn dump_eh_frame<R: Reader, W: Write>(
                 if let Some(encoding) = cie.fde_address_encoding() {
                     writeln!(w, "  fde_encoding: {:#02x}", encoding.0)?;
                 }
-                dump_cfi_instructions(w, cie.instructions(eh_frame, bases), true, register_name)?;
+                let instructions = cie.instructions(&eh_frame, &bases);
+                dump_cfi_instructions(w, instructions, true, register_name)?;
                 writeln!(w)?;
             }
             Some(gimli::CieOrFde::Fde(partial)) => {
@@ -773,7 +828,8 @@ fn dump_eh_frame<R: Reader, W: Write>(
                     dump_pointer(w, lsda)?;
                     writeln!(w)?;
                 }
-                dump_cfi_instructions(w, fde.instructions(eh_frame, bases), false, register_name)?;
+                let instructions = fde.instructions(&eh_frame, &bases);
+                dump_cfi_instructions(w, instructions, false, register_name)?;
                 writeln!(w)?;
             }
         }
@@ -983,22 +1039,110 @@ fn dump_cfi_instructions<R: Reader, W: Write>(
     }
 }
 
-fn dump_info<R: Reader>(
-    dwarf: &gimli::Dwarf<R>,
-    dwo_parent_units: HashMap<gimli::DwoId, gimli::Unit<R>>,
+fn dump_dwp<R: Reader, W: Write + Send>(
+    w: &mut W,
+    dwp: &gimli::DwarfPackage<R>,
+    dwo_parent: &gimli::Dwarf<R>,
+    dwo_parent_units: Option<&HashMap<gimli::DwoId, gimli::Unit<R>>>,
     flags: &Flags,
 ) -> Result<()>
 where
     R::Endian: Send + Sync,
 {
-    let out = io::stdout();
-    writeln!(&mut BufWriter::new(out.lock()), "\n.debug_info")?;
+    if dwp.cu_index.unit_count() != 0 {
+        writeln!(
+            w,
+            "\n.debug_cu_index: version = {}, sections = {}, units = {}, slots = {}",
+            dwp.cu_index.version(),
+            dwp.cu_index.section_count(),
+            dwp.cu_index.unit_count(),
+            dwp.cu_index.slot_count(),
+        )?;
+        for i in 1..=dwp.cu_index.unit_count() {
+            writeln!(w, "\nCU index {}", i)?;
+            dump_dwp_sections(
+                w,
+                &dwp,
+                dwo_parent,
+                dwo_parent_units,
+                flags,
+                dwp.cu_index.sections(i)?,
+            )?;
+        }
+    }
+
+    if dwp.tu_index.unit_count() != 0 {
+        writeln!(
+            w,
+            "\n.debug_tu_index: version = {}, sections = {}, units = {}, slots = {}",
+            dwp.tu_index.version(),
+            dwp.tu_index.section_count(),
+            dwp.tu_index.unit_count(),
+            dwp.tu_index.slot_count(),
+        )?;
+        for i in 1..=dwp.tu_index.unit_count() {
+            writeln!(w, "\nTU index {}", i)?;
+            dump_dwp_sections(
+                w,
+                &dwp,
+                dwo_parent,
+                dwo_parent_units,
+                flags,
+                dwp.tu_index.sections(i)?,
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
+fn dump_dwp_sections<R: Reader, W: Write + Send>(
+    w: &mut W,
+    dwp: &gimli::DwarfPackage<R>,
+    dwo_parent: &gimli::Dwarf<R>,
+    dwo_parent_units: Option<&HashMap<gimli::DwoId, gimli::Unit<R>>>,
+    flags: &Flags,
+    sections: gimli::UnitIndexSectionIterator<R>,
+) -> Result<()>
+where
+    R::Endian: Send + Sync,
+{
+    for section in sections.clone() {
+        writeln!(
+            w,
+            "  {}: offset = 0x{:x}, size = 0x{:x}",
+            section.section.dwo_name().unwrap(),
+            section.offset,
+            section.size
+        )?;
+    }
+    let dwarf = dwp.sections(sections, dwo_parent)?;
+    if flags.info {
+        dump_info(w, &dwarf, dwo_parent_units, flags)?;
+        dump_types(w, &dwarf, dwo_parent_units, flags)?;
+    }
+    if flags.line {
+        dump_line(w, &dwarf)?;
+    }
+    Ok(())
+}
+
+fn dump_info<R: Reader, W: Write + Send>(
+    w: &mut W,
+    dwarf: &gimli::Dwarf<R>,
+    dwo_parent_units: Option<&HashMap<gimli::DwoId, gimli::Unit<R>>>,
+    flags: &Flags,
+) -> Result<()>
+where
+    R::Endian: Send + Sync,
+{
+    writeln!(w, "\n.debug_info")?;
 
     let units = match dwarf.units().collect::<Vec<_>>() {
         Ok(units) => units,
         Err(err) => {
             writeln_error(
-                &mut BufWriter::new(out.lock()),
+                w,
                 dwarf,
                 Error::GimliError(err),
                 "Failed to read unit headers",
@@ -1007,53 +1151,7 @@ where
         }
     };
     let process_unit = |header: UnitHeader<R>, buf: &mut Vec<u8>| -> Result<()> {
-        writeln!(
-            buf,
-            "\nUNIT<header overall offset = 0x{:08x}>:",
-            header.offset().as_debug_info_offset().unwrap().0,
-        )?;
-
-        match header.type_() {
-            UnitType::Compilation | UnitType::Partial => (),
-            UnitType::Type {
-                type_signature,
-                type_offset,
-            }
-            | UnitType::SplitType {
-                type_signature,
-                type_offset,
-            } => {
-                write!(buf, "  signature        = ")?;
-                dump_type_signature(buf, type_signature)?;
-                writeln!(buf)?;
-                writeln!(buf, "  typeoffset       = 0x{:08x}", type_offset.0,)?;
-            }
-            UnitType::Skeleton(dwo_id) | UnitType::SplitCompilation(dwo_id) => {
-                write!(buf, "  dwo_id           = ")?;
-                writeln!(buf, "0x{:016x}", dwo_id.0)?;
-            }
-        }
-
-        let mut unit = match dwarf.unit(header) {
-            Ok(unit) => unit,
-            Err(err) => {
-                writeln_error(buf, dwarf, err.into(), "Failed to parse unit root entry")?;
-                return Ok(());
-            }
-        };
-
-        if flags.dwo {
-            if let Some(dwo_id) = unit.dwo_id {
-                if let Some(parent_unit) = dwo_parent_units.get(&dwo_id) {
-                    unit.copy_relocated_attributes(parent_unit);
-                }
-            }
-        }
-
-        let entries_result = dump_entries(buf, unit, dwarf, flags);
-        if let Err(err) = entries_result {
-            writeln_error(buf, dwarf, err, "Failed to dump entries")?;
-        }
+        dump_unit(buf, header, dwarf, dwo_parent_units, flags)?;
         if !flags
             .match_units
             .as_ref()
@@ -1066,46 +1164,88 @@ where
     };
     // Don't use more than 16 cores even if available. No point in soaking hundreds
     // of cores if you happen to have them.
-    parallel_output(16, units, process_unit)
+    parallel_output(w, 16, units, process_unit)
 }
 
 fn dump_types<R: Reader, W: Write>(
     w: &mut W,
     dwarf: &gimli::Dwarf<R>,
+    dwo_parent_units: Option<&HashMap<gimli::DwoId, gimli::Unit<R>>>,
     flags: &Flags,
 ) -> Result<()> {
     writeln!(w, "\n.debug_types")?;
 
     let mut iter = dwarf.type_units();
     while let Some(header) = iter.next()? {
-        writeln!(
-            w,
-            "\nUNIT<header overall offset = 0x{:08x}>:",
-            header.offset().as_debug_types_offset().unwrap().0,
-        )?;
-        write!(w, "  signature        = ")?;
-        let (type_signature, type_offset) = match header.type_() {
-            UnitType::Type {
-                type_signature,
-                type_offset,
-            } => (type_signature, type_offset),
-            _ => unreachable!(), // No other units allowed in .debug_types.
-        };
-        dump_type_signature(w, type_signature)?;
-        writeln!(w)?;
-        writeln!(w, "  typeoffset       = 0x{:08x}", type_offset.0,)?;
+        dump_unit(w, header, dwarf, dwo_parent_units, flags)?;
+    }
+    Ok(())
+}
 
-        let unit = match dwarf.unit(header) {
-            Ok(unit) => unit,
-            Err(err) => {
-                writeln_error(w, dwarf, err.into(), "Failed to parse type unit root entry")?;
-                continue;
-            }
-        };
-        let entries_result = dump_entries(w, unit, dwarf, flags);
-        if let Err(err) = entries_result {
-            writeln_error(w, dwarf, err, "Failed to dump entries")?;
+fn dump_unit<R: Reader, W: Write>(
+    w: &mut W,
+    header: UnitHeader<R>,
+    dwarf: &gimli::Dwarf<R>,
+    dwo_parent_units: Option<&HashMap<gimli::DwoId, gimli::Unit<R>>>,
+    flags: &Flags,
+) -> Result<()> {
+    write!(w, "\nUNIT<")?;
+    match header.offset() {
+        UnitSectionOffset::DebugInfoOffset(o) => {
+            write!(w, ".debug_info+0x{:08x}", o.0)?;
         }
+        UnitSectionOffset::DebugTypesOffset(o) => {
+            write!(w, ".debug_types+0x{:08x}", o.0)?;
+        }
+    }
+    writeln!(w, ">: length = 0x{:x}, format = {:?}, version = {}, address_size = {}, abbrev_offset = 0x{:x}",
+        header.unit_length(),
+        header.format(),
+        header.version(),
+        header.address_size(),
+        header.debug_abbrev_offset().0,
+    )?;
+
+    match header.type_() {
+        UnitType::Compilation | UnitType::Partial => (),
+        UnitType::Type {
+            type_signature,
+            type_offset,
+        }
+        | UnitType::SplitType {
+            type_signature,
+            type_offset,
+        } => {
+            write!(w, "  signature        = ")?;
+            dump_type_signature(w, type_signature)?;
+            writeln!(w)?;
+            writeln!(w, "  type_offset      = 0x{:x}", type_offset.0,)?;
+        }
+        UnitType::Skeleton(dwo_id) | UnitType::SplitCompilation(dwo_id) => {
+            write!(w, "  dwo_id           = ")?;
+            writeln!(w, "0x{:016x}", dwo_id.0)?;
+        }
+    }
+
+    let mut unit = match dwarf.unit(header) {
+        Ok(unit) => unit,
+        Err(err) => {
+            writeln_error(w, dwarf, err.into(), "Failed to parse unit root entry")?;
+            return Ok(());
+        }
+    };
+
+    if let Some(dwo_parent_units) = dwo_parent_units {
+        if let Some(dwo_id) = unit.dwo_id {
+            if let Some(parent_unit) = dwo_parent_units.get(&dwo_id) {
+                unit.copy_relocated_attributes(parent_unit);
+            }
+        }
+    }
+
+    let entries_result = dump_entries(w, unit, dwarf, flags);
+    if let Err(err) = entries_result {
+        writeln_error(w, dwarf, err, "Failed to dump entries")?;
     }
     Ok(())
 }
@@ -1146,23 +1286,33 @@ fn dump_entries<R: Reader, W: Write>(
 ) -> Result<()> {
     let mut spaces_buf = String::new();
 
-    let mut depth = 0;
-    let mut entries = unit.entries();
-    while let Some((delta_depth, entry)) = entries.next_dfs()? {
-        depth += delta_depth;
-        assert!(depth >= 0);
-        let mut indent = depth as usize * 2 + 2;
+    let mut entries = unit.entries_raw(None)?;
+    while !entries.is_empty() {
+        let offset = entries.next_offset();
+        let depth = entries.next_depth();
+        let abbrev = entries.read_abbreviation()?;
+
+        let mut indent = if depth >= 0 {
+            depth as usize * 2 + 2
+        } else {
+            2
+        };
         write!(w, "<{}{}>", if depth < 10 { " " } else { "" }, depth)?;
-        write_offset(w, &unit, entry.offset(), flags)?;
-        writeln!(w, "{}{}", spaces(&mut spaces_buf, indent), entry.tag())?;
+        write_offset(w, &unit, offset, flags)?;
+        writeln!(
+            w,
+            "{}{}",
+            spaces(&mut spaces_buf, indent),
+            abbrev.map(|x| x.tag()).unwrap_or(gimli::DW_TAG_null)
+        )?;
 
         indent += 18;
         if flags.goff {
             indent += GOFF_SPACES;
         }
 
-        let mut attrs = entry.attrs();
-        while let Some(attr) = attrs.next()? {
+        for spec in abbrev.map(|x| x.attributes()).unwrap_or(&[]) {
+            let attr = entries.read_attribute(*spec)?;
             w.write_all(spaces(&mut spaces_buf, indent).as_bytes())?;
             if let Some(n) = attr.name().static_string() {
                 let right_padding = 27 - std::cmp::min(27, n.len());

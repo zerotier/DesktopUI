@@ -26,7 +26,7 @@
 #![cfg_attr(feature = "rustc-dep-of-std", no_core)]
 #![cfg_attr(
     any(feature = "rustc-dep-of-std", target_os = "redox"),
-    feature(static_nobundle)
+    feature(static_nobundle, native_link_modifiers, native_link_modifiers_bundle)
 )]
 #![cfg_attr(libc_const_extern_fn, feature(const_extern_fn))]
 
@@ -123,6 +123,12 @@ cfg_if! {
 
         mod vxworks;
         pub use vxworks::*;
+    } else if #[cfg(target_os = "solid_asp3")] {
+        mod fixed_width_ints;
+        pub use fixed_width_ints::*;
+
+        mod solid;
+        pub use solid::*;
     } else if #[cfg(unix)] {
         mod fixed_width_ints;
         pub use fixed_width_ints::*;

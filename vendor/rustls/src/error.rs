@@ -1,12 +1,13 @@
 use crate::msgs::enums::{AlertDescription, ContentType, HandshakeType};
-use sct;
-use std::error::Error;
+use crate::rand;
+
+use std::error::Error as StdError;
 use std::fmt;
-use webpki;
+use std::time::SystemTimeError;
 
 /// rustls reports protocol errors using this type.
 #[derive(Debug, PartialEq, Clone)]
-pub enum TLSError {
+pub enum Error {
     /// We received a TLS message that isn't valid right now.
     /// `expect_types` lists the message types we can expect right now.
     /// `got_type` is the type we found.  This error is typically
@@ -38,8 +39,15 @@ pub enum TLSError {
     /// The peer didn't give us any certificates.
     NoCertificatesPresented,
 
+    /// The certificate verifier doesn't support the given type of name.
+    UnsupportedNameType,
+
     /// We couldn't decrypt a message.  This is invariably fatal.
     DecryptError,
+
+    /// We couldn't encrypt a message because it was larger than the allowed message size.
+    /// This should never happen if the application is using valid record sizes.
+    EncryptError,
 
     /// The peer doesn't support a protocol version/feature we require.
     /// The parameter gives a hint as to what version/feature it is.
@@ -52,17 +60,29 @@ pub enum TLSError {
     /// We received a fatal alert.  This means the peer is unhappy.
     AlertReceived(AlertDescription),
 
-    /// The presented certificate chain is invalid.
-    WebPKIError(webpki::Error),
+    /// We received an invalidly encoded certificate from the peer.
+    InvalidCertificateEncoding,
+
+    /// We received a certificate with invalid signature type.
+    InvalidCertificateSignatureType,
+
+    /// We received a certificate with invalid signature.
+    InvalidCertificateSignature,
+
+    /// We received a certificate which includes invalid data.
+    InvalidCertificateData(String),
 
     /// The presented SCT(s) were invalid.
-    InvalidSCT(sct::Error),
+    InvalidSct(sct::Error),
 
     /// A catch-all error for unlikely errors.
     General(String),
 
     /// We failed to figure out what time it currently is.
     FailedToGetCurrentTime,
+
+    /// We failed to acquire random bytes from the system.
+    FailedToGetRandomBytes,
 
     /// This function doesn't work until the TLS handshake
     /// is complete.
@@ -73,6 +93,10 @@ pub enum TLSError {
 
     /// An incoming connection did not support any known application protocol.
     NoApplicationProtocol,
+
+    /// The `max_fragment_size` value supplied in configuration was too small,
+    /// or too large.
+    BadMaxFragmentSize,
 }
 
 fn join<T: fmt::Debug>(items: &[T]) -> String {
@@ -83,10 +107,10 @@ fn join<T: fmt::Debug>(items: &[T]) -> String {
         .join(" or ")
 }
 
-impl fmt::Display for TLSError {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            TLSError::InappropriateMessage {
+            Error::InappropriateMessage {
                 ref expect_types,
                 ref got_type,
             } => write!(
@@ -95,7 +119,7 @@ impl fmt::Display for TLSError {
                 got_type,
                 join::<ContentType>(expect_types)
             ),
-            TLSError::InappropriateHandshakeMessage {
+            Error::InappropriateHandshakeMessage {
                 ref expect_types,
                 ref got_type,
             } => write!(
@@ -104,65 +128,118 @@ impl fmt::Display for TLSError {
                 got_type,
                 join::<HandshakeType>(expect_types)
             ),
-            TLSError::CorruptMessagePayload(ref typ) => {
+            Error::CorruptMessagePayload(ref typ) => {
                 write!(f, "received corrupt message of type {:?}", typ)
             }
-            TLSError::PeerIncompatibleError(ref why) => write!(f, "peer is incompatible: {}", why),
-            TLSError::PeerMisbehavedError(ref why) => write!(f, "peer misbehaved: {}", why),
-            TLSError::AlertReceived(ref alert) => write!(f, "received fatal alert: {:?}", alert),
-            TLSError::WebPKIError(ref err) => write!(f, "invalid certificate: {:?}", err),
-            TLSError::CorruptMessage => write!(f, "received corrupt message"),
-            TLSError::NoCertificatesPresented => write!(f, "peer sent no certificates"),
-            TLSError::DecryptError => write!(f, "cannot decrypt peer's message"),
-            TLSError::PeerSentOversizedRecord => write!(f, "peer sent excess record size"),
-            TLSError::HandshakeNotComplete => write!(f, "handshake not complete"),
-            TLSError::NoApplicationProtocol => write!(f, "peer doesn't support any known protocol"),
-            TLSError::InvalidSCT(ref err) => write!(f, "invalid certificate timestamp: {:?}", err),
-            TLSError::FailedToGetCurrentTime => write!(f, "failed to get current time"),
-            TLSError::General(ref err) => write!(f, "unexpected error: {}", err), // (please file a bug)
+            Error::PeerIncompatibleError(ref why) => write!(f, "peer is incompatible: {}", why),
+            Error::PeerMisbehavedError(ref why) => write!(f, "peer misbehaved: {}", why),
+            Error::AlertReceived(ref alert) => write!(f, "received fatal alert: {:?}", alert),
+            Error::InvalidCertificateEncoding => {
+                write!(f, "invalid peer certificate encoding")
+            }
+            Error::InvalidCertificateSignatureType => {
+                write!(f, "invalid peer certificate signature type")
+            }
+            Error::InvalidCertificateSignature => {
+                write!(f, "invalid peer certificate signature")
+            }
+            Error::InvalidCertificateData(ref reason) => {
+                write!(f, "invalid peer certificate contents: {}", reason)
+            }
+            Error::CorruptMessage => write!(f, "received corrupt message"),
+            Error::NoCertificatesPresented => write!(f, "peer sent no certificates"),
+            Error::UnsupportedNameType => write!(f, "presented server name type wasn't supported"),
+            Error::DecryptError => write!(f, "cannot decrypt peer's message"),
+            Error::EncryptError => write!(f, "cannot encrypt message"),
+            Error::PeerSentOversizedRecord => write!(f, "peer sent excess record size"),
+            Error::HandshakeNotComplete => write!(f, "handshake not complete"),
+            Error::NoApplicationProtocol => write!(f, "peer doesn't support any known protocol"),
+            Error::InvalidSct(ref err) => write!(f, "invalid certificate timestamp: {:?}", err),
+            Error::FailedToGetCurrentTime => write!(f, "failed to get current time"),
+            Error::FailedToGetRandomBytes => write!(f, "failed to get random bytes"),
+            Error::BadMaxFragmentSize => {
+                write!(f, "the supplied max_fragment_size was too small or large")
+            }
+            Error::General(ref err) => write!(f, "unexpected error: {}", err),
         }
     }
 }
 
-impl Error for TLSError {}
+impl From<SystemTimeError> for Error {
+    #[inline]
+    fn from(_: SystemTimeError) -> Self {
+        Self::FailedToGetCurrentTime
+    }
+}
+
+impl StdError for Error {}
+
+impl From<rand::GetRandomFailed> for Error {
+    fn from(_: rand::GetRandomFailed) -> Self {
+        Self::FailedToGetRandomBytes
+    }
+}
 
 #[cfg(test)]
 mod tests {
+    use super::Error;
+
     #[test]
     fn smoke() {
-        use super::TLSError;
         use crate::msgs::enums::{AlertDescription, ContentType, HandshakeType};
         use sct;
-        use webpki;
 
         let all = vec![
-            TLSError::InappropriateMessage {
+            Error::InappropriateMessage {
                 expect_types: vec![ContentType::Alert],
                 got_type: ContentType::Handshake,
             },
-            TLSError::InappropriateHandshakeMessage {
+            Error::InappropriateHandshakeMessage {
                 expect_types: vec![HandshakeType::ClientHello, HandshakeType::Finished],
                 got_type: HandshakeType::ServerHello,
             },
-            TLSError::CorruptMessage,
-            TLSError::CorruptMessagePayload(ContentType::Alert),
-            TLSError::NoCertificatesPresented,
-            TLSError::DecryptError,
-            TLSError::PeerIncompatibleError("no tls1.2".to_string()),
-            TLSError::PeerMisbehavedError("inconsistent something".to_string()),
-            TLSError::AlertReceived(AlertDescription::ExportRestriction),
-            TLSError::WebPKIError(webpki::Error::ExtensionValueInvalid),
-            TLSError::InvalidSCT(sct::Error::MalformedSCT),
-            TLSError::General("undocumented error".to_string()),
-            TLSError::FailedToGetCurrentTime,
-            TLSError::HandshakeNotComplete,
-            TLSError::PeerSentOversizedRecord,
-            TLSError::NoApplicationProtocol,
+            Error::CorruptMessage,
+            Error::CorruptMessagePayload(ContentType::Alert),
+            Error::NoCertificatesPresented,
+            Error::DecryptError,
+            Error::PeerIncompatibleError("no tls1.2".to_string()),
+            Error::PeerMisbehavedError("inconsistent something".to_string()),
+            Error::AlertReceived(AlertDescription::ExportRestriction),
+            Error::InvalidCertificateEncoding,
+            Error::InvalidCertificateSignatureType,
+            Error::InvalidCertificateSignature,
+            Error::InvalidCertificateData("Data".into()),
+            Error::InvalidSct(sct::Error::MalformedSct),
+            Error::General("undocumented error".to_string()),
+            Error::FailedToGetCurrentTime,
+            Error::FailedToGetRandomBytes,
+            Error::HandshakeNotComplete,
+            Error::PeerSentOversizedRecord,
+            Error::NoApplicationProtocol,
+            Error::BadMaxFragmentSize,
         ];
 
         for err in all {
             println!("{:?}:", err);
             println!("  fmt '{}'", err);
         }
+    }
+
+    #[test]
+    fn rand_error_mapping() {
+        use super::rand;
+        let err: Error = rand::GetRandomFailed.into();
+        assert_eq!(err, Error::FailedToGetRandomBytes);
+    }
+
+    #[test]
+    fn time_error_mapping() {
+        use std::time::SystemTime;
+
+        let time_error = SystemTime::UNIX_EPOCH
+            .duration_since(SystemTime::now())
+            .unwrap_err();
+        let err: Error = time_error.into();
+        assert_eq!(err, Error::FailedToGetCurrentTime);
     }
 }

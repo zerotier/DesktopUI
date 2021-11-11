@@ -1,8 +1,7 @@
 # addr2line
 
-[![](http://meritbadge.herokuapp.com/addr2line) ![](https://img.shields.io/crates/d/addr2line.svg)](https://crates.io/crates/addr2line)
-[![](https://docs.rs/addr2line/badge.svg)](https://docs.rs/addr2line/)
-[![Build Status](https://travis-ci.org/gimli-rs/addr2line.svg?branch=master)](https://travis-ci.org/gimli-rs/addr2line)
+[![](https://img.shields.io/crates/v/addr2line.svg)](https://crates.io/crates/addr2line)
+[![](https://img.shields.io/docsrs/addr2line.svg)](https://docs.rs/addr2line)
 [![Coverage Status](https://coveralls.io/repos/github/gimli-rs/addr2line/badge.svg?branch=master)](https://coveralls.io/github/gimli-rs/addr2line?branch=master)
 
 A cross-platform library for retrieving per-address debug information
@@ -19,7 +18,7 @@ performed programmatically through `Context::find_location` and
 
 # Quickstart
  - Add the [`addr2line` crate](https://crates.io/crates/addr2line) to your `Cargo.toml`
- - Load the file and parse it with [`addr2line::object::File::parse`](https://docs.rs/object/*/object/struct.File.html#method.parse)
+ - Load the file and parse it with [`addr2line::object::read::File::parse`](https://docs.rs/object/*/object/read/struct.File.html#method.parse)
  - Pass the parsed file to [`addr2line::Context::new` ](https://docs.rs/addr2line/*/addr2line/struct.Context.html#method.new)
  - Use [`addr2line::Context::find_location`](https://docs.rs/addr2line/*/addr2line/struct.Context.html#method.find_location)
    or [`addr2line::Context::find_frames`](https://docs.rs/addr2line/*/addr2line/struct.Context.html#method.find_frames)
@@ -39,8 +38,8 @@ was done that indicates a comparable performance.
 
 Licensed under either of
 
-  * Apache License, Version 2.0 ([`LICENSE-APACHE`](./LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-  * MIT license ([`LICENSE-MIT`](./LICENSE-MIT) or http://opensource.org/licenses/MIT)
+  * Apache License, Version 2.0 ([`LICENSE-APACHE`](./LICENSE-APACHE) or https://www.apache.org/licenses/LICENSE-2.0)
+  * MIT license ([`LICENSE-MIT`](./LICENSE-MIT) or https://opensource.org/licenses/MIT)
 
 at your option.
 

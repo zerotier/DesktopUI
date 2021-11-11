@@ -1,8 +1,8 @@
-use super::codec::Codec;
 use super::codec::Reader;
 use super::enums::{AlertDescription, AlertLevel, HandshakeType};
-use super::message::Message;
+use super::message::{Message, OpaqueMessage, PlainMessage};
 
+use std::convert::TryFrom;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -26,9 +26,21 @@ fn test_read_fuzz_corpus() {
         f.read_to_end(&mut bytes).unwrap();
 
         let mut rd = Reader::init(&bytes);
-        let msg = Message::read(&mut rd).unwrap();
+        let msg = OpaqueMessage::read(&mut rd)
+            .unwrap()
+            .into_plain_message();
         println!("{:?}", msg);
-        assert_eq!(bytes.to_vec(), msg.get_encoding());
+
+        let msg = match Message::try_from(msg) {
+            Ok(msg) => msg,
+            Err(_) => continue,
+        };
+
+        let enc = PlainMessage::from(msg)
+            .into_unencrypted_opaque()
+            .encode();
+        assert_eq!(bytes.to_vec(), enc);
+        assert_eq!(bytes[..rd.used()].to_vec(), enc);
     }
 }
 
@@ -55,9 +67,9 @@ fn can_read_safari_client_hello() {
         \x79\x2f\x33\x08\x68\x74\x74\x70\x2f\x31\x2e\x31\x00\x0b\x00\x02\
         \x01\x00\x00\x0a\x00\x0a\x00\x08\x00\x1d\x00\x17\x00\x18\x00\x19";
     let mut rd = Reader::init(bytes);
-    let mut m = Message::read(&mut rd).unwrap();
+    let m = OpaqueMessage::read(&mut rd).unwrap();
     println!("m = {:?}", m);
-    assert_eq!(m.decode_payload(), false);
+    assert!(Message::try_from(m.into_plain_message()).is_err());
 }
 
 #[test]
@@ -68,9 +80,8 @@ fn alert_is_not_handshake() {
 
 #[test]
 fn alert_is_not_opaque() {
-    let mut m = Message::build_alert(AlertLevel::Fatal, AlertDescription::DecodeError);
-    assert_eq!(None, m.take_opaque_payload());
-    assert_eq!(false, m.decode_payload());
+    let m = Message::build_alert(AlertLevel::Fatal, AlertDescription::DecodeError);
+    assert!(Message::try_from(m).is_ok());
 }
 
 #[test]
@@ -82,10 +93,10 @@ fn construct_all_types() {
         &b"\x17\x03\x04\x00\x04\x11\x22\x33\x44"[..],
         &b"\x18\x03\x04\x00\x04\x11\x22\x33\x44"[..],
     ];
-    for bytes in samples.iter() {
-        let mut m = Message::read_bytes(bytes).unwrap();
+    for &bytes in samples.iter() {
+        let m = OpaqueMessage::read(&mut Reader::init(bytes)).unwrap();
         println!("m = {:?}", m);
-        m.decode_payload();
+        let m = Message::try_from(m.into_plain_message());
         println!("m' = {:?}", m);
     }
 }

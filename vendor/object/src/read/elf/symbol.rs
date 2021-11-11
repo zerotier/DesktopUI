@@ -23,7 +23,9 @@ pub struct SymbolTable<'data, Elf: FileHeader, R = &'data [u8]>
 where
     R: ReadRef<'data>,
 {
-    section: usize,
+    section: SectionIndex,
+    string_section: SectionIndex,
+    shndx_section: SectionIndex,
     symbols: &'data [Elf::Sym],
     strings: StringTable<'data, R>,
     shndx: &'data [u32],
@@ -32,7 +34,9 @@ where
 impl<'data, Elf: FileHeader, R: ReadRef<'data>> Default for SymbolTable<'data, Elf, R> {
     fn default() -> Self {
         SymbolTable {
-            section: 0,
+            section: SectionIndex(0),
+            string_section: SectionIndex(0),
+            shndx_section: SectionIndex(0),
             symbols: &[],
             strings: Default::default(),
             shndx: &[],
@@ -46,7 +50,7 @@ impl<'data, Elf: FileHeader, R: ReadRef<'data>> SymbolTable<'data, Elf, R> {
         endian: Elf::Endian,
         data: R,
         sections: &SectionTable<'data, Elf, R>,
-        section_index: usize,
+        section_index: SectionIndex,
         section: &Elf::SectionHeader,
     ) -> read::Result<SymbolTable<'data, Elf, R>> {
         debug_assert!(
@@ -58,42 +62,48 @@ impl<'data, Elf: FileHeader, R: ReadRef<'data>> SymbolTable<'data, Elf, R> {
             .data_as_array(endian, data)
             .read_error("Invalid ELF symbol table data")?;
 
-        let strtab = sections.section(section.sh_link(endian) as usize)?;
-        let strings = if let Some((str_offset, str_size)) = strtab.file_range(endian) {
-            let str_end = str_offset
-                .checked_add(str_size)
-                .read_error("Invalid str_size")?;
-            StringTable::new(data, str_offset, str_end)
-        } else {
-            StringTable::default()
-        };
+        let link = SectionIndex(section.sh_link(endian) as usize);
+        let strings = sections.strings(endian, data, link)?;
 
-        let shndx = sections
-            .iter()
-            .find(|s| {
-                s.sh_type(endian) == elf::SHT_SYMTAB_SHNDX
-                    && s.sh_link(endian) as usize == section_index
-            })
-            .map(|section| {
-                section
+        let mut shndx_section = SectionIndex(0);
+        let mut shndx = &[][..];
+        for (i, s) in sections.iter().enumerate() {
+            if s.sh_type(endian) == elf::SHT_SYMTAB_SHNDX
+                && s.sh_link(endian) as usize == section_index.0
+            {
+                shndx_section = SectionIndex(i);
+                shndx = s
                     .data_as_array(endian, data)
-                    .read_error("Invalid ELF symtab_shndx data")
-            })
-            .transpose()?
-            .unwrap_or(&[]);
+                    .read_error("Invalid ELF symtab_shndx data")?;
+            }
+        }
 
         Ok(SymbolTable {
             section: section_index,
+            string_section: link,
             symbols,
             strings,
             shndx,
+            shndx_section,
         })
     }
 
     /// Return the section index of this symbol table.
     #[inline]
-    pub fn section(&self) -> usize {
+    pub fn section(&self) -> SectionIndex {
         self.section
+    }
+
+    /// Return the section index of the shndx table.
+    #[inline]
+    pub fn shndx_section(&self) -> SectionIndex {
+        self.string_section
+    }
+
+    /// Return the section index of the linked string table.
+    #[inline]
+    pub fn string_section(&self) -> SectionIndex {
+        self.string_section
     }
 
     /// Return the string table used for the symbol names.
@@ -136,7 +146,27 @@ impl<'data, Elf: FileHeader, R: ReadRef<'data>> SymbolTable<'data, Elf, R> {
     /// Return the extended section index for the given symbol if present.
     #[inline]
     pub fn shndx(&self, index: usize) -> Option<u32> {
-        self.shndx.get(index).cloned()
+        self.shndx.get(index).copied()
+    }
+
+    /// Return the section index for the given symbol.
+    ///
+    /// This uses the extended section index if present.
+    pub fn symbol_section(
+        &self,
+        endian: Elf::Endian,
+        symbol: &'data Elf::Sym,
+        index: usize,
+    ) -> read::Result<Option<SectionIndex>> {
+        match symbol.st_shndx(endian) {
+            elf::SHN_UNDEF => Ok(None),
+            elf::SHN_XINDEX => self
+                .shndx(index)
+                .read_error("Missing ELF symbol extended index")
+                .map(|index| Some(SectionIndex(index as usize))),
+            shndx if shndx < elf::SHN_LORESERVE => Ok(Some(SectionIndex(shndx.into()))),
+            _ => Ok(None),
+        }
     }
 
     /// Return the symbol name for the given symbol.
@@ -295,8 +325,12 @@ impl<'data, 'file, Elf: FileHeader, R: ReadRef<'data>> ObjectSymbol<'data>
         self.index
     }
 
+    fn name_bytes(&self) -> read::Result<&'data [u8]> {
+        self.symbol.name(self.endian, self.symbols.strings())
+    }
+
     fn name(&self) -> read::Result<&'data str> {
-        let name = self.symbol.name(self.endian, self.symbols.strings())?;
+        let name = self.name_bytes()?;
         str::from_utf8(name)
             .ok()
             .read_error("Non UTF-8 ELF symbol name")

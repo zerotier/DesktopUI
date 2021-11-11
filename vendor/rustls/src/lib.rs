@@ -13,16 +13,16 @@
 //! * ChaCha20-Poly1305 bulk encryption ([RFC7905](https://tools.ietf.org/html/rfc7905)).
 //! * ALPN support.
 //! * SNI support.
-//! * Tunable MTU to make TLS messages match size of underlying transport.
+//! * Tunable fragment size to make TLS messages match size of underlying transport.
 //! * Optional use of vectored IO to minimise system calls.
 //! * TLS1.2 session resumption.
-//! * TLS1.2 resumption via tickets (RFC5077).
+//! * TLS1.2 resumption via tickets ([RFC5077](https://tools.ietf.org/html/rfc5077)).
 //! * TLS1.3 resumption via tickets or session storage.
 //! * TLS1.3 0-RTT data for clients.
 //! * Client authentication by clients.
 //! * Client authentication by servers.
-//! * Extended master secret support (RFC7627).
-//! * Exporters (RFC5705).
+//! * Extended master secret support ([RFC7627](https://tools.ietf.org/html/rfc7627)).
+//! * Exporters ([RFC5705](https://tools.ietf.org/html/rfc5705)).
 //! * OCSP stapling by servers.
 //! * SCT stapling by servers.
 //! * SCT verification by clients.
@@ -35,8 +35,8 @@
 //!
 //! ## Non-features
 //!
-//! The following things are broken, obsolete, badly designed, underspecified,
-//! dangerous and/or insane. Rustls does not support:
+//! For reasons [explained in the manual](manual),
+//! rustls does not and will not support:
 //!
 //! * SSL1, SSL2, SSL3, TLS1 or TLS1.1.
 //! * RC4.
@@ -49,7 +49,6 @@
 //! * Compression.
 //! * Discrete-log Diffie-Hellman.
 //! * Automatic protocol version downgrade.
-//! * AES-GCM with unsafe nonces.
 //!
 //! There are plenty of other libraries that provide these features should you
 //! need them.
@@ -69,20 +68,23 @@
 //! IO.
 //!
 //! ### Rustls provides encrypted pipes
-//! These are the `ServerSession` and `ClientSession` types.  You supply raw TLS traffic
-//! on the left (via the `read_tls()` and `write_tls()` methods) and then read/write the
+//! These are the [`ServerConnection`] and [`ClientConnection`] types.  You supply raw TLS traffic
+//! on the left (via the [`read_tls()`] and [`write_tls()`] methods) and then read/write the
 //! plaintext on the right:
+//!
+//! [`read_tls()`]: Connection::read_tls
+//! [`write_tls()`]: Connection::read_tls
 //!
 //! ```text
 //!          TLS                                   Plaintext
 //!          ===                                   =========
-//!     read_tls()      +-----------------------+      io::Read
+//!     read_tls()      +-----------------------+      reader() as io::Read
 //!                     |                       |
-//!           +--------->     ClientSession     +--------->
+//!           +--------->   ClientConnection    +--------->
 //!                     |          or           |
-//!           <---------+     ServerSession     <---------+
+//!           <---------+   ServerConnection    <---------+
 //!                     |                       |
-//!     write_tls()     +-----------------------+      io::Write
+//!     write_tls()     +-----------------------+      writer() as io::Write
 //! ```
 //!
 //! ### Rustls takes care of server certificate verification
@@ -92,32 +94,65 @@
 //! ## Getting started
 //! This is the minimum you need to do to make a TLS client connection.
 //!
-//! First, we make a `ClientConfig`.  You're likely to make one of these per process,
-//! and use it for all connections made by that process.
-//!
-//! ```
-//! let mut config = rustls::ClientConfig::new();
-//! ```
-//!
-//! Next we load some root certificates.  These are used to authenticate the server.
+//! First we load some root certificates.  These are used to authenticate the server.
 //! The recommended way is to depend on the `webpki_roots` crate which contains
 //! the Mozilla set of root certificates.
 //!
-//! ```rust,ignore
-//! config.root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+//! ```rust,no_run
+//! let mut root_store = rustls::RootCertStore::empty();
+//! root_store.add_server_trust_anchors(
+//!     webpki_roots::TLS_SERVER_ROOTS
+//!         .0
+//!         .iter()
+//!         .map(|ta| {
+//!             rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
+//!                 ta.subject,
+//!                 ta.spki,
+//!                 ta.name_constraints,
+//!             )
+//!         })
+//! );
 //! ```
 //!
-//! Now we can make a session.  You need to provide the server's hostname so we
+//! Next, we make a `ClientConfig`.  You're likely to make one of these per process,
+//! and use it for all connections made by that process.
+//!
+//! ```rust,no_run
+//! # let root_store: rustls::RootCertStore = panic!();
+//! let config = rustls::ClientConfig::builder()
+//!     .with_safe_defaults()
+//!     .with_root_certificates(root_store)
+//!     .with_no_client_auth();
+//! ```
+//!
+//! Now we can make a connection.  You need to provide the server's hostname so we
 //! know what to expect to find in the server's certificate.
 //!
-//! ```no_run
+//! ```rust
 //! # use rustls;
 //! # use webpki;
 //! # use std::sync::Arc;
-//! # let mut config = rustls::ClientConfig::new();
+//! # use std::convert::TryInto;
+//! # let mut root_store = rustls::RootCertStore::empty();
+//! # root_store.add_server_trust_anchors(
+//! #  webpki_roots::TLS_SERVER_ROOTS
+//! #      .0
+//! #      .iter()
+//! #      .map(|ta| {
+//! #          rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
+//! #              ta.subject,
+//! #              ta.spki,
+//! #              ta.name_constraints,
+//! #          )
+//! #      })
+//! # );
+//! # let config = rustls::ClientConfig::builder()
+//! #     .with_safe_defaults()
+//! #     .with_root_certificates(root_store)
+//! #     .with_no_client_auth();
 //! let rc_config = Arc::new(config);
-//! let example_com = webpki::DNSNameRef::try_from_ascii_str("example.com").unwrap();
-//! let mut client = rustls::ClientSession::new(&rc_config, example_com);
+//! let example_com = "example.com".try_into().unwrap();
+//! let mut client = rustls::ClientConnection::new(rc_config, example_com);
 //! ```
 //!
 //! Now you should do appropriate IO for the `client` object.  If `client.wants_read()` yields
@@ -129,24 +164,45 @@
 //! The return types of `read_tls()` and `write_tls()` only tell you if the IO worked.  No
 //! parsing or processing of the TLS messages is done.  After each `read_tls()` you should
 //! therefore call `client.process_new_packets()` which parses and processes the messages.
-//! Any error returned from `process_new_packets` is fatal to the session, and will tell you
+//! Any error returned from `process_new_packets` is fatal to the connection, and will tell you
 //! why.  For example, if the server's certificate is expired `process_new_packets` will
-//! return `Err(WebPKIError(CertExpired))`.  From this point on, `process_new_packets` will
-//! not do any new work and will return that error continually.
+//! return `Err(WebPkiError(CertExpired, ValidateServerCert))`.  From this point on,
+//! `process_new_packets` will not do any new work and will return that error continually.
 //!
-//! You can extract newly received data by calling `client.read()` (via the `io::Read`
-//! trait).  You can send data to the peer by calling `client.write()` (via the `io::Write`
-//! trait).  Note that `client.write()` buffers data you send if the TLS session is not
-//! yet established: this is useful for writing (say) a HTTP request, but don't write huge
-//! amounts of data.
+//! You can extract newly received data by calling `client.reader()` (which implements the
+//! `io::Read` trait).  You can send data to the peer by calling `client.writer()` (which
+//! implements `io::Write` trait).  Note that `client.writer().write()` buffers data you
+//! send if the TLS connection is not yet established: this is useful for writing (say) a
+//! HTTP request, but this is buffered so avoid large amounts of data.
 //!
 //! The following code uses a fictional socket IO API for illustration, and does not handle
 //! errors.
 //!
-//! ```text
+//! ```rust,no_run
+//! # let mut client = rustls::ClientConnection::new(panic!(), panic!()).unwrap();
+//! # struct Socket { }
+//! # impl Socket {
+//! #   fn ready_for_write(&self) -> bool { false }
+//! #   fn ready_for_read(&self) -> bool { false }
+//! #   fn wait_for_something_to_happen(&self) { }
+//! # }
+//! #
+//! # use std::io::{Read, Write, Result};
+//! # impl Read for Socket {
+//! #   fn read(&mut self, buf: &mut [u8]) -> Result<usize> { panic!() }
+//! # }
+//! # impl Write for Socket {
+//! #   fn write(&mut self, buf: &[u8]) -> Result<usize> { panic!() }
+//! #   fn flush(&mut self) -> Result<()> { panic!() }
+//! # }
+//! #
+//! # fn connect(_address: &str, _port: u16) -> Socket {
+//! #   panic!();
+//! # }
 //! use std::io;
+//! use rustls::Connection;
 //!
-//! client.write(b"GET / HTTP/1.0\r\n\r\n").unwrap();
+//! client.writer().write(b"GET / HTTP/1.0\r\n\r\n").unwrap();
 //! let mut socket = connect("example.com", 443);
 //! loop {
 //!   if client.wants_read() && socket.ready_for_read() {
@@ -154,7 +210,7 @@
 //!     client.process_new_packets().unwrap();
 //!
 //!     let mut plaintext = Vec::new();
-//!     client.read_to_end(&mut plaintext).unwrap();
+//!     client.reader().read_to_end(&mut plaintext).unwrap();
 //!     io::stdout().write(&plaintext).unwrap();
 //!   }
 //!
@@ -189,13 +245,22 @@
 //!   details of these.  You will only need this if you're writing a QUIC
 //!   implementation.
 //!
+//! - `tls12`: enables support for TLS version 1.2. This feature is in the default
+//!   set. Note that, due to the additive nature of Cargo features and because it
+//!   is enabled by default, other crates in your dependency graph could re-enable
+//!   it for your application. If you want to disable TLS 1.2 for security reasons,
+//!   consider explicitly enabling TLS 1.3 only in the config builder API.
+//!
 
 // Require docs for public APIs, deny unsafe code, etc.
 #![forbid(unsafe_code, unused_must_use, unstable_features)]
 #![deny(
+    clippy::clone_on_ref_ptr,
+    clippy::use_self,
     trivial_casts,
     trivial_numeric_casts,
     missing_docs,
+    unreachable_pub,
     unused_import_braces,
     unused_extern_crates,
     unused_qualifications
@@ -203,7 +268,20 @@
 // Relax these clippy lints:
 // - ptr_arg: this triggers on references to type aliases that are Vec
 //   underneath.
-#![cfg_attr(feature = "cargo-clippy", allow(clippy::ptr_arg))]
+// - too_many_arguments: some things just need a lot of state, wrapping it
+//   doesn't necessarily make it easier to follow what's going on
+// - new_ret_no_self: we sometimes return `Arc<Self>`, which seems fine
+// - single_component_path_imports: our top-level `use log` import causes
+//   a false positive, https://github.com/rust-lang/rust-clippy/issues/5210
+// - new_without_default: for internal constructors, the indirection is not
+//   helpful
+#![allow(
+    clippy::too_many_arguments,
+    clippy::new_ret_no_self,
+    clippy::ptr_arg,
+    clippy::single_component_path_imports,
+    clippy::new_without_default
+)]
 // Enable documentation for all features on docs.rs
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
@@ -225,15 +303,16 @@ mod log {
 mod msgs;
 mod anchors;
 mod cipher;
+mod conn;
 mod error;
 mod hash_hs;
-mod key_schedule;
-mod pemfile;
-mod prf;
+mod limited_cache;
 mod rand;
 mod record_layer;
-mod session;
 mod stream;
+#[cfg(feature = "tls12")]
+mod tls12;
+mod tls13;
 mod vecbuf;
 mod verify;
 #[cfg(test)]
@@ -242,65 +321,157 @@ mod x509;
 #[macro_use]
 mod check;
 mod bs_debug;
-mod client;
+mod builder;
 mod key;
 mod keylog;
-mod server;
+mod kx;
 mod suites;
 mod ticketer;
+mod versions;
 
 /// Internal classes which may be useful outside the library.
 /// The contents of this section DO NOT form part of the stable interface.
 pub mod internal {
-    /// Functions for parsing PEM files containing certificates/keys.
-    pub mod pemfile {
-        pub use crate::pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
-    }
-
     /// Low-level TLS message parsing and encoding functions.
     pub mod msgs {
         pub use crate::msgs::*;
     }
+    /// Low-level TLS message decryption functions.
+    pub mod cipher {
+        pub use crate::cipher::MessageDecrypter;
+    }
 }
 
 // The public interface is:
-pub use crate::anchors::{DistinguishedNames, OwnedTrustAnchor, RootCertStore};
-pub use crate::client::handy::{ClientSessionMemoryCache, NoClientSessionStorage};
-pub use crate::client::ResolvesClientCert;
-pub use crate::client::StoresClientSessions;
-pub use crate::client::{ClientConfig, ClientSession, WriteEarlyData};
-pub use crate::error::TLSError;
+pub use crate::anchors::{OwnedTrustAnchor, RootCertStore};
+pub use crate::builder::{
+    ConfigBuilder, ConfigSide, WantsCipherSuites, WantsKxGroups, WantsVerifier, WantsVersions,
+};
+pub use crate::conn::{
+    CommonState, Connection, ConnectionCommon, IoState, Reader, SideData, Writer,
+};
+pub use crate::error::Error;
 pub use crate::key::{Certificate, PrivateKey};
 pub use crate::keylog::{KeyLog, KeyLogFile, NoKeyLog};
+pub use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
 pub use crate::msgs::enums::CipherSuite;
 pub use crate::msgs::enums::ProtocolVersion;
 pub use crate::msgs::enums::SignatureScheme;
-pub use crate::server::handy::ResolvesServerCertUsingSNI;
-pub use crate::server::handy::{NoServerSessionStorage, ServerSessionMemoryCache};
-pub use crate::server::StoresServerSessions;
-pub use crate::server::{ClientHello, ProducesTickets, ResolvesServerCert};
-pub use crate::server::{ServerConfig, ServerSession};
-pub use crate::session::Session;
+pub use crate::msgs::handshake::DistinguishedNames;
 pub use crate::stream::{Stream, StreamOwned};
-pub use crate::suites::{BulkAlgorithm, SupportedCipherSuite, ALL_CIPHERSUITES};
-pub use crate::ticketer::Ticketer;
-pub use crate::verify::{
-    AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth,
+pub use crate::suites::{
+    BulkAlgorithm, SupportedCipherSuite, ALL_CIPHER_SUITES, DEFAULT_CIPHER_SUITES,
 };
+pub use crate::ticketer::Ticketer;
+#[cfg(feature = "tls12")]
+pub use crate::tls12::Tls12CipherSuite;
+pub use crate::tls13::Tls13CipherSuite;
+pub use crate::versions::{SupportedProtocolVersion, ALL_VERSIONS, DEFAULT_VERSIONS};
+
+/// Items for use in a client.
+pub mod client {
+    pub(super) mod builder;
+    mod client_conn;
+    mod common;
+    pub(super) mod handy;
+    mod hs;
+    #[cfg(feature = "tls12")]
+    mod tls12;
+    mod tls13;
+
+    pub use builder::WantsClientCert;
+    #[cfg(feature = "quic")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "quic")))]
+    pub use client_conn::ClientQuicExt;
+    pub use client_conn::ResolvesClientCert;
+    pub use client_conn::ServerName;
+    pub use client_conn::StoresClientSessions;
+    pub use client_conn::{ClientConfig, ClientConnection, ClientConnectionData, WriteEarlyData};
+    pub use handy::{ClientSessionMemoryCache, NoClientSessionStorage};
+
+    #[cfg(feature = "dangerous_configuration")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
+    pub use crate::verify::{
+        CertificateTransparencyPolicy, HandshakeSignatureValid, ServerCertVerified,
+        ServerCertVerifier, WebPkiVerifier,
+    };
+    #[cfg(feature = "dangerous_configuration")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
+    pub use client_conn::danger::DangerousClientConfig;
+}
+
+pub use client::{ClientConfig, ClientConnection, ServerName};
+
+/// Items for use in a server.
+pub mod server {
+    pub(crate) mod builder;
+    mod common;
+    pub(crate) mod handy;
+    mod hs;
+    mod server_conn;
+    #[cfg(feature = "tls12")]
+    mod tls12;
+    mod tls13;
+
+    pub use crate::verify::{
+        AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth,
+    };
+    pub use builder::WantsServerCert;
+    pub use handy::ResolvesServerCertUsingSni;
+    pub use handy::{NoServerSessionStorage, ServerSessionMemoryCache};
+    #[cfg(feature = "quic")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "quic")))]
+    pub use server_conn::ServerQuicExt;
+    pub use server_conn::StoresServerSessions;
+    pub use server_conn::{
+        Accepted, Acceptor, ServerConfig, ServerConnection, ServerConnectionData,
+    };
+    pub use server_conn::{ClientHello, ProducesTickets, ResolvesServerCert};
+
+    #[cfg(feature = "dangerous_configuration")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
+    pub use crate::verify::{ClientCertVerified, ClientCertVerifier, DnsName};
+}
+
+pub use server::{ServerConfig, ServerConnection};
 
 /// All defined ciphersuites appear in this module.
 ///
-/// ALL_CIPHERSUITES is provided an array of all of these values.
-pub mod ciphersuite {
-    pub use crate::suites::TLS13_AES_128_GCM_SHA256;
-    pub use crate::suites::TLS13_AES_256_GCM_SHA384;
-    pub use crate::suites::TLS13_CHACHA20_POLY1305_SHA256;
-    pub use crate::suites::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256;
-    pub use crate::suites::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384;
-    pub use crate::suites::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256;
-    pub use crate::suites::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256;
-    pub use crate::suites::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384;
-    pub use crate::suites::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256;
+/// [`ALL_CIPHER_SUITES`] is provided as an array of all of these values.
+pub mod cipher_suite {
+    #[cfg(feature = "tls12")]
+    pub use crate::tls12::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256;
+    #[cfg(feature = "tls12")]
+    pub use crate::tls12::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384;
+    #[cfg(feature = "tls12")]
+    pub use crate::tls12::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256;
+    #[cfg(feature = "tls12")]
+    pub use crate::tls12::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256;
+    #[cfg(feature = "tls12")]
+    pub use crate::tls12::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384;
+    #[cfg(feature = "tls12")]
+    pub use crate::tls12::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256;
+    pub use crate::tls13::TLS13_AES_128_GCM_SHA256;
+    pub use crate::tls13::TLS13_AES_256_GCM_SHA384;
+    pub use crate::tls13::TLS13_CHACHA20_POLY1305_SHA256;
+}
+
+/// All defined protocol versions appear in this module.
+///
+/// ALL_VERSIONS is a provided as an array of all of these values.
+pub mod version {
+    #[cfg(feature = "tls12")]
+    pub use crate::versions::TLS12;
+    pub use crate::versions::TLS13;
+}
+
+/// All defined key exchange groups appear in this module.
+///
+/// ALL_KX_GROUPS is provided as an array of all of these values.
+pub mod kx_group {
+    pub use crate::kx::SECP256R1;
+    pub use crate::kx::SECP384R1;
+    pub use crate::kx::X25519;
 }
 
 /// Message signing interfaces and implementations.
@@ -311,24 +482,31 @@ pub mod sign;
 /// APIs for implementing QUIC TLS
 pub mod quic;
 
-#[cfg(not(feature = "quic"))]
-// If QUIC support is disabled, just define a private module with an empty
-// trait to allow Session having QuicExt as a trait bound.
-mod quic {
-    pub trait QuicExt {}
-    impl QuicExt for super::ClientSession {}
-    impl QuicExt for super::ServerSession {}
-}
-
-#[cfg(feature = "dangerous_configuration")]
-#[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
-pub use crate::client::danger::DangerousClientConfig;
-#[cfg(feature = "dangerous_configuration")]
-#[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
-pub use crate::verify::{
-    ClientCertVerified, ClientCertVerifier, HandshakeSignatureValid, ServerCertVerified,
-    ServerCertVerifier, WebPKIVerifier,
-};
-
 /// This is the rustls manual.
 pub mod manual;
+
+/** Type renames. */
+#[allow(clippy::upper_case_acronyms)]
+#[doc(hidden)]
+#[deprecated(since = "0.20.0", note = "Use ResolvesServerCertUsingSni")]
+pub type ResolvesServerCertUsingSNI = server::ResolvesServerCertUsingSni;
+#[allow(clippy::upper_case_acronyms)]
+#[cfg(feature = "dangerous_configuration")]
+#[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
+#[doc(hidden)]
+#[deprecated(since = "0.20.0", note = "Use client::WebPkiVerifier")]
+pub type WebPKIVerifier = client::WebPkiVerifier;
+#[allow(clippy::upper_case_acronyms)]
+#[doc(hidden)]
+#[deprecated(since = "0.20.0", note = "Use TlsError")]
+pub type TLSError = Error;
+#[doc(hidden)]
+#[deprecated(since = "0.20.0", note = "Use ClientConnection")]
+pub type ClientSession = ClientConnection;
+#[doc(hidden)]
+#[deprecated(since = "0.20.0", note = "Use ServerConnection")]
+pub type ServerSession = ServerConnection;
+
+/* Apologies: would make a trait alias here, but those remain unstable.
+pub trait Session = Connection;
+*/

@@ -55,7 +55,7 @@
 //!     compilers used to create each compilation unit within a shared library or
 //!     executable (via `DW_AT_producer`)
 //!
-//!   * [`dwarf-validate`](http://github.com/gimli-rs/gimli/blob/master/examples/dwarf-validate.rs),
+//!   * [`dwarf-validate`](https://github.com/gimli-rs/gimli/blob/master/examples/dwarf-validate.rs),
 //!     a program to validate the integrity of some DWARF and its references
 //!     between sections and compilation units.
 //!
@@ -104,6 +104,10 @@
 //!   * [`DebugStrOffsets`](./struct.DebugStrOffsets.html): The `.debug_str_offsets` section.
 //!
 //!   * [`DebugTypes`](./struct.DebugTypes.html): The `.debug_types` section.
+//!
+//!   * [`DebugCuIndex`](./struct.DebugCuIndex.html): The `.debug_cu_index` section.
+//!
+//!   * [`DebugTuIndex`](./struct.DebugTuIndex.html): The `.debug_tu_index` section.
 //!
 //!   * [`EhFrame`](./struct.EhFrame.html): The `.eh_frame` section.
 //!
@@ -173,13 +177,18 @@ use std::{error, io};
 use crate::common::{Register, SectionId};
 use crate::constants;
 
+mod util;
+pub use util::*;
+
 mod addr;
 pub use self::addr::*;
 
 mod cfi;
 pub use self::cfi::*;
 
+#[cfg(feature = "read")]
 mod dwarf;
+#[cfg(feature = "read")]
 pub use self::dwarf::*;
 
 mod endian_slice;
@@ -193,13 +202,20 @@ pub use self::endian_reader::*;
 mod reader;
 pub use self::reader::*;
 
+#[cfg(feature = "read")]
 mod abbrev;
+#[cfg(feature = "read")]
 pub use self::abbrev::*;
 
 mod aranges;
 pub use self::aranges::*;
 
+mod index;
+pub use self::index::*;
+
+#[cfg(feature = "read")]
 mod line;
+#[cfg(feature = "read")]
 pub use self::line::*;
 
 mod lists;
@@ -207,15 +223,20 @@ mod lists;
 mod loclists;
 pub use self::loclists::*;
 
+#[cfg(feature = "read")]
 mod lookup;
 
 mod op;
 pub use self::op::*;
 
+#[cfg(feature = "read")]
 mod pubnames;
+#[cfg(feature = "read")]
 pub use self::pubnames::*;
 
+#[cfg(feature = "read")]
 mod pubtypes;
+#[cfg(feature = "read")]
 pub use self::pubtypes::*;
 
 mod rnglists;
@@ -224,11 +245,21 @@ pub use self::rnglists::*;
 mod str;
 pub use self::str::*;
 
+/// An offset into the current compilation or type unit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash)]
+pub struct UnitOffset<T = usize>(pub T);
+
+#[cfg(feature = "read")]
 mod unit;
+#[cfg(feature = "read")]
 pub use self::unit::*;
 
 mod value;
 pub use self::value::*;
+
+/// Indicates that storage should be allocated on heap.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StoreOnHeap;
 
 /// `EndianBuf` has been renamed to `EndianSlice`. For ease of upgrading across
 /// `gimli` versions, we export this type alias.
@@ -370,9 +401,9 @@ pub enum Error {
     UnsupportedRegister(u64),
     /// The CFI program defined more register rules than we have storage for.
     TooManyRegisterRules,
-    /// Attempted to push onto the CFI stack, but it was already at full
-    /// capacity.
-    CfiStackFull,
+    /// Attempted to push onto the CFI or evaluation stack, but it was already
+    /// at full capacity.
+    StackFull,
     /// The `.eh_frame_hdr` binary search table claims to be variable-length encoded,
     /// which makes binary search impossible.
     VariableLengthSearchTable,
@@ -392,6 +423,14 @@ pub enum Error {
     ExpectedStringAttributeValue,
     /// `DW_FORM_implicit_const` used in an invalid context.
     InvalidImplicitConst,
+    /// Invalid section count in `.dwp` index.
+    InvalidIndexSectionCount,
+    /// Invalid slot count in `.dwp` index.
+    InvalidIndexSlotCount,
+    /// Invalid hash row in `.dwp` index.
+    InvalidIndexRow,
+    /// Unknown section type in `.dwp` index.
+    UnknownIndexSection,
 }
 
 impl fmt::Display for Error {
@@ -518,7 +557,7 @@ impl Error {
             Error::TooManyRegisterRules => {
                 "The CFI program defined more register rules than we have storage for."
             }
-            Error::CfiStackFull => {
+            Error::StackFull => {
                 "Attempted to push onto the CFI stack, but it was already at full capacity."
             }
             Error::VariableLengthSearchTable => {
@@ -537,6 +576,10 @@ impl Error {
                 "Expected an attribute value to be a string form."
             }
             Error::InvalidImplicitConst => "DW_FORM_implicit_const used in an invalid context.",
+            Error::InvalidIndexSectionCount => "Invalid section count in `.dwp` index.",
+            Error::InvalidIndexSlotCount => "Invalid slot count in `.dwp` index.",
+            Error::InvalidIndexRow => "Invalid hash row in `.dwp` index.",
+            Error::UnknownIndexSection => "Unknown section type in `.dwp` index.",
         }
     }
 }
@@ -593,6 +636,18 @@ pub trait Section<R>: From<R> {
     fn reader(&self) -> &R
     where
         R: Reader;
+
+    /// Returns the subrange of the section that is the contribution of
+    /// a unit in a `.dwp` file.
+    fn dwp_range(&self, offset: u32, size: u32) -> Result<Self>
+    where
+        R: Reader,
+    {
+        let mut data = self.reader().clone();
+        data.skip(R::Offset::from_u32(offset))?;
+        data.truncate(R::Offset::from_u32(size))?;
+        Ok(data.into())
+    }
 
     /// Returns the `Reader` for this section.
     fn lookup_offset_id(&self, id: ReaderOffsetId) -> Option<(SectionId, R::Offset)>

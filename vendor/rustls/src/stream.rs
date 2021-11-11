@@ -1,48 +1,53 @@
-use crate::session::Session;
+use crate::conn::{ConnectionCommon, SideData};
+
 use std::io::{IoSlice, Read, Result, Write};
+use std::ops::{Deref, DerefMut};
 
 /// This type implements `io::Read` and `io::Write`, encapsulating
-/// a Session `S` and an underlying transport `T`, such as a socket.
+/// a Connection `C` and an underlying transport `T`, such as a socket.
 ///
-/// This allows you to use a rustls Session like a normal stream.
-pub struct Stream<'a, S: 'a + Session + ?Sized, T: 'a + Read + Write + ?Sized> {
-    /// Our session
-    pub sess: &'a mut S,
+/// This allows you to use a rustls Connection like a normal stream.
+#[derive(Debug)]
+pub struct Stream<'a, C: 'a + ?Sized, T: 'a + Read + Write + ?Sized> {
+    /// Our TLS connection
+    pub conn: &'a mut C,
 
     /// The underlying transport, like a socket
     pub sock: &'a mut T,
 }
 
-impl<'a, S, T> Stream<'a, S, T>
+impl<'a, C, T, S> Stream<'a, C, T>
 where
-    S: 'a + Session,
+    C: 'a + DerefMut + Deref<Target = ConnectionCommon<S>>,
     T: 'a + Read + Write,
+    S: SideData,
 {
-    /// Make a new Stream using the Session `sess` and socket-like object
+    /// Make a new Stream using the Connection `conn` and socket-like object
     /// `sock`.  This does not fail and does no IO.
-    pub fn new(sess: &'a mut S, sock: &'a mut T) -> Stream<'a, S, T> {
-        Stream { sess, sock }
+    pub fn new(conn: &'a mut C, sock: &'a mut T) -> Self {
+        Self { conn, sock }
     }
 
     /// If we're handshaking, complete all the IO for that.
     /// If we have data to write, write it all.
     fn complete_prior_io(&mut self) -> Result<()> {
-        if self.sess.is_handshaking() {
-            self.sess.complete_io(self.sock)?;
+        if self.conn.is_handshaking() {
+            self.conn.complete_io(self.sock)?;
         }
 
-        if self.sess.wants_write() {
-            self.sess.complete_io(self.sock)?;
+        if self.conn.wants_write() {
+            self.conn.complete_io(self.sock)?;
         }
 
         Ok(())
     }
 }
 
-impl<'a, S, T> Read for Stream<'a, S, T>
+impl<'a, C, T, S> Read for Stream<'a, C, T>
 where
-    S: 'a + Session,
+    C: 'a + DerefMut + Deref<Target = ConnectionCommon<S>>,
     T: 'a + Read + Write,
+    S: SideData,
 {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         self.complete_prior_io()?;
@@ -53,26 +58,37 @@ where
         // hit. Otherwise, we will prematurely signal EOF by returning 0. We
         // determine if EOF has actually been hit by checking if 0 bytes were
         // read from the underlying transport.
-        while self.sess.wants_read() && self.sess.complete_io(self.sock)?.0 != 0 {}
+        while self.conn.wants_read() {
+            let at_eof = self.conn.complete_io(self.sock)?.0 == 0;
+            if at_eof {
+                if let Ok(io_state) = self.conn.process_new_packets() {
+                    if at_eof && io_state.plaintext_bytes_to_read() == 0 {
+                        return Ok(0);
+                    }
+                }
+                break;
+            }
+        }
 
-        self.sess.read(buf)
+        self.conn.reader().read(buf)
     }
 }
 
-impl<'a, S, T> Write for Stream<'a, S, T>
+impl<'a, C, T, S> Write for Stream<'a, C, T>
 where
-    S: 'a + Session,
+    C: 'a + DerefMut + Deref<Target = ConnectionCommon<S>>,
     T: 'a + Read + Write,
+    S: SideData,
 {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         self.complete_prior_io()?;
 
-        let len = self.sess.write(buf)?;
+        let len = self.conn.writer().write(buf)?;
 
         // Try to write the underlying transport here, but don't let
         // any errors mask the fact we've consumed `len` bytes.
         // Callers will learn of permanent errors on the next call.
-        let _ = self.sess.complete_io(self.sock);
+        let _ = self.conn.complete_io(self.sock);
 
         Ok(len)
     }
@@ -80,12 +96,15 @@ where
     fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> Result<usize> {
         self.complete_prior_io()?;
 
-        let len = self.sess.write_vectored(bufs)?;
+        let len = self
+            .conn
+            .writer()
+            .write_vectored(bufs)?;
 
         // Try to write the underlying transport here, but don't let
         // any errors mask the fact we've consumed `len` bytes.
         // Callers will learn of permanent errors on the next call.
-        let _ = self.sess.complete_io(self.sock);
+        let _ = self.conn.complete_io(self.sock);
 
         Ok(len)
     }
@@ -93,39 +112,41 @@ where
     fn flush(&mut self) -> Result<()> {
         self.complete_prior_io()?;
 
-        self.sess.flush()?;
-        if self.sess.wants_write() {
-            self.sess.complete_io(self.sock)?;
+        self.conn.writer().flush()?;
+        if self.conn.wants_write() {
+            self.conn.complete_io(self.sock)?;
         }
         Ok(())
     }
 }
 
 /// This type implements `io::Read` and `io::Write`, encapsulating
-/// and owning a Session `S` and an underlying blocking transport
+/// and owning a Connection `C` and an underlying blocking transport
 /// `T`, such as a socket.
 ///
-/// This allows you to use a rustls Session like a normal stream.
-pub struct StreamOwned<S: Session + Sized, T: Read + Write + Sized> {
-    /// Our session
-    pub sess: S,
+/// This allows you to use a rustls Connection like a normal stream.
+#[derive(Debug)]
+pub struct StreamOwned<C: Sized, T: Read + Write + Sized> {
+    /// Our conneciton
+    pub conn: C,
 
     /// The underlying transport, like a socket
     pub sock: T,
 }
 
-impl<S, T> StreamOwned<S, T>
+impl<C, T, S> StreamOwned<C, T>
 where
-    S: Session,
+    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
     T: Read + Write,
+    S: SideData,
 {
-    /// Make a new StreamOwned taking the Session `sess` and socket-like
+    /// Make a new StreamOwned taking the Connection `conn` and socket-like
     /// object `sock`.  This does not fail and does no IO.
     ///
-    /// This is the same as `Stream::new` except `sess` and `sock` are
+    /// This is the same as `Stream::new` except `conn` and `sock` are
     /// moved into the StreamOwned.
-    pub fn new(sess: S, sock: T) -> StreamOwned<S, T> {
-        StreamOwned { sess, sock }
+    pub fn new(conn: C, sock: T) -> Self {
+        Self { conn, sock }
     }
 
     /// Get a reference to the underlying socket
@@ -139,33 +160,36 @@ where
     }
 }
 
-impl<'a, S, T> StreamOwned<S, T>
+impl<'a, C, T, S> StreamOwned<C, T>
 where
-    S: Session,
+    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
     T: Read + Write,
+    S: SideData,
 {
-    fn as_stream(&'a mut self) -> Stream<'a, S, T> {
+    fn as_stream(&'a mut self) -> Stream<'a, C, T> {
         Stream {
-            sess: &mut self.sess,
+            conn: &mut self.conn,
             sock: &mut self.sock,
         }
     }
 }
 
-impl<S, T> Read for StreamOwned<S, T>
+impl<C, T, S> Read for StreamOwned<C, T>
 where
-    S: Session,
+    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
     T: Read + Write,
+    S: SideData,
 {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         self.as_stream().read(buf)
     }
 }
 
-impl<S, T> Write for StreamOwned<S, T>
+impl<C, T, S> Write for StreamOwned<C, T>
 where
-    S: Session,
+    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
     T: Read + Write,
+    S: SideData,
 {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         self.as_stream().write(buf)
@@ -179,23 +203,22 @@ where
 #[cfg(test)]
 mod tests {
     use super::{Stream, StreamOwned};
-    use crate::client::ClientSession;
-    use crate::server::ServerSession;
-    use crate::session::Session;
+    use crate::client::ClientConnection;
+    use crate::server::ServerConnection;
     use std::net::TcpStream;
 
     #[test]
-    fn stream_can_be_created_for_session_and_tcpstream() {
-        type _Test<'a> = Stream<'a, dyn Session, TcpStream>;
+    fn stream_can_be_created_for_connection_and_tcpstream() {
+        type _Test<'a> = Stream<'a, ClientConnection, TcpStream>;
     }
 
     #[test]
     fn streamowned_can_be_created_for_client_and_tcpstream() {
-        type _Test = StreamOwned<ClientSession, TcpStream>;
+        type _Test = StreamOwned<ClientConnection, TcpStream>;
     }
 
     #[test]
     fn streamowned_can_be_created_for_server_and_tcpstream() {
-        type _Test = StreamOwned<ServerSession, TcpStream>;
+        type _Test = StreamOwned<ServerConnection, TcpStream>;
     }
 }

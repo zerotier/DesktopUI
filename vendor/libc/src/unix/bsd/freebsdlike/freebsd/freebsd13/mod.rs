@@ -4,6 +4,9 @@ pub type nlink_t = u64;
 pub type dev_t = u64;
 pub type ino_t = ::c_ulong;
 pub type shmatt_t = ::c_uint;
+pub type kpaddr_t = u64;
+pub type kssize_t = i64;
+pub type domainset_t = __c_anonymous_domainset;
 
 s! {
     pub struct shmid_ds {
@@ -36,6 +39,20 @@ s! {
         pub sc_egid: ::gid_t,
         pub sc_ngroups: ::c_int,
         pub sc_groups: [::gid_t; 1],
+    }
+
+    pub struct kvm_page {
+        pub kp_version: ::u_int,
+        pub kp_paddr: ::kpaddr_t,
+        pub kp_kmap_vaddr: ::kvaddr_t,
+        pub kp_dmap_vaddr: ::kvaddr_t,
+        pub kp_prot: ::vm_prot_t,
+        pub kp_offset: ::off_t,
+        pub kp_len: ::size_t,
+    }
+
+    pub struct __c_anonymous_domainset {
+        _priv: [::uintptr_t; 4],
     }
 }
 
@@ -201,32 +218,21 @@ cfg_if! {
     }
 }
 
-pub const F_ADD_SEALS: ::c_int = 19;
-pub const F_GET_SEALS: ::c_int = 20;
-pub const F_SEAL_SEAL: ::c_int = 0x0001;
-pub const F_SEAL_SHRINK: ::c_int = 0x0002;
-pub const F_SEAL_GROW: ::c_int = 0x0004;
-pub const F_SEAL_WRITE: ::c_int = 0x0008;
-
-pub const GRND_NONBLOCK: ::c_uint = 0x1;
-pub const GRND_RANDOM: ::c_uint = 0x2;
-
 pub const RAND_MAX: ::c_int = 0x7fff_ffff;
-
-pub const SO_DOMAIN: ::c_int = 0x1019;
-
-pub const EINTEGRITY: ::c_int = 97;
 pub const ELAST: ::c_int = 97;
-pub const GRND_INSECURE: ::c_uint = 0x4;
 
-pub const PROC_ASLR_CTL: ::c_int = 13;
-pub const PROC_ASLR_STATUS: ::c_int = 14;
-pub const PROC_PROTMAX_CTL: ::c_int = 15;
-pub const PROC_PROTMAX_STATUS: ::c_int = 16;
-pub const PROC_PROCCTL_MD_MIN: ::c_int = 0x10000000;
+pub const KF_TYPE_EVENTFD: ::c_int = 13;
 
-pub const LOCAL_CREDS_PERSISTENT: ::c_int = 3;
-pub const SCM_CREDS2: ::c_int = 0x08;
+/// max length of devicename
+pub const SPECNAMELEN: ::c_int = 255;
+pub const KI_NSPARE_PTR: usize = 5;
+
+/// domainset policies
+pub const DOMAINSET_POLICY_INVALID: ::c_int = 0;
+pub const DOMAINSET_POLICY_ROUNDROBIN: ::c_int = 1;
+pub const DOMAINSET_POLICY_FIRSTTOUCH: ::c_int = 2;
+pub const DOMAINSET_POLICY_PREFER: ::c_int = 3;
+pub const DOMAINSET_POLICY_INTERLEAVE: ::c_int = 4;
 
 f! {
     pub fn SOCKCRED2SIZE(ngrps: usize) -> usize {
@@ -259,6 +265,8 @@ extern "C" {
         rmtp: *mut ::timespec,
     ) -> ::c_int;
 
+    pub fn eventfd(init: ::c_uint, flags: ::c_int) -> ::c_int;
+
     pub fn fdatasync(fd: ::c_int) -> ::c_int;
 
     pub fn getrandom(buf: *mut ::c_void, buflen: ::size_t, flags: ::c_uint) -> ::ssize_t;
@@ -267,6 +275,37 @@ extern "C" {
     pub fn setproctitle_fast(fmt: *const ::c_char, ...);
     pub fn timingsafe_bcmp(a: *const ::c_void, b: *const ::c_void, len: ::size_t) -> ::c_int;
     pub fn timingsafe_memcmp(a: *const ::c_void, b: *const ::c_void, len: ::size_t) -> ::c_int;
+
+    pub fn cpuset_getdomain(
+        level: ::cpulevel_t,
+        which: ::cpuwhich_t,
+        id: ::id_t,
+        setsize: ::size_t,
+        mask: *mut ::domainset_t,
+        policy: *mut ::c_int,
+    ) -> ::c_int;
+    pub fn cpuset_setdomain(
+        level: ::cpulevel_t,
+        which: ::cpuwhich_t,
+        id: ::id_t,
+        setsize: ::size_t,
+        mask: *const ::domainset_t,
+        policy: ::c_int,
+    ) -> ::c_int;
+
+    pub fn copy_file_range(
+        infd: ::c_int,
+        inoffp: *mut ::off_t,
+        outfd: ::c_int,
+        outoffp: *mut ::off_t,
+        len: ::size_t,
+        flags: ::c_uint,
+    ) -> ::ssize_t;
+}
+
+#[link(name = "kvm")]
+extern "C" {
+    pub fn kvm_kerndisp(kd: *mut ::kvm_t) -> ::kssize_t;
 }
 
 cfg_if! {

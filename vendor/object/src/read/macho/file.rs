@@ -4,8 +4,8 @@ use core::{mem, str};
 
 use crate::read::{
     self, Architecture, ComdatKind, Error, Export, FileFlags, Import, NoDynamicRelocationIterator,
-    Object, ObjectComdat, ObjectMap, ObjectSection, ReadError, ReadRef, Result, SectionIndex,
-    SymbolIndex,
+    Object, ObjectComdat, ObjectKind, ObjectMap, ObjectSection, ReadError, ReadRef, Result,
+    SectionIndex, SymbolIndex,
 };
 use crate::{endian, macho, BigEndian, ByteString, Endian, Endianness, Pod};
 
@@ -142,6 +142,16 @@ where
         self.header.is_type_64()
     }
 
+    fn kind(&self) -> ObjectKind {
+        match self.header.filetype(self.endian) {
+            macho::MH_OBJECT => ObjectKind::Relocatable,
+            macho::MH_EXECUTE => ObjectKind::Executable,
+            macho::MH_CORE => ObjectKind::Core,
+            macho::MH_DYLIB => ObjectKind::Dynamic,
+            _ => ObjectKind::Unknown,
+        }
+    }
+
     fn segments(&'file self) -> MachOSegmentIterator<'data, 'file, Mach, R> {
         MachOSegmentIterator {
             file: self,
@@ -153,13 +163,13 @@ where
         }
     }
 
-    fn section_by_name(
+    fn section_by_name_bytes(
         &'file self,
-        section_name: &str,
+        section_name: &[u8],
     ) -> Option<MachOSection<'data, 'file, Mach, R>> {
         // Translate the "." prefix to the "__" prefix used by OSX/Mach-O, eg
         // ".debug_info" to "__debug_info", and limit to 16 bytes total.
-        let system_name = if section_name.starts_with('.') {
+        let system_name = if section_name.starts_with(b".") {
             if section_name.len() > 15 {
                 Some(&section_name[1..15])
             } else {
@@ -170,12 +180,12 @@ where
         };
         let cmp_section_name = |section: &MachOSection<'data, 'file, Mach, R>| {
             section
-                .name()
+                .name_bytes()
                 .map(|name| {
                     section_name == name
                         || system_name
                             .filter(|system_name| {
-                                name.starts_with("__") && name[2..] == **system_name
+                                name.starts_with(b"__") && name[2..] == **system_name
                             })
                             .is_some()
                 })
@@ -424,6 +434,11 @@ where
 
     #[inline]
     fn symbol(&self) -> SymbolIndex {
+        unreachable!();
+    }
+
+    #[inline]
+    fn name_bytes(&self) -> Result<&[u8]> {
         unreachable!();
     }
 

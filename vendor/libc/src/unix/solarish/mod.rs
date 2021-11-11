@@ -35,6 +35,7 @@ pub type socklen_t = ::c_uint;
 pub type sa_family_t = u16;
 pub type pthread_t = ::c_uint;
 pub type pthread_key_t = ::c_uint;
+pub type thread_t = ::c_uint;
 pub type blksize_t = ::c_int;
 pub type nl_item = ::c_int;
 pub type mqd_t = *mut ::c_void;
@@ -264,6 +265,13 @@ s! {
         pub f_flag: ::c_ulong,
         pub f_namemax: ::c_ulong,
         pub f_fstr: [::c_char; 32]
+    }
+
+    pub struct sendfilevec_t {
+        pub sfv_fd: ::c_int,
+        pub sfv_flag: ::c_uint,
+        pub sfv_off: ::off_t,
+        pub sfv_len: ::size_t,
     }
 
     pub struct sched_param {
@@ -2191,6 +2199,15 @@ pub const SCHED_IA: ::c_int = 4;
 pub const SCHED_FSS: ::c_int = 5;
 pub const SCHED_FX: ::c_int = 6;
 
+// sys/priv.h
+pub const PRIV_DEBUG: ::c_uint = 0x0001;
+pub const PRIV_AWARE: ::c_uint = 0x0002;
+pub const PRIV_AWARE_INHERIT: ::c_uint = 0x0004;
+pub const __PROC_PROTECT: ::c_uint = 0x0008;
+pub const NET_MAC_AWARE: ::c_uint = 0x0010;
+pub const NET_MAC_AWARE_INHERIT: ::c_uint = 0x0020;
+pub const PRIV_AWARE_RESET: ::c_uint = 0x0040;
+
 // As per sys/socket.h, header alignment must be 8 bytes on SPARC
 // and 4 bytes everywhere else:
 #[cfg(target_arch = "sparc64")]
@@ -2594,6 +2611,7 @@ extern "C" {
         buflen: ::size_t,
         result: *mut *mut ::group,
     ) -> ::c_int;
+    pub fn thr_self() -> ::thread_t;
     pub fn pthread_sigmask(how: ::c_int, set: *const sigset_t, oldset: *mut sigset_t) -> ::c_int;
     pub fn sem_open(name: *const ::c_char, oflag: ::c_int, ...) -> *mut sem_t;
     pub fn getgrnam(name: *const ::c_char) -> *mut ::group;
@@ -2758,6 +2776,18 @@ extern "C" {
 
     pub fn gethostid() -> ::c_long;
     pub fn sethostid(hostid: ::c_long) -> ::c_int;
+
+    pub fn getpflags(flags: ::c_uint) -> ::c_uint;
+    pub fn setpflags(flags: ::c_uint, value: ::c_uint) -> ::c_int;
+
+    pub fn sendfile(out_fd: ::c_int, in_fd: ::c_int, off: *mut ::off_t, len: ::size_t)
+        -> ::ssize_t;
+    pub fn sendfilev(
+        fildes: ::c_int,
+        vec: *const sendfilevec_t,
+        sfvcnt: ::c_int,
+        xferred: *mut ::size_t,
+    ) -> ::ssize_t;
 }
 
 mod compat;

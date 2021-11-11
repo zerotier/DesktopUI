@@ -35,6 +35,14 @@ pub type Elf64_Xword = u64;
 
 pub type iconv_t = *mut ::c_void;
 
+e! {
+    pub enum fae_action {
+        FAE_OPEN,
+        FAE_DUP2,
+        FAE_CLOSE,
+    }
+}
+
 cfg_if! {
     if #[cfg(target_pointer_width = "64")] {
         type Elf_Addr = Elf64_Addr;
@@ -497,6 +505,49 @@ s! {
         pub kve_vn_mode: u32,
         pub kve_path: [[::c_char; 32]; 32],
     }
+
+    pub struct __c_anonymous_posix_spawn_fae_open {
+        pub path: *mut ::c_char,
+        pub oflag: ::c_int,
+        pub mode: ::mode_t,
+    }
+
+    pub struct __c_anonymous_posix_spawn_fae_dup2 {
+        pub newfildes: ::c_int,
+    }
+
+    pub struct posix_spawnattr_t {
+        pub sa_flags: ::c_short,
+        pub sa_pgroup: ::pid_t,
+        pub sa_schedparam: sched_param,
+        pub sa_schedpolicy: ::c_int,
+        pub sa_sigdefault: sigset_t,
+        pub sa_sigmask: sigset_t,
+    }
+
+    pub struct posix_spawn_file_actions_entry_t {
+        pub fae_action: fae_action,
+        pub fae_fildes: ::c_int,
+        #[cfg(libc_union)]
+        pub fae_data: __c_anonymous_posix_spawn_fae,
+    }
+
+    pub struct posix_spawn_file_actions_t {
+        pub size: ::c_uint,
+        pub len: ::c_uint,
+        #[cfg(libc_union)]
+        pub fae: *mut posix_spawn_file_actions_entry_t,
+    }
+
+    pub struct ptrace_lwpinfo {
+        pub pl_lwpid: lwpid_t,
+        pub pl_event: ::c_int,
+    }
+
+    pub struct ptrace_siginfo {
+        pub psi_siginfo: siginfo_t,
+        pub psi_lwpid: lwpid_t,
+    }
 }
 
 s_no_extra_traits! {
@@ -608,6 +659,12 @@ s_no_extra_traits! {
         pub sigev_value: ::sigval,
         __unused1: *mut ::c_void,       //actually a function pointer
         pub sigev_notify_attributes: *mut ::c_void
+    }
+
+    #[cfg(libc_union)]
+    pub union __c_anonymous_posix_spawn_fae {
+        pub open: __c_anonymous_posix_spawn_fae_open,
+        pub dup2: __c_anonymous_posix_spawn_fae_dup2,
     }
 }
 
@@ -1036,6 +1093,41 @@ cfg_if! {
                 self.sigev_notify_attributes.hash(state);
             }
         }
+
+        #[cfg(libc_union)]
+        impl Eq for __c_anonymous_posix_spawn_fae {}
+
+        #[cfg(libc_union)]
+        impl PartialEq for __c_anonymous_posix_spawn_fae {
+            fn eq(&self, other: &__c_anonymous_posix_spawn_fae) -> bool {
+                unsafe {
+                    self.open == other.open
+                        || self.dup2 == other.dup2
+                }
+            }
+        }
+
+        #[cfg(libc_union)]
+        impl ::fmt::Debug for __c_anonymous_posix_spawn_fae {
+            fn fmt(&self, f: &mut ::fmt::Formatter) -> ::fmt::Result {
+                unsafe {
+                    f.debug_struct("__c_anonymous_posix_fae")
+                        .field("open", &self.open)
+                        .field("dup2", &self.dup2)
+                        .finish()
+                }
+            }
+        }
+
+        #[cfg(libc_union)]
+        impl ::hash::Hash for __c_anonymous_posix_spawn_fae {
+            fn hash<H: ::hash::Hasher>(&self, state: &mut H) {
+                unsafe {
+                    self.open.hash(state);
+                    self.dup2.hash(state);
+                }
+            }
+        }
     }
 }
 
@@ -1303,6 +1395,15 @@ pub const MAP_NORESERVE: ::c_int = 0x40;
 pub const MAP_HASSEMAPHORE: ::c_int = 0x200;
 pub const MAP_WIRED: ::c_int = 0x800;
 pub const MAP_STACK: ::c_int = 0x2000;
+// map alignment aliases for MAP_ALIGNED
+pub const MAP_ALIGNMENT_SHIFT: ::c_int = 24;
+pub const MAP_ALIGNMENT_MASK: ::c_int = 0xff << MAP_ALIGNMENT_SHIFT;
+pub const MAP_ALIGNMENT_64KB: ::c_int = 16 << MAP_ALIGNMENT_SHIFT;
+pub const MAP_ALIGNMENT_16MB: ::c_int = 24 << MAP_ALIGNMENT_SHIFT;
+pub const MAP_ALIGNMENT_4GB: ::c_int = 32 << MAP_ALIGNMENT_SHIFT;
+pub const MAP_ALIGNMENT_1TB: ::c_int = 40 << MAP_ALIGNMENT_SHIFT;
+pub const MAP_ALIGNMENT_256TB: ::c_int = 48 << MAP_ALIGNMENT_SHIFT;
+pub const MAP_ALIGNMENT_64PB: ::c_int = 56 << MAP_ALIGNMENT_SHIFT;
 // mremap flag
 pub const MAP_REMAPDUP: ::c_int = 0x004;
 
@@ -1516,6 +1617,10 @@ pub const TIME_ERROR: ::c_int = 5;
 pub const LITTLE_ENDIAN: ::c_int = 1234;
 pub const BIG_ENDIAN: ::c_int = 4321;
 
+pub const PL_EVENT_NONE: ::c_int = 0;
+pub const PL_EVENT_SIGNAL: ::c_int = 1;
+pub const PL_EVENT_SUSPENDED: ::c_int = 2;
+
 cfg_if! {
     if #[cfg(any(target_arch = "sparc", target_arch = "sparc64",
                  target_arch = "x86", target_arch = "x86_64"))] {
@@ -1613,6 +1718,13 @@ pub const NOTE_TRACKERR: u32 = 0x00000002;
 pub const NOTE_CHILD: u32 = 0x00000004;
 
 pub const TMP_MAX: ::c_uint = 308915776;
+
+pub const AI_PASSIVE: ::c_int = 0x00000001;
+pub const AI_CANONNAME: ::c_int = 0x00000002;
+pub const AI_NUMERICHOST: ::c_int = 0x00000004;
+pub const AI_NUMERICSERV: ::c_int = 0x00000008;
+pub const AI_ADDRCONFIG: ::c_int = 0x00000400;
+pub const AI_SRV: ::c_int = 0x00000800;
 
 pub const NI_MAXHOST: ::socklen_t = 1025;
 pub const NI_MAXSERV: ::socklen_t = 32;
@@ -1874,6 +1986,14 @@ pub const PT_SET_EVENT_MASK: ::c_int = 16;
 pub const PT_GET_EVENT_MASK: ::c_int = 17;
 pub const PT_GET_PROCESS_STATE: ::c_int = 18;
 pub const PT_FIRSTMACH: ::c_int = 32;
+
+pub const POSIX_SPAWN_RESETIDS: ::c_int = 0x01;
+pub const POSIX_SPAWN_SETPGROUP: ::c_int = 0x02;
+pub const POSIX_SPAWN_SETSCHEDPARAM: ::c_int = 0x04;
+pub const POSIX_SPAWN_SETSCHEDULER: ::c_int = 0x08;
+pub const POSIX_SPAWN_SETSIGDEF: ::c_int = 0x10;
+pub const POSIX_SPAWN_SETSIGMASK: ::c_int = 0x20;
+pub const POSIX_SPAWN_RETURNERROR: ::c_int = 0x40;
 
 // Flags for chflags(2)
 pub const SF_SNAPSHOT: ::c_ulong = 0x00200000;
@@ -2307,6 +2427,83 @@ extern "C" {
         ts: *const ::timespec,
         sigmask: *const ::sigset_t,
     ) -> ::c_int;
+
+    pub fn posix_spawn(
+        pid: *mut ::pid_t,
+        path: *const ::c_char,
+        file_actions: *const ::posix_spawn_file_actions_t,
+        attrp: *const ::posix_spawnattr_t,
+        argv: *const *mut ::c_char,
+        envp: *const *mut ::c_char,
+    ) -> ::c_int;
+    pub fn posix_spawnp(
+        pid: *mut ::pid_t,
+        file: *const ::c_char,
+        file_actions: *const ::posix_spawn_file_actions_t,
+        attrp: *const ::posix_spawnattr_t,
+        argv: *const *mut ::c_char,
+        envp: *const *mut ::c_char,
+    ) -> ::c_int;
+    pub fn posix_spawnattr_init(attr: *mut posix_spawnattr_t) -> ::c_int;
+    pub fn posix_spawnattr_destroy(attr: *mut posix_spawnattr_t) -> ::c_int;
+    pub fn posix_spawnattr_getsigdefault(
+        attr: *const posix_spawnattr_t,
+        default: *mut ::sigset_t,
+    ) -> ::c_int;
+    pub fn posix_spawnattr_setsigdefault(
+        attr: *mut posix_spawnattr_t,
+        default: *const ::sigset_t,
+    ) -> ::c_int;
+    pub fn posix_spawnattr_getsigmask(
+        attr: *const posix_spawnattr_t,
+        default: *mut ::sigset_t,
+    ) -> ::c_int;
+    pub fn posix_spawnattr_setsigmask(
+        attr: *mut posix_spawnattr_t,
+        default: *const ::sigset_t,
+    ) -> ::c_int;
+    pub fn posix_spawnattr_getflags(
+        attr: *const posix_spawnattr_t,
+        flags: *mut ::c_short,
+    ) -> ::c_int;
+    pub fn posix_spawnattr_setflags(attr: *mut posix_spawnattr_t, flags: ::c_short) -> ::c_int;
+    pub fn posix_spawnattr_getpgroup(
+        attr: *const posix_spawnattr_t,
+        flags: *mut ::pid_t,
+    ) -> ::c_int;
+    pub fn posix_spawnattr_setpgroup(attr: *mut posix_spawnattr_t, flags: ::pid_t) -> ::c_int;
+    pub fn posix_spawnattr_getschedpolicy(
+        attr: *const posix_spawnattr_t,
+        flags: *mut ::c_int,
+    ) -> ::c_int;
+    pub fn posix_spawnattr_setschedpolicy(attr: *mut posix_spawnattr_t, flags: ::c_int) -> ::c_int;
+    pub fn posix_spawnattr_getschedparam(
+        attr: *const posix_spawnattr_t,
+        param: *mut ::sched_param,
+    ) -> ::c_int;
+    pub fn posix_spawnattr_setschedparam(
+        attr: *mut posix_spawnattr_t,
+        param: *const ::sched_param,
+    ) -> ::c_int;
+
+    pub fn posix_spawn_file_actions_init(actions: *mut posix_spawn_file_actions_t) -> ::c_int;
+    pub fn posix_spawn_file_actions_destroy(actions: *mut posix_spawn_file_actions_t) -> ::c_int;
+    pub fn posix_spawn_file_actions_addopen(
+        actions: *mut posix_spawn_file_actions_t,
+        fd: ::c_int,
+        path: *const ::c_char,
+        oflag: ::c_int,
+        mode: ::mode_t,
+    ) -> ::c_int;
+    pub fn posix_spawn_file_actions_addclose(
+        actions: *mut posix_spawn_file_actions_t,
+        fd: ::c_int,
+    ) -> ::c_int;
+    pub fn posix_spawn_file_actions_adddup2(
+        actions: *mut posix_spawn_file_actions_t,
+        fd: ::c_int,
+        newfd: ::c_int,
+    ) -> ::c_int;
 }
 
 #[link(name = "util")]
@@ -2348,10 +2545,23 @@ extern "C" {
     pub fn emalloc(n: ::size_t) -> *mut ::c_void;
     pub fn ecalloc(n: ::size_t, c: ::size_t) -> *mut ::c_void;
     pub fn erealloc(p: *mut ::c_void, n: ::size_t) -> *mut ::c_void;
+    pub fn ereallocarr(p: *mut ::c_void, n: ::size_t, s: ::size_t);
     pub fn estrdup(s: *const ::c_char) -> *mut ::c_char;
     pub fn estrndup(s: *const ::c_char, len: ::size_t) -> *mut ::c_char;
     pub fn estrlcpy(dst: *mut ::c_char, src: *const ::c_char, len: ::size_t) -> ::size_t;
     pub fn estrlcat(dst: *mut ::c_char, src: *const ::c_char, len: ::size_t) -> ::size_t;
+    pub fn estrtoi(
+        nptr: *const ::c_char,
+        base: ::c_int,
+        lo: ::intmax_t,
+        hi: ::intmax_t,
+    ) -> ::intmax_t;
+    pub fn estrtou(
+        nptr: *const ::c_char,
+        base: ::c_int,
+        lo: ::uintmax_t,
+        hi: ::uintmax_t,
+    ) -> ::uintmax_t;
     pub fn easprintf(string: *mut *mut ::c_char, fmt: *const ::c_char, ...) -> ::c_int;
     pub fn evasprintf(string: *mut *mut ::c_char, fmt: *const ::c_char, ...) -> ::c_int;
     pub fn esetfunc(
@@ -2418,6 +2628,50 @@ extern "C" {
         status: ::c_int,
         tpe: ::c_int,
     );
+
+    pub fn getxattr(
+        path: *const ::c_char,
+        name: *const ::c_char,
+        value: *mut ::c_void,
+        size: ::size_t,
+    ) -> ::ssize_t;
+    pub fn lgetxattr(
+        path: *const ::c_char,
+        name: *const ::c_char,
+        value: *mut ::c_void,
+        size: ::size_t,
+    ) -> ::ssize_t;
+    pub fn fgetxattr(
+        filedes: ::c_int,
+        name: *const ::c_char,
+        value: *mut ::c_void,
+        size: ::size_t,
+    ) -> ::ssize_t;
+    pub fn setxattr(
+        path: *const ::c_char,
+        name: *const ::c_char,
+        value: *const ::c_void,
+        size: ::size_t,
+    ) -> ::c_int;
+    pub fn lsetxattr(
+        path: *const ::c_char,
+        name: *const ::c_char,
+        value: *const ::c_void,
+        size: ::size_t,
+    ) -> ::c_int;
+    pub fn fsetxattr(
+        filedes: ::c_int,
+        name: *const ::c_char,
+        value: *const ::c_void,
+        size: ::size_t,
+        flags: ::c_int,
+    ) -> ::c_int;
+    pub fn listxattr(path: *const ::c_char, list: *mut ::c_char, size: ::size_t) -> ::ssize_t;
+    pub fn llistxattr(path: *const ::c_char, list: *mut ::c_char, size: ::size_t) -> ::ssize_t;
+    pub fn flistxattr(filedes: ::c_int, list: *mut ::c_char, size: ::size_t) -> ::ssize_t;
+    pub fn removexattr(path: *const ::c_char, name: *const ::c_char) -> ::c_int;
+    pub fn lremovexattr(path: *const ::c_char, name: *const ::c_char) -> ::c_int;
+    pub fn fremovexattr(fd: ::c_int, path: *const ::c_char, name: *const ::c_char) -> ::c_int;
 
     pub fn string_to_flags(
         string_p: *mut *mut ::c_char,

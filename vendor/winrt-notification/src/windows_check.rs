@@ -1,37 +1,45 @@
-// Lifted from mattmccarty's work in os_info
-use std::mem::zeroed;
-use std::mem::size_of;
-use winapi::shared::ntdef::NTSTATUS;
-use winapi::shared::minwindef::DWORD;
-use winapi::shared::ntstatus::STATUS_SUCCESS;
+#[cfg(target_env = "msvc")]
+mod internal {
+    #[link(name = "ntdll")]
+    extern "system" {
+        pub fn RtlGetNtVersionNumbers(major: *mut u32, minor: *mut u32, build: *mut u32);
+    }
+}
 
-#[cfg(target_arch = "x86")]
-use winapi::um::winnt::OSVERSIONINFOEXA;
+// The gnu target doesn't have access to this method at build time without installing extra things
+// but we know it's in ntdll which will always be present at runtime.
+#[cfg(target_env = "gnu")]
+mod internal {
+    use windows::Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress};
 
-#[cfg(not(target_arch = "x86"))]
-use winapi::um::winnt::OSVERSIONINFOEXW;
+    #[allow(non_upper_case_globals)]
+    static mut CacheRtlGetNtVersionNumbers: Option<unsafe extern "system" fn() -> isize> = None;
 
-#[cfg(target_arch = "x86")]
-type OSVERSIONINFOEX = OSVERSIONINFOEXA;
+    #[allow(non_snake_case)]
+    pub unsafe fn RtlGetNtVersionNumbers(major: *mut u32, minor: *mut u32, build: *mut u32) {
+        if CacheRtlGetNtVersionNumbers.is_none() {
+            CacheRtlGetNtVersionNumbers = GetProcAddress(GetModuleHandleA("ntdll.dll"), "RtlGetNtVersionNumbers");
+        }
 
-#[cfg(not(target_arch = "x86"))]
-type OSVERSIONINFOEX = OSVERSIONINFOEXW;
-
-#[cfg_attr(target_env = "gnu", link(name = "winapi_ntdll"))]
-#[cfg_attr(target_env = "msvc", link(name = "ntdll"))]
-extern "system" {
-    pub fn RtlGetVersion(lpVersionInformation: &mut OSVERSIONINFOEX) -> NTSTATUS;
+        if let Some(RtlGetNtVersionNumbers_FUNCTION) = CacheRtlGetNtVersionNumbers {
+            std::intrinsics::transmute::<_, extern "system" fn(*mut u32, *mut u32, *mut u32)>(RtlGetNtVersionNumbers_FUNCTION)(
+                major, minor, build,
+            )
+        } else {
+            // RtlGetNtVersionNumbers goes as far back as xp.
+            // Assume something else has gone wrong and guess we are newer than windows 8.1
+            *major = 7;
+        }
+    }
 }
 
 pub fn is_newer_than_windows81() -> bool {
-    unsafe {
-        let mut info: OSVERSIONINFOEX = { zeroed() };
-        info.dwOSVersionInfoSize = size_of::<OSVERSIONINFOEX>() as DWORD;
+    let mut major = 0u32;
+    let mut minor = 0u32;
+    let mut build = 0u32;
 
-        if RtlGetVersion(&mut info) == STATUS_SUCCESS {
-            info.dwMajorVersion > 6
-        } else {
-            false
-        }
+    unsafe {
+        internal::RtlGetNtVersionNumbers(&mut major, &mut minor, &mut build);
     }
+    major > 6
 }

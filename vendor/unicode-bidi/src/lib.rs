@@ -66,7 +66,7 @@
 
 #![no_std]
 // We need to link to std to make doc tests work on older Rust versions
-#![cfg(feature = "std")]
+#[cfg(feature = "std")]
 extern crate std;
 #[macro_use]
 extern crate alloc;

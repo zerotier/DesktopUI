@@ -1186,6 +1186,14 @@ pub const NOTE_CHILD: u32 = 0x00000004;
 
 pub const TMP_MAX: ::c_uint = 0x7fffffff;
 
+pub const AI_PASSIVE: ::c_int = 1;
+pub const AI_CANONNAME: ::c_int = 2;
+pub const AI_NUMERICHOST: ::c_int = 4;
+pub const AI_EXT: ::c_int = 8;
+pub const AI_NUMERICSERV: ::c_int = 16;
+pub const AI_FQDN: ::c_int = 32;
+pub const AI_ADDRCONFIG: ::c_int = 64;
+
 pub const NI_NUMERICHOST: ::c_int = 1;
 pub const NI_NUMERICSERV: ::c_int = 2;
 pub const NI_NOFQDN: ::c_int = 4;
@@ -1527,6 +1535,8 @@ extern "C" {
         servlen: ::size_t,
         flags: ::c_int,
     ) -> ::c_int;
+    pub fn getresgid(rgid: *mut ::gid_t, egid: *mut ::gid_t, sgid: *mut ::gid_t) -> ::c_int;
+    pub fn getresuid(ruid: *mut ::uid_t, euid: *mut ::uid_t, suid: *mut ::uid_t) -> ::c_int;
     pub fn kevent(
         kq: ::c_int,
         changelist: *const ::kevent,
@@ -1536,6 +1546,7 @@ extern "C" {
         timeout: *const ::timespec,
     ) -> ::c_int;
     pub fn mprotect(addr: *mut ::c_void, len: ::size_t, prot: ::c_int) -> ::c_int;
+    pub fn getthrid() -> ::pid_t;
     pub fn pthread_attr_getguardsize(
         attr: *const ::pthread_attr_t,
         guardsize: *mut ::size_t,

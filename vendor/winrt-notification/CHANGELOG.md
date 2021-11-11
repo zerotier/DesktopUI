@@ -1,6 +1,19 @@
 # Changelog
 
-## 0.2.4
+## 0.5.0
+ - Updated dependencies
+ - Added support for gnu targets without msys
+
+## 0.4.0
+ - Updated dependencies
+
+## 0.3.1
+ - Allow the crate build with the gnu toolchain with msys [#4][i4]
+
+## 0.3.0
+ - Switched to the windows-rs crate, dropped winapi and winrt crate.
+
+ ## 0.2.4
  - Made most enums Copy/Clonable.
 
 ## 0.2.3

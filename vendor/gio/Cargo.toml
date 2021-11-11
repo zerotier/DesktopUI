@@ -12,7 +12,7 @@
 [package]
 edition = "2018"
 name = "gio"
-version = "0.14.6"
+version = "0.14.8"
 authors = ["The gtk-rs Project Developers"]
 build = "build.rs"
 exclude = ["gir-files/*"]
