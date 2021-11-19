@@ -72,13 +72,15 @@ window.zt_ui_update = (update) => {};
 window.zt_ui_render = (ui_mode) => {
     if (ui_mode === "Main") {
         ReactDOM.render((<div style={{width: '100%', height: '100%'}}><Main/></div>), document.getElementById("_app_root"));
-        setInterval(function() {
+        function poll() {
             window.rpc.call('poll').then((result) => {
                 if (result) {
                     window.zt_ui_update(JSON.parse(result));
                 }
             });
-        }, 200);
+        }
+        poll()
+        setInterval(poll, 200);
     } else if (ui_mode === "About") {
         ReactDOM.render((<div style={{width: '100%', height: '100%'}}><About/></div>), document.getElementById("_app_root"));
     }
