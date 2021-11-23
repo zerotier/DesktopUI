@@ -284,6 +284,16 @@ fn get_web_ui_blob(dark: bool) -> String {
     include_str!("../ui/dist/index.html").replace(CSS_PLACEHOLDER, css)
 }
 
+fn write_web_ui_blob() {
+    let ui_str = get_web_ui_blob(is_dark_mode());
+    let ui = ui_str.as_bytes();
+    let ui_path = std::env::temp_dir().join(WEB_UI_BLOB_PATH);
+    let ui_md = std::fs::metadata(&ui_path);
+    if ui_md.map_or(true, |ui_md| !ui_md.is_file() || ui_md.len() != (ui.len() as u64)) {
+        std::fs::write(ui_path, ui).expect("unable to write web UI HTML");
+    }
+}
+
 /*******************************************************************************************************************/
 
 /// Start the service client background thread, returning the client and a flag set when the data changes.
@@ -470,9 +480,11 @@ fn control_panel_window_main(args: &Vec<String>) {
      */
 
     set_thread_to_foreground_priority();
+    write_web_ui_blob();
 
     let (client, dirty_flag) = start_client(vec!["status", "network", "peer"], 100, 5);
     let raise_window = create_raise_window_listener_thread();
+    raise_window.store(true, std::sync::atomic::Ordering::Relaxed);
 
     let mut event_loop = wry::application::event_loop::EventLoop::new();
     #[cfg(target_os = "macos")] {
@@ -483,7 +495,7 @@ fn control_panel_window_main(args: &Vec<String>) {
         .with_title("ZeroTier Control Panel")
         .with_inner_size(wry::application::dpi::LogicalSize::new(i32::from_str_radix(args[3].as_str(), 10).unwrap_or(1024), i32::from_str_radix(args[4].as_str(), 10).unwrap_or(768)))
         .with_resizable(true)
-        .with_visible(true)
+        .with_visible(false)
         .build(&event_loop)
         .unwrap();
 
@@ -1231,7 +1243,7 @@ fn main() {
             _ => println!("FATAL: unrecognized mode: {}", args[1])
         }
     } else {
-        std::fs::write(std::env::temp_dir().join(WEB_UI_BLOB_PATH), get_web_ui_blob(is_dark_mode())).expect("unable to write web UI HTML");
+        write_web_ui_blob();
         tray_main();
     }
     std::process::exit(0);

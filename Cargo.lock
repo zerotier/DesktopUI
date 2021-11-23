@@ -2500,7 +2500,7 @@ dependencies = [
 
 [[package]]
 name = "zerotier_desktop_ui"
-version = "1.8.2"
+version = "1.8.4"
 dependencies = [
  "chrono",
  "crc64",
