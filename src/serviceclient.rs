@@ -7,6 +7,7 @@
  */
 
 use std::cell::Cell;
+use std::cmp;
 use std::collections::{HashMap, LinkedList};
 use std::ffi::CString;
 use std::io::Write;
@@ -16,6 +17,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime};
 
 use serde_json::{Map, Value};
+
 
 const QUERY_TIMEOUT_MS: u64 = 2000;
 
@@ -291,20 +293,18 @@ impl ServiceClient {
     }
     */
 
-    pub fn sso_auth_needed_networks(&self, reauth_ms_before_timeout: i64) -> Vec<(String, String, String)> {
+    pub fn sso_auth_needed_networks(&self) -> Vec<(String, String, String)> {
         let mut nw: Vec<(String, String, String)> = Vec::new();
-        let now = ms_since_epoch();
         self.with(&["network"], |nws| {
             let _ = nws.as_array().map(|a| a.iter().for_each(|network| {
                 let _ = network.as_object().map(|network| {
                     let id = network.get("id").map_or("", |id| id.as_str().unwrap_or(""));
                     let sso_enabled = network.get("ssoEnabled").map_or(false, |sso_enabled| sso_enabled.as_bool().unwrap_or(false));
-                    let auth_expiry_time = network.get("authenticationExpiryTime").map_or(-1, |auth_expiry_time| auth_expiry_time.as_i64().unwrap_or(-1));
                     let auth_url = network.get("authenticationURL").map_or("", |auth_url| auth_url.as_str().unwrap_or(""));
                     let status = network.get("status").map_or("", |status| status.as_str().unwrap_or(""));
                     if sso_enabled && !auth_url.is_empty() {
-                        let remaining = auth_expiry_time - now;
-                        if status == "AUTHENTICATION_REQUIRED" || remaining <= reauth_ms_before_timeout {
+                        if status == "AUTHENTICATION_REQUIRED" {
+                            println!("Auth Required for {}", id);
                             nw.push((id.into(), auth_url.into(), status.into()));
                         }
                     }

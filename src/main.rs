@@ -366,7 +366,11 @@ fn create_raise_window_listener_thread() -> Arc<AtomicBool> {
 
 /// Opens SSO authentication window, which in turn runs sso_auth_window_main().
 fn open_sso_auth_window_subprocess(w: &mut Option<Child>, width: i32, height: i32, param: &[&str]) {
-    did_process_exit(w);
+    if did_process_exit(w) {
+        println!("did_process_exit: true");
+    } else {
+        println!("did_process_exit: false");
+    }
     if w.is_none() {
         let ch = Command::new(std::env::current_exe().unwrap()).arg("auth").arg(width.to_string()).arg(height.to_string()).args(param).stdin(Stdio::piped()).spawn();
         if ch.is_ok() {
@@ -375,41 +379,9 @@ fn open_sso_auth_window_subprocess(w: &mut Option<Child>, width: i32, height: i3
     }
 }
 
-// TEMPORARY HACK: the new 'wry' web view steals focus on Mac, and there seems to be no way to fix that.
-// Until we have full flow SSO, use old web_view to pop up SSO windows on Mac since we hacked that to
-// not steal focus.
-#[cfg(target_os = "macos")]
-fn sso_auth_window_main(args: &Vec<String>) {
-    let raise_window = create_raise_window_listener_thread();
-    let title = format!("Remote Network Login: {}", args[4].as_str());
-    let mut wv = web_view::builder()
-        .title(title.as_str())
-        .content(web_view::Content::Url(args[5].as_str()))
-        .size(i32::from_str_radix(args[2].as_str(), 10).unwrap_or(1024), i32::from_str_radix(args[3].as_str(), 10).unwrap_or(768))
-        .visible(false)
-        .frameless(false)
-        .hide_instead_of_close(false)
-        .debug(false)
-        .user_data(())
-        .invoke_handler(move |_, _| Ok(()))
-        .build()
-        .unwrap();
-    loop {
-        if wv.step().is_none() {
-            break;
-        }
-        if raise_window.load(std::sync::atomic::Ordering::Relaxed) {
-            wv.set_visible(true);
-        }
-    }
-}
-
 /// Main function for SSO authentication webview popup windows.
-#[cfg(not(target_os = "macos"))]
 #[allow(unused_mut)]
 fn sso_auth_window_main(args: &Vec<String>) {
-    let raise_window = create_raise_window_listener_thread();
-    set_thread_to_background_priority();
     let mut event_loop = wry::application::event_loop::EventLoop::new();
     let window = wry::application::window::WindowBuilder::new()
         .with_visible(false)
@@ -428,16 +400,19 @@ fn sso_auth_window_main(args: &Vec<String>) {
         .with_web_context(&mut web_context)
         .with_url(args[5].as_str()).unwrap()
         .build().unwrap();
+    webview.window().set_visible(true);
+    webview.window().set_focus();
+    set_thread_to_foreground_priority();
+
     event_loop.run(move |event, _, control_flow| {
         *control_flow = wry::application::event_loop::ControlFlow::WaitUntil(Instant::now() + Duration::from_secs(1));
         match event {
-            wry::application::event::Event::WindowEvent {event: wry::application::event::WindowEvent::CloseRequested, ..} => *control_flow = wry::application::event_loop::ControlFlow::Exit,
-            _ => {}
-        }
-        if raise_window.load(std::sync::atomic::Ordering::Relaxed) {
-            set_thread_to_foreground_priority();
-            webview.window().set_visible(true);
-            webview.window().set_focus();
+            wry::application::event::Event::WindowEvent {event: wry::application::event::WindowEvent::CloseRequested, ..} => {
+                println!("Close requested");
+                *control_flow = wry::application::event_loop::ControlFlow::Exit
+            },
+            _ => {
+            }
         }
     });
 }
@@ -1037,10 +1012,11 @@ fn tray_main() {
         let about_window = about_window2;
 
         loop {
+            println!("sso thread tick");
             std::thread::sleep(Duration::from_secs(5));
 
             let mut auth_windows = auth_windows.lock();
-            let auth_needed_networks = client.lock().sso_auth_needed_networks(20000);
+            let auth_needed_networks = client.lock().sso_auth_needed_networks();
 
             for network in auth_needed_networks.iter() { // network is a tuple of (ID, URL, remaining ms)
                 let nwid = &(*network).0;
@@ -1122,6 +1098,7 @@ fn tray_main() {
 }
 
 fn main() {
+    println!("hello");
     #[cfg(target_os = "macos")] {
         let p = std::env::current_exe().unwrap();
         for pp in p.ancestors() {
