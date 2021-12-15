@@ -408,7 +408,6 @@ fn sso_auth_window_main(args: &Vec<String>) {
         *control_flow = wry::application::event_loop::ControlFlow::WaitUntil(Instant::now() + Duration::from_secs(1));
         match event {
             wry::application::event::Event::WindowEvent {event: wry::application::event::WindowEvent::CloseRequested, ..} => {
-                println!("Close requested");
                 *control_flow = wry::application::event_loop::ControlFlow::Exit
             },
             _ => {
@@ -1012,7 +1011,6 @@ fn tray_main() {
         let about_window = about_window2;
 
         loop {
-            println!("sso thread tick");
             std::thread::sleep(Duration::from_secs(5));
 
             let mut auth_windows = auth_windows.lock();
@@ -1098,7 +1096,6 @@ fn tray_main() {
 }
 
 fn main() {
-    println!("hello");
     #[cfg(target_os = "macos")] {
         let p = std::env::current_exe().unwrap();
         for pp in p.ancestors() {
