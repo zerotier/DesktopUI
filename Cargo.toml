@@ -3,6 +3,8 @@ name = "zerotier_desktop_ui"
 version = "1.8.4"
 authors = ["Adam Ierymenko <adam.ierymenko@zerotier.com>"]
 edition = "2018"
+license = "MPL 2.0"
+description = "UI for ZeroTier One, a comprehensive SD-WAN solution"
 
 [profile.release]
 opt-level = 'z'
@@ -32,3 +34,9 @@ web-view = { path = "web-view", features = [] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "^0"
+
+[package.metadata.deb]
+copyright = "ZeroTier, Inc"
+
+[package.metadata.generate-rpm]
+assets = [ { source = "target/release/zerotier_desktop_ui", dest = "/usr/bin/zerotier_desktop_ui", mode = "755" } ]
