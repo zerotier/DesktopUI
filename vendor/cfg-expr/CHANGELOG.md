@@ -6,17 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- next-header -->
 ## [Unreleased] - ReleaseDate
-## [0.9.0] - 2021-08-31
-### Changed
-- [PR#35](https://github.com/EmbarkStudios/cfg-expr/pull/35) changed `TargetInfo`, `Os`, `Arch`, `Env`, and `Vendor` to use a `Cow<'static, str>` to avoid the need for lifetime parameters for the common case of statically known target information, but still support arbitrary/future variants. Thanks [@sunshowers](https://github.com/sunshowers)!
-- [PR#38](https://github.com/EmbarkStudios/cfg-expr/pull/38) updated the built-in target list to `1.54.0`, which notably includes the addition of the new `wasm` variant to `target_family`. Thanks [@sunshowers](https://github.com/sunshowers)!
-
-### Fixed
-- [PR#33](https://github.com/EmbarkStudios/cfg-expr/pull/33) added clippy.toml with an `msrv` so clippy lints are consistent across environments. Thanks [@remilauzier](https://github.com/remilauzier)!
-
 ## [0.8.1] - 2021-08-05
 ### Changed
-- [PR#31](https://github.com/EmbarkStudios/cfg-expr/pull/31) reverted the usage of "or patterns" that were only added in 1.53.0. We now state the MSRV as 1.52.0. Thanks [@cgwalters](https://github.com/cgwalters)!
+- [PR#31](https://blog.rust-lang.org/2021/05/06/Rust-1.52.0.html) reverted the usage of "or patterns" that were only added in 1.53.0. We now state the MSRV as 1.52.0. Thanks [@cgwalters](https://github.com/cgwalters)!
 
 ## [0.8.0] - 2021-07-16
 ### Changed
@@ -30,7 +22,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.3] - 2021-03-16
 ### Added
 - [PR#25](https://github.com/EmbarkStudios/cfg-expr/pull/25) added `Clone` for `Expression`. Thanks [@gdesmott](https://github.com/gdesmott)!
-
 ## [0.7.2] - 2021-03-16
 ### Added
 - [PR#23](https://github.com/EmbarkStudios/cfg-expr/pull/23) added a `PartialEq` implementation for `Expression`, primarily for cases where an `Expression` is stored in a type that itself requires `PartialEq`. This is only a simple syntactical equality check. Thanks [@gdesmott](https://github.com/gdesmott)!
@@ -67,7 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [PR#9](https://github.com/EmbarkStudios/cfg-expr/pull/9) added the optional `targets` feature, which allows matching the various `target_` predicates against a [`target_lexicon::Triple`](https://docs.rs/target-lexicon/0.11.0/target_lexicon/struct.Triple.html).
 
 ### Changed
-- [PR#9](https://github.com/EmbarkStudios/cfg-expr/pull/9) changed the `Arch`, `Vendor`, `Os`, and `Env` types to not be longer enums, and are instead thin wrappers around strings. This allows for custom targets where one or more components of the target triple are not built-in to rustc. Resolved [#8](https://github.com/EmbarkStudios/cfg-expr/issues/8).
+- [PR#9](https://github.com/EmbarkStudios/cfg-expr/pull/9) changed the `Arch`, `Vendor`, `Os`, and `Env` types to no be longer enums, and are instead thin wrappers around strings. This allows for custom targets where one or more components of the target triple are not built-in to rustc. Resolved [#8](https://github.com/EmbarkStudios/cfg-expr/issues/8).
 - Changed `ParseError` to remove the lifetime and just keep an owned string of the expression that failed to parse.
 - Updated the list of built-in rustc targets to 1.43.1.
 
@@ -81,7 +72,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.0] - 2020-02-05
 ### Added
-- Added `targets::rustc_version` which can be used to retrieve the version string of the rustc used to generate the list of targets.
+- Added `targets::rustc_version` which can be used to retrieve the version string of the the rustc used to generate the list of targets.
 
 ### Changed
 - `targets::ALL` now uses the built-in targets for rustc 1.41.0
@@ -91,8 +82,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial add of all the things
 
 <!-- next-url -->
-[Unreleased]: https://github.com/EmbarkStudios/cfg-expr/compare/0.9.0...HEAD
-[0.9.0]: https://github.com/EmbarkStudios/cfg-expr/compare/0.8.1...0.9.0
+[Unreleased]: https://github.com/EmbarkStudios/cfg-expr/compare/0.8.1...HEAD
 [0.8.1]: https://github.com/EmbarkStudios/cfg-expr/compare/0.8.0...0.8.1
 [0.8.0]: https://github.com/EmbarkStudios/cfg-expr/compare/0.7.4...0.8.0
 [0.7.4]: https://github.com/EmbarkStudios/cfg-expr/compare/0.7.3...0.7.4

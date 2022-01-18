@@ -10,11 +10,11 @@
 
 use super::*;
 
-pub(crate) const RUSTC_VERSION: &str = "1.54.0";
+pub(crate) const RUSTC_VERSION: &str = "1.53.0";
 
-pub const ALL_BUILTINS: &[TargetInfo] = &[
+pub const ALL_BUILTINS: &[TargetInfo<'static>] = &[
     TargetInfo {
-        triple: Triple::new_const("aarch64-apple-darwin"),
+        triple: "aarch64-apple-darwin",
         os: Some(Os::macos),
         arch: Arch::aarch64,
         env: None,
@@ -24,7 +24,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("aarch64-apple-ios"),
+        triple: "aarch64-apple-ios",
         os: Some(Os::ios),
         arch: Arch::aarch64,
         env: None,
@@ -34,7 +34,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("aarch64-apple-ios-macabi"),
+        triple: "aarch64-apple-ios-macabi",
         os: Some(Os::ios),
         arch: Arch::aarch64,
         env: None,
@@ -44,7 +44,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("aarch64-apple-ios-sim"),
+        triple: "aarch64-apple-ios-sim",
         os: Some(Os::ios),
         arch: Arch::aarch64,
         env: None,
@@ -54,7 +54,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("aarch64-apple-tvos"),
+        triple: "aarch64-apple-tvos",
         os: Some(Os::tvos),
         arch: Arch::aarch64,
         env: None,
@@ -64,7 +64,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("aarch64-fuchsia"),
+        triple: "aarch64-fuchsia",
         os: Some(Os::fuchsia),
         arch: Arch::aarch64,
         env: None,
@@ -74,7 +74,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("aarch64-linux-android"),
+        triple: "aarch64-linux-android",
         os: Some(Os::android),
         arch: Arch::aarch64,
         env: Some(Env::gnu),
@@ -84,7 +84,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("aarch64-pc-windows-msvc"),
+        triple: "aarch64-pc-windows-msvc",
         os: Some(Os::windows),
         arch: Arch::aarch64,
         env: Some(Env::msvc),
@@ -94,7 +94,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("aarch64-unknown-freebsd"),
+        triple: "aarch64-unknown-freebsd",
         os: Some(Os::freebsd),
         arch: Arch::aarch64,
         env: None,
@@ -104,7 +104,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("aarch64-unknown-hermit"),
+        triple: "aarch64-unknown-hermit",
         os: Some(Os::hermit),
         arch: Arch::aarch64,
         env: None,
@@ -114,7 +114,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("aarch64-unknown-linux-gnu"),
+        triple: "aarch64-unknown-linux-gnu",
         os: Some(Os::linux),
         arch: Arch::aarch64,
         env: Some(Env::gnu),
@@ -124,7 +124,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("aarch64-unknown-linux-gnu_ilp32"),
+        triple: "aarch64-unknown-linux-gnu_ilp32",
         os: Some(Os::linux),
         arch: Arch::aarch64,
         env: Some(Env::gnu),
@@ -134,7 +134,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("aarch64-unknown-linux-musl"),
+        triple: "aarch64-unknown-linux-musl",
         os: Some(Os::linux),
         arch: Arch::aarch64,
         env: Some(Env::musl),
@@ -144,7 +144,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("aarch64-unknown-netbsd"),
+        triple: "aarch64-unknown-netbsd",
         os: Some(Os::netbsd),
         arch: Arch::aarch64,
         env: None,
@@ -154,7 +154,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("aarch64-unknown-none"),
+        triple: "aarch64-unknown-none",
         os: None,
         arch: Arch::aarch64,
         env: None,
@@ -164,7 +164,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("aarch64-unknown-none-softfloat"),
+        triple: "aarch64-unknown-none-softfloat",
         os: None,
         arch: Arch::aarch64,
         env: None,
@@ -174,7 +174,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("aarch64-unknown-openbsd"),
+        triple: "aarch64-unknown-openbsd",
         os: Some(Os::openbsd),
         arch: Arch::aarch64,
         env: None,
@@ -184,7 +184,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("aarch64-unknown-redox"),
+        triple: "aarch64-unknown-redox",
         os: Some(Os::redox),
         arch: Arch::aarch64,
         env: Some(Env::relibc),
@@ -194,7 +194,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("aarch64-uwp-windows-msvc"),
+        triple: "aarch64-uwp-windows-msvc",
         os: Some(Os::windows),
         arch: Arch::aarch64,
         env: Some(Env::msvc),
@@ -204,7 +204,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("aarch64-wrs-vxworks"),
+        triple: "aarch64-wrs-vxworks",
         os: Some(Os::vxworks),
         arch: Arch::aarch64,
         env: Some(Env::gnu),
@@ -214,7 +214,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("aarch64_be-unknown-linux-gnu"),
+        triple: "aarch64_be-unknown-linux-gnu",
         os: Some(Os::linux),
         arch: Arch::aarch64,
         env: Some(Env::gnu),
@@ -224,7 +224,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::big,
     },
     TargetInfo {
-        triple: Triple::new_const("aarch64_be-unknown-linux-gnu_ilp32"),
+        triple: "aarch64_be-unknown-linux-gnu_ilp32",
         os: Some(Os::linux),
         arch: Arch::aarch64,
         env: Some(Env::gnu),
@@ -234,7 +234,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::big,
     },
     TargetInfo {
-        triple: Triple::new_const("arm-linux-androideabi"),
+        triple: "arm-linux-androideabi",
         os: Some(Os::android),
         arch: Arch::arm,
         env: Some(Env::gnu),
@@ -244,7 +244,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("arm-unknown-linux-gnueabi"),
+        triple: "arm-unknown-linux-gnueabi",
         os: Some(Os::linux),
         arch: Arch::arm,
         env: Some(Env::gnu),
@@ -254,7 +254,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("arm-unknown-linux-gnueabihf"),
+        triple: "arm-unknown-linux-gnueabihf",
         os: Some(Os::linux),
         arch: Arch::arm,
         env: Some(Env::gnu),
@@ -264,7 +264,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("arm-unknown-linux-musleabi"),
+        triple: "arm-unknown-linux-musleabi",
         os: Some(Os::linux),
         arch: Arch::arm,
         env: Some(Env::musl),
@@ -274,7 +274,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("arm-unknown-linux-musleabihf"),
+        triple: "arm-unknown-linux-musleabihf",
         os: Some(Os::linux),
         arch: Arch::arm,
         env: Some(Env::musl),
@@ -284,7 +284,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("armebv7r-none-eabi"),
+        triple: "armebv7r-none-eabi",
         os: None,
         arch: Arch::arm,
         env: None,
@@ -294,7 +294,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::big,
     },
     TargetInfo {
-        triple: Triple::new_const("armebv7r-none-eabihf"),
+        triple: "armebv7r-none-eabihf",
         os: None,
         arch: Arch::arm,
         env: None,
@@ -304,7 +304,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::big,
     },
     TargetInfo {
-        triple: Triple::new_const("armv4t-unknown-linux-gnueabi"),
+        triple: "armv4t-unknown-linux-gnueabi",
         os: Some(Os::linux),
         arch: Arch::arm,
         env: Some(Env::gnu),
@@ -314,7 +314,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("armv5te-unknown-linux-gnueabi"),
+        triple: "armv5te-unknown-linux-gnueabi",
         os: Some(Os::linux),
         arch: Arch::arm,
         env: Some(Env::gnu),
@@ -324,7 +324,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("armv5te-unknown-linux-musleabi"),
+        triple: "armv5te-unknown-linux-musleabi",
         os: Some(Os::linux),
         arch: Arch::arm,
         env: Some(Env::musl),
@@ -334,7 +334,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("armv5te-unknown-linux-uclibceabi"),
+        triple: "armv5te-unknown-linux-uclibceabi",
         os: Some(Os::linux),
         arch: Arch::arm,
         env: Some(Env::uclibc),
@@ -344,7 +344,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("armv6-unknown-freebsd"),
+        triple: "armv6-unknown-freebsd",
         os: Some(Os::freebsd),
         arch: Arch::arm,
         env: Some(Env::gnueabihf),
@@ -354,7 +354,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("armv6-unknown-netbsd-eabihf"),
+        triple: "armv6-unknown-netbsd-eabihf",
         os: Some(Os::netbsd),
         arch: Arch::arm,
         env: Some(Env::eabihf),
@@ -364,7 +364,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("armv7-apple-ios"),
+        triple: "armv7-apple-ios",
         os: Some(Os::ios),
         arch: Arch::arm,
         env: None,
@@ -374,7 +374,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("armv7-linux-androideabi"),
+        triple: "armv7-linux-androideabi",
         os: Some(Os::android),
         arch: Arch::arm,
         env: Some(Env::gnu),
@@ -384,7 +384,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("armv7-unknown-freebsd"),
+        triple: "armv7-unknown-freebsd",
         os: Some(Os::freebsd),
         arch: Arch::arm,
         env: Some(Env::gnueabihf),
@@ -394,7 +394,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("armv7-unknown-linux-gnueabi"),
+        triple: "armv7-unknown-linux-gnueabi",
         os: Some(Os::linux),
         arch: Arch::arm,
         env: Some(Env::gnu),
@@ -404,7 +404,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("armv7-unknown-linux-gnueabihf"),
+        triple: "armv7-unknown-linux-gnueabihf",
         os: Some(Os::linux),
         arch: Arch::arm,
         env: Some(Env::gnu),
@@ -414,7 +414,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("armv7-unknown-linux-musleabi"),
+        triple: "armv7-unknown-linux-musleabi",
         os: Some(Os::linux),
         arch: Arch::arm,
         env: Some(Env::musl),
@@ -424,7 +424,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("armv7-unknown-linux-musleabihf"),
+        triple: "armv7-unknown-linux-musleabihf",
         os: Some(Os::linux),
         arch: Arch::arm,
         env: Some(Env::musl),
@@ -434,7 +434,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("armv7-unknown-netbsd-eabihf"),
+        triple: "armv7-unknown-netbsd-eabihf",
         os: Some(Os::netbsd),
         arch: Arch::arm,
         env: Some(Env::eabihf),
@@ -444,7 +444,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("armv7-wrs-vxworks-eabihf"),
+        triple: "armv7-wrs-vxworks-eabihf",
         os: Some(Os::vxworks),
         arch: Arch::arm,
         env: Some(Env::gnu),
@@ -454,7 +454,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("armv7a-none-eabi"),
+        triple: "armv7a-none-eabi",
         os: None,
         arch: Arch::arm,
         env: None,
@@ -464,7 +464,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("armv7a-none-eabihf"),
+        triple: "armv7a-none-eabihf",
         os: None,
         arch: Arch::arm,
         env: None,
@@ -474,7 +474,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("armv7r-none-eabi"),
+        triple: "armv7r-none-eabi",
         os: None,
         arch: Arch::arm,
         env: None,
@@ -484,7 +484,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("armv7r-none-eabihf"),
+        triple: "armv7r-none-eabihf",
         os: None,
         arch: Arch::arm,
         env: None,
@@ -494,7 +494,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("armv7s-apple-ios"),
+        triple: "armv7s-apple-ios",
         os: Some(Os::ios),
         arch: Arch::arm,
         env: None,
@@ -504,7 +504,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("asmjs-unknown-emscripten"),
+        triple: "asmjs-unknown-emscripten",
         os: Some(Os::emscripten),
         arch: Arch::wasm32,
         env: None,
@@ -514,7 +514,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("avr-unknown-gnu-atmega328"),
+        triple: "avr-unknown-gnu-atmega328",
         os: None,
         arch: Arch::avr,
         env: None,
@@ -524,27 +524,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("bpfeb-unknown-none"),
-        os: None,
-        arch: Arch::bpf,
-        env: None,
-        vendor: Some(Vendor::unknown),
-        family: None,
-        pointer_width: 64,
-        endian: Endian::big,
-    },
-    TargetInfo {
-        triple: Triple::new_const("bpfel-unknown-none"),
-        os: None,
-        arch: Arch::bpf,
-        env: None,
-        vendor: Some(Vendor::unknown),
-        family: None,
-        pointer_width: 64,
-        endian: Endian::little,
-    },
-    TargetInfo {
-        triple: Triple::new_const("hexagon-unknown-linux-musl"),
+        triple: "hexagon-unknown-linux-musl",
         os: Some(Os::linux),
         arch: Arch::hexagon,
         env: Some(Env::musl),
@@ -554,7 +534,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("i386-apple-ios"),
+        triple: "i386-apple-ios",
         os: Some(Os::ios),
         arch: Arch::x86,
         env: None,
@@ -564,7 +544,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("i586-pc-windows-msvc"),
+        triple: "i586-pc-windows-msvc",
         os: Some(Os::windows),
         arch: Arch::x86,
         env: Some(Env::msvc),
@@ -574,7 +554,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("i586-unknown-linux-gnu"),
+        triple: "i586-unknown-linux-gnu",
         os: Some(Os::linux),
         arch: Arch::x86,
         env: Some(Env::gnu),
@@ -584,7 +564,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("i586-unknown-linux-musl"),
+        triple: "i586-unknown-linux-musl",
         os: Some(Os::linux),
         arch: Arch::x86,
         env: Some(Env::musl),
@@ -594,7 +574,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("i686-apple-darwin"),
+        triple: "i686-apple-darwin",
         os: Some(Os::macos),
         arch: Arch::x86,
         env: None,
@@ -604,7 +584,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("i686-linux-android"),
+        triple: "i686-linux-android",
         os: Some(Os::android),
         arch: Arch::x86,
         env: Some(Env::gnu),
@@ -614,7 +594,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("i686-pc-windows-gnu"),
+        triple: "i686-pc-windows-gnu",
         os: Some(Os::windows),
         arch: Arch::x86,
         env: Some(Env::gnu),
@@ -624,7 +604,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("i686-pc-windows-msvc"),
+        triple: "i686-pc-windows-msvc",
         os: Some(Os::windows),
         arch: Arch::x86,
         env: Some(Env::msvc),
@@ -634,7 +614,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("i686-unknown-freebsd"),
+        triple: "i686-unknown-freebsd",
         os: Some(Os::freebsd),
         arch: Arch::x86,
         env: None,
@@ -644,7 +624,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("i686-unknown-haiku"),
+        triple: "i686-unknown-haiku",
         os: Some(Os::haiku),
         arch: Arch::x86,
         env: None,
@@ -654,7 +634,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("i686-unknown-linux-gnu"),
+        triple: "i686-unknown-linux-gnu",
         os: Some(Os::linux),
         arch: Arch::x86,
         env: Some(Env::gnu),
@@ -664,7 +644,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("i686-unknown-linux-musl"),
+        triple: "i686-unknown-linux-musl",
         os: Some(Os::linux),
         arch: Arch::x86,
         env: Some(Env::musl),
@@ -674,7 +654,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("i686-unknown-netbsd"),
+        triple: "i686-unknown-netbsd",
         os: Some(Os::netbsd),
         arch: Arch::x86,
         env: None,
@@ -684,7 +664,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("i686-unknown-openbsd"),
+        triple: "i686-unknown-openbsd",
         os: Some(Os::openbsd),
         arch: Arch::x86,
         env: None,
@@ -694,7 +674,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("i686-unknown-uefi"),
+        triple: "i686-unknown-uefi",
         os: Some(Os::uefi),
         arch: Arch::x86,
         env: None,
@@ -704,7 +684,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("i686-uwp-windows-gnu"),
+        triple: "i686-uwp-windows-gnu",
         os: Some(Os::windows),
         arch: Arch::x86,
         env: Some(Env::gnu),
@@ -714,7 +694,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("i686-uwp-windows-msvc"),
+        triple: "i686-uwp-windows-msvc",
         os: Some(Os::windows),
         arch: Arch::x86,
         env: Some(Env::msvc),
@@ -724,7 +704,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("i686-wrs-vxworks"),
+        triple: "i686-wrs-vxworks",
         os: Some(Os::vxworks),
         arch: Arch::x86,
         env: Some(Env::gnu),
@@ -734,7 +714,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("mips-unknown-linux-gnu"),
+        triple: "mips-unknown-linux-gnu",
         os: Some(Os::linux),
         arch: Arch::mips,
         env: Some(Env::gnu),
@@ -744,7 +724,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::big,
     },
     TargetInfo {
-        triple: Triple::new_const("mips-unknown-linux-musl"),
+        triple: "mips-unknown-linux-musl",
         os: Some(Os::linux),
         arch: Arch::mips,
         env: Some(Env::musl),
@@ -754,7 +734,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::big,
     },
     TargetInfo {
-        triple: Triple::new_const("mips-unknown-linux-uclibc"),
+        triple: "mips-unknown-linux-uclibc",
         os: Some(Os::linux),
         arch: Arch::mips,
         env: Some(Env::uclibc),
@@ -764,7 +744,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::big,
     },
     TargetInfo {
-        triple: Triple::new_const("mips64-unknown-linux-gnuabi64"),
+        triple: "mips64-unknown-linux-gnuabi64",
         os: Some(Os::linux),
         arch: Arch::mips64,
         env: Some(Env::gnu),
@@ -774,7 +754,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::big,
     },
     TargetInfo {
-        triple: Triple::new_const("mips64-unknown-linux-muslabi64"),
+        triple: "mips64-unknown-linux-muslabi64",
         os: Some(Os::linux),
         arch: Arch::mips64,
         env: Some(Env::musl),
@@ -784,7 +764,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::big,
     },
     TargetInfo {
-        triple: Triple::new_const("mips64el-unknown-linux-gnuabi64"),
+        triple: "mips64el-unknown-linux-gnuabi64",
         os: Some(Os::linux),
         arch: Arch::mips64,
         env: Some(Env::gnu),
@@ -794,7 +774,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("mips64el-unknown-linux-muslabi64"),
+        triple: "mips64el-unknown-linux-muslabi64",
         os: Some(Os::linux),
         arch: Arch::mips64,
         env: Some(Env::musl),
@@ -804,7 +784,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("mipsel-sony-psp"),
+        triple: "mipsel-sony-psp",
         os: Some(Os::psp),
         arch: Arch::mips,
         env: None,
@@ -814,7 +794,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("mipsel-unknown-linux-gnu"),
+        triple: "mipsel-unknown-linux-gnu",
         os: Some(Os::linux),
         arch: Arch::mips,
         env: Some(Env::gnu),
@@ -824,7 +804,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("mipsel-unknown-linux-musl"),
+        triple: "mipsel-unknown-linux-musl",
         os: Some(Os::linux),
         arch: Arch::mips,
         env: Some(Env::musl),
@@ -834,7 +814,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("mipsel-unknown-linux-uclibc"),
+        triple: "mipsel-unknown-linux-uclibc",
         os: Some(Os::linux),
         arch: Arch::mips,
         env: Some(Env::uclibc),
@@ -844,7 +824,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("mipsel-unknown-none"),
+        triple: "mipsel-unknown-none",
         os: None,
         arch: Arch::mips,
         env: None,
@@ -854,7 +834,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("mipsisa32r6-unknown-linux-gnu"),
+        triple: "mipsisa32r6-unknown-linux-gnu",
         os: Some(Os::linux),
         arch: Arch::mips,
         env: Some(Env::gnu),
@@ -864,7 +844,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::big,
     },
     TargetInfo {
-        triple: Triple::new_const("mipsisa32r6el-unknown-linux-gnu"),
+        triple: "mipsisa32r6el-unknown-linux-gnu",
         os: Some(Os::linux),
         arch: Arch::mips,
         env: Some(Env::gnu),
@@ -874,7 +854,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("mipsisa64r6-unknown-linux-gnuabi64"),
+        triple: "mipsisa64r6-unknown-linux-gnuabi64",
         os: Some(Os::linux),
         arch: Arch::mips64,
         env: Some(Env::gnu),
@@ -884,7 +864,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::big,
     },
     TargetInfo {
-        triple: Triple::new_const("mipsisa64r6el-unknown-linux-gnuabi64"),
+        triple: "mipsisa64r6el-unknown-linux-gnuabi64",
         os: Some(Os::linux),
         arch: Arch::mips64,
         env: Some(Env::gnu),
@@ -894,7 +874,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("msp430-none-elf"),
+        triple: "msp430-none-elf",
         os: None,
         arch: Arch::msp430,
         env: None,
@@ -904,7 +884,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("nvptx64-nvidia-cuda"),
+        triple: "nvptx64-nvidia-cuda",
         os: Some(Os::cuda),
         arch: Arch::nvptx64,
         env: None,
@@ -914,7 +894,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("powerpc-unknown-linux-gnu"),
+        triple: "powerpc-unknown-linux-gnu",
         os: Some(Os::linux),
         arch: Arch::powerpc,
         env: Some(Env::gnu),
@@ -924,7 +904,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::big,
     },
     TargetInfo {
-        triple: Triple::new_const("powerpc-unknown-linux-gnuspe"),
+        triple: "powerpc-unknown-linux-gnuspe",
         os: Some(Os::linux),
         arch: Arch::powerpc,
         env: Some(Env::gnu),
@@ -934,7 +914,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::big,
     },
     TargetInfo {
-        triple: Triple::new_const("powerpc-unknown-linux-musl"),
+        triple: "powerpc-unknown-linux-musl",
         os: Some(Os::linux),
         arch: Arch::powerpc,
         env: Some(Env::musl),
@@ -944,7 +924,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::big,
     },
     TargetInfo {
-        triple: Triple::new_const("powerpc-unknown-netbsd"),
+        triple: "powerpc-unknown-netbsd",
         os: Some(Os::netbsd),
         arch: Arch::powerpc,
         env: None,
@@ -954,7 +934,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::big,
     },
     TargetInfo {
-        triple: Triple::new_const("powerpc-unknown-openbsd"),
+        triple: "powerpc-unknown-openbsd",
         os: Some(Os::openbsd),
         arch: Arch::powerpc,
         env: None,
@@ -964,7 +944,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::big,
     },
     TargetInfo {
-        triple: Triple::new_const("powerpc-wrs-vxworks"),
+        triple: "powerpc-wrs-vxworks",
         os: Some(Os::vxworks),
         arch: Arch::powerpc,
         env: Some(Env::gnu),
@@ -974,7 +954,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::big,
     },
     TargetInfo {
-        triple: Triple::new_const("powerpc-wrs-vxworks-spe"),
+        triple: "powerpc-wrs-vxworks-spe",
         os: Some(Os::vxworks),
         arch: Arch::powerpc,
         env: Some(Env::gnu),
@@ -984,7 +964,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::big,
     },
     TargetInfo {
-        triple: Triple::new_const("powerpc64-unknown-freebsd"),
+        triple: "powerpc64-unknown-freebsd",
         os: Some(Os::freebsd),
         arch: Arch::powerpc64,
         env: None,
@@ -994,7 +974,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::big,
     },
     TargetInfo {
-        triple: Triple::new_const("powerpc64-unknown-linux-gnu"),
+        triple: "powerpc64-unknown-linux-gnu",
         os: Some(Os::linux),
         arch: Arch::powerpc64,
         env: Some(Env::gnu),
@@ -1004,7 +984,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::big,
     },
     TargetInfo {
-        triple: Triple::new_const("powerpc64-unknown-linux-musl"),
+        triple: "powerpc64-unknown-linux-musl",
         os: Some(Os::linux),
         arch: Arch::powerpc64,
         env: Some(Env::musl),
@@ -1014,7 +994,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::big,
     },
     TargetInfo {
-        triple: Triple::new_const("powerpc64-wrs-vxworks"),
+        triple: "powerpc64-wrs-vxworks",
         os: Some(Os::vxworks),
         arch: Arch::powerpc64,
         env: Some(Env::gnu),
@@ -1024,7 +1004,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::big,
     },
     TargetInfo {
-        triple: Triple::new_const("powerpc64le-unknown-linux-gnu"),
+        triple: "powerpc64le-unknown-linux-gnu",
         os: Some(Os::linux),
         arch: Arch::powerpc64,
         env: Some(Env::gnu),
@@ -1034,7 +1014,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("powerpc64le-unknown-linux-musl"),
+        triple: "powerpc64le-unknown-linux-musl",
         os: Some(Os::linux),
         arch: Arch::powerpc64,
         env: Some(Env::musl),
@@ -1044,7 +1024,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("riscv32gc-unknown-linux-gnu"),
+        triple: "riscv32gc-unknown-linux-gnu",
         os: Some(Os::linux),
         arch: Arch::riscv32,
         env: Some(Env::gnu),
@@ -1054,7 +1034,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("riscv32gc-unknown-linux-musl"),
+        triple: "riscv32gc-unknown-linux-musl",
         os: Some(Os::linux),
         arch: Arch::riscv32,
         env: Some(Env::musl),
@@ -1064,7 +1044,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("riscv32i-unknown-none-elf"),
+        triple: "riscv32i-unknown-none-elf",
         os: None,
         arch: Arch::riscv32,
         env: None,
@@ -1074,7 +1054,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("riscv32imac-unknown-none-elf"),
+        triple: "riscv32imac-unknown-none-elf",
         os: None,
         arch: Arch::riscv32,
         env: None,
@@ -1084,7 +1064,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("riscv32imc-unknown-none-elf"),
+        triple: "riscv32imc-unknown-none-elf",
         os: None,
         arch: Arch::riscv32,
         env: None,
@@ -1094,7 +1074,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("riscv64gc-unknown-linux-gnu"),
+        triple: "riscv64gc-unknown-linux-gnu",
         os: Some(Os::linux),
         arch: Arch::riscv64,
         env: Some(Env::gnu),
@@ -1104,7 +1084,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("riscv64gc-unknown-linux-musl"),
+        triple: "riscv64gc-unknown-linux-musl",
         os: Some(Os::linux),
         arch: Arch::riscv64,
         env: Some(Env::musl),
@@ -1114,7 +1094,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("riscv64gc-unknown-none-elf"),
+        triple: "riscv64gc-unknown-none-elf",
         os: None,
         arch: Arch::riscv64,
         env: None,
@@ -1124,7 +1104,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("riscv64imac-unknown-none-elf"),
+        triple: "riscv64imac-unknown-none-elf",
         os: None,
         arch: Arch::riscv64,
         env: None,
@@ -1134,7 +1114,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("s390x-unknown-linux-gnu"),
+        triple: "s390x-unknown-linux-gnu",
         os: Some(Os::linux),
         arch: Arch::s390x,
         env: Some(Env::gnu),
@@ -1144,7 +1124,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::big,
     },
     TargetInfo {
-        triple: Triple::new_const("s390x-unknown-linux-musl"),
+        triple: "s390x-unknown-linux-musl",
         os: Some(Os::linux),
         arch: Arch::s390x,
         env: Some(Env::musl),
@@ -1154,7 +1134,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::big,
     },
     TargetInfo {
-        triple: Triple::new_const("sparc-unknown-linux-gnu"),
+        triple: "sparc-unknown-linux-gnu",
         os: Some(Os::linux),
         arch: Arch::sparc,
         env: Some(Env::gnu),
@@ -1164,7 +1144,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::big,
     },
     TargetInfo {
-        triple: Triple::new_const("sparc64-unknown-linux-gnu"),
+        triple: "sparc64-unknown-linux-gnu",
         os: Some(Os::linux),
         arch: Arch::sparc64,
         env: Some(Env::gnu),
@@ -1174,7 +1154,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::big,
     },
     TargetInfo {
-        triple: Triple::new_const("sparc64-unknown-netbsd"),
+        triple: "sparc64-unknown-netbsd",
         os: Some(Os::netbsd),
         arch: Arch::sparc64,
         env: None,
@@ -1184,7 +1164,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::big,
     },
     TargetInfo {
-        triple: Triple::new_const("sparc64-unknown-openbsd"),
+        triple: "sparc64-unknown-openbsd",
         os: Some(Os::openbsd),
         arch: Arch::sparc64,
         env: None,
@@ -1194,7 +1174,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::big,
     },
     TargetInfo {
-        triple: Triple::new_const("sparcv9-sun-solaris"),
+        triple: "sparcv9-sun-solaris",
         os: Some(Os::solaris),
         arch: Arch::sparc64,
         env: None,
@@ -1204,7 +1184,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::big,
     },
     TargetInfo {
-        triple: Triple::new_const("thumbv4t-none-eabi"),
+        triple: "thumbv4t-none-eabi",
         os: None,
         arch: Arch::arm,
         env: None,
@@ -1214,7 +1194,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("thumbv6m-none-eabi"),
+        triple: "thumbv6m-none-eabi",
         os: None,
         arch: Arch::arm,
         env: None,
@@ -1224,7 +1204,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("thumbv7a-pc-windows-msvc"),
+        triple: "thumbv7a-pc-windows-msvc",
         os: Some(Os::windows),
         arch: Arch::arm,
         env: Some(Env::msvc),
@@ -1234,7 +1214,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("thumbv7a-uwp-windows-msvc"),
+        triple: "thumbv7a-uwp-windows-msvc",
         os: Some(Os::windows),
         arch: Arch::arm,
         env: Some(Env::msvc),
@@ -1244,7 +1224,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("thumbv7em-none-eabi"),
+        triple: "thumbv7em-none-eabi",
         os: None,
         arch: Arch::arm,
         env: None,
@@ -1254,7 +1234,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("thumbv7em-none-eabihf"),
+        triple: "thumbv7em-none-eabihf",
         os: None,
         arch: Arch::arm,
         env: None,
@@ -1264,7 +1244,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("thumbv7m-none-eabi"),
+        triple: "thumbv7m-none-eabi",
         os: None,
         arch: Arch::arm,
         env: None,
@@ -1274,7 +1254,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("thumbv7neon-linux-androideabi"),
+        triple: "thumbv7neon-linux-androideabi",
         os: Some(Os::android),
         arch: Arch::arm,
         env: Some(Env::gnu),
@@ -1284,7 +1264,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("thumbv7neon-unknown-linux-gnueabihf"),
+        triple: "thumbv7neon-unknown-linux-gnueabihf",
         os: Some(Os::linux),
         arch: Arch::arm,
         env: Some(Env::gnu),
@@ -1294,7 +1274,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("thumbv7neon-unknown-linux-musleabihf"),
+        triple: "thumbv7neon-unknown-linux-musleabihf",
         os: Some(Os::linux),
         arch: Arch::arm,
         env: Some(Env::musl),
@@ -1304,7 +1284,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("thumbv8m.base-none-eabi"),
+        triple: "thumbv8m.base-none-eabi",
         os: None,
         arch: Arch::arm,
         env: None,
@@ -1314,7 +1294,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("thumbv8m.main-none-eabi"),
+        triple: "thumbv8m.main-none-eabi",
         os: None,
         arch: Arch::arm,
         env: None,
@@ -1324,7 +1304,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("thumbv8m.main-none-eabihf"),
+        triple: "thumbv8m.main-none-eabihf",
         os: None,
         arch: Arch::arm,
         env: None,
@@ -1334,7 +1314,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("wasm32-unknown-emscripten"),
+        triple: "wasm32-unknown-emscripten",
         os: Some(Os::emscripten),
         arch: Arch::wasm32,
         env: None,
@@ -1344,37 +1324,37 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("wasm32-unknown-unknown"),
+        triple: "wasm32-unknown-unknown",
         os: Some(Os::unknown),
         arch: Arch::wasm32,
         env: None,
         vendor: Some(Vendor::unknown),
-        family: Some(Family::wasm),
+        family: None,
         pointer_width: 32,
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("wasm32-wasi"),
+        triple: "wasm32-wasi",
         os: Some(Os::wasi),
         arch: Arch::wasm32,
         env: None,
         vendor: Some(Vendor::unknown),
-        family: Some(Family::wasm),
+        family: None,
         pointer_width: 32,
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("wasm64-unknown-unknown"),
+        triple: "wasm64-unknown-unknown",
         os: Some(Os::unknown),
         arch: Arch::wasm64,
         env: None,
         vendor: Some(Vendor::unknown),
-        family: Some(Family::wasm),
+        family: None,
         pointer_width: 64,
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("x86_64-apple-darwin"),
+        triple: "x86_64-apple-darwin",
         os: Some(Os::macos),
         arch: Arch::x86_64,
         env: None,
@@ -1384,7 +1364,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("x86_64-apple-ios"),
+        triple: "x86_64-apple-ios",
         os: Some(Os::ios),
         arch: Arch::x86_64,
         env: None,
@@ -1394,7 +1374,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("x86_64-apple-ios-macabi"),
+        triple: "x86_64-apple-ios-macabi",
         os: Some(Os::ios),
         arch: Arch::x86_64,
         env: None,
@@ -1404,7 +1384,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("x86_64-apple-tvos"),
+        triple: "x86_64-apple-tvos",
         os: Some(Os::tvos),
         arch: Arch::x86_64,
         env: None,
@@ -1414,7 +1394,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("x86_64-fortanix-unknown-sgx"),
+        triple: "x86_64-fortanix-unknown-sgx",
         os: Some(Os::unknown),
         arch: Arch::x86_64,
         env: Some(Env::sgx),
@@ -1424,7 +1404,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("x86_64-fuchsia"),
+        triple: "x86_64-fuchsia",
         os: Some(Os::fuchsia),
         arch: Arch::x86_64,
         env: None,
@@ -1434,7 +1414,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("x86_64-linux-android"),
+        triple: "x86_64-linux-android",
         os: Some(Os::android),
         arch: Arch::x86_64,
         env: Some(Env::gnu),
@@ -1444,7 +1424,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("x86_64-pc-solaris"),
+        triple: "x86_64-pc-solaris",
         os: Some(Os::solaris),
         arch: Arch::x86_64,
         env: None,
@@ -1454,7 +1434,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("x86_64-pc-windows-gnu"),
+        triple: "x86_64-pc-windows-gnu",
         os: Some(Os::windows),
         arch: Arch::x86_64,
         env: Some(Env::gnu),
@@ -1464,7 +1444,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("x86_64-pc-windows-msvc"),
+        triple: "x86_64-pc-windows-msvc",
         os: Some(Os::windows),
         arch: Arch::x86_64,
         env: Some(Env::msvc),
@@ -1474,7 +1454,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("x86_64-sun-solaris"),
+        triple: "x86_64-sun-solaris",
         os: Some(Os::solaris),
         arch: Arch::x86_64,
         env: None,
@@ -1484,7 +1464,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("x86_64-unknown-dragonfly"),
+        triple: "x86_64-unknown-dragonfly",
         os: Some(Os::dragonfly),
         arch: Arch::x86_64,
         env: None,
@@ -1494,7 +1474,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("x86_64-unknown-freebsd"),
+        triple: "x86_64-unknown-freebsd",
         os: Some(Os::freebsd),
         arch: Arch::x86_64,
         env: None,
@@ -1504,7 +1484,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("x86_64-unknown-haiku"),
+        triple: "x86_64-unknown-haiku",
         os: Some(Os::haiku),
         arch: Arch::x86_64,
         env: None,
@@ -1514,7 +1494,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("x86_64-unknown-hermit"),
+        triple: "x86_64-unknown-hermit",
         os: Some(Os::hermit),
         arch: Arch::x86_64,
         env: None,
@@ -1524,7 +1504,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("x86_64-unknown-illumos"),
+        triple: "x86_64-unknown-illumos",
         os: Some(Os::illumos),
         arch: Arch::x86_64,
         env: None,
@@ -1534,7 +1514,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("x86_64-unknown-l4re-uclibc"),
+        triple: "x86_64-unknown-l4re-uclibc",
         os: Some(Os::l4re),
         arch: Arch::x86_64,
         env: Some(Env::uclibc),
@@ -1544,7 +1524,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("x86_64-unknown-linux-gnu"),
+        triple: "x86_64-unknown-linux-gnu",
         os: Some(Os::linux),
         arch: Arch::x86_64,
         env: Some(Env::gnu),
@@ -1554,7 +1534,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("x86_64-unknown-linux-gnux32"),
+        triple: "x86_64-unknown-linux-gnux32",
         os: Some(Os::linux),
         arch: Arch::x86_64,
         env: Some(Env::gnu),
@@ -1564,7 +1544,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("x86_64-unknown-linux-musl"),
+        triple: "x86_64-unknown-linux-musl",
         os: Some(Os::linux),
         arch: Arch::x86_64,
         env: Some(Env::musl),
@@ -1574,7 +1554,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("x86_64-unknown-netbsd"),
+        triple: "x86_64-unknown-netbsd",
         os: Some(Os::netbsd),
         arch: Arch::x86_64,
         env: None,
@@ -1584,7 +1564,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("x86_64-unknown-none-hermitkernel"),
+        triple: "x86_64-unknown-none-hermitkernel",
         os: Some(Os::hermit),
         arch: Arch::x86_64,
         env: None,
@@ -1594,7 +1574,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("x86_64-unknown-none-linuxkernel"),
+        triple: "x86_64-unknown-none-linuxkernel",
         os: None,
         arch: Arch::x86_64,
         env: Some(Env::gnu),
@@ -1604,7 +1584,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("x86_64-unknown-openbsd"),
+        triple: "x86_64-unknown-openbsd",
         os: Some(Os::openbsd),
         arch: Arch::x86_64,
         env: None,
@@ -1614,7 +1594,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("x86_64-unknown-redox"),
+        triple: "x86_64-unknown-redox",
         os: Some(Os::redox),
         arch: Arch::x86_64,
         env: Some(Env::relibc),
@@ -1624,7 +1604,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("x86_64-unknown-uefi"),
+        triple: "x86_64-unknown-uefi",
         os: Some(Os::uefi),
         arch: Arch::x86_64,
         env: None,
@@ -1634,7 +1614,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("x86_64-uwp-windows-gnu"),
+        triple: "x86_64-uwp-windows-gnu",
         os: Some(Os::windows),
         arch: Arch::x86_64,
         env: Some(Env::gnu),
@@ -1644,7 +1624,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("x86_64-uwp-windows-msvc"),
+        triple: "x86_64-uwp-windows-msvc",
         os: Some(Os::windows),
         arch: Arch::x86_64,
         env: Some(Env::msvc),
@@ -1654,7 +1634,7 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
         endian: Endian::little,
     },
     TargetInfo {
-        triple: Triple::new_const("x86_64-wrs-vxworks"),
+        triple: "x86_64-wrs-vxworks",
         os: Some(Os::vxworks),
         arch: Arch::x86_64,
         env: Some(Env::gnu),
@@ -1665,81 +1645,74 @@ pub const ALL_BUILTINS: &[TargetInfo] = &[
     },
 ];
 
-impl super::Arch {
-    pub const aarch64: Arch = Arch::new_const("aarch64");
-    pub const arm: Arch = Arch::new_const("arm");
-    pub const avr: Arch = Arch::new_const("avr");
-    pub const bpf: Arch = Arch::new_const("bpf");
-    pub const hexagon: Arch = Arch::new_const("hexagon");
-    pub const mips: Arch = Arch::new_const("mips");
-    pub const mips64: Arch = Arch::new_const("mips64");
-    pub const msp430: Arch = Arch::new_const("msp430");
-    pub const nvptx64: Arch = Arch::new_const("nvptx64");
-    pub const powerpc: Arch = Arch::new_const("powerpc");
-    pub const powerpc64: Arch = Arch::new_const("powerpc64");
-    pub const riscv32: Arch = Arch::new_const("riscv32");
-    pub const riscv64: Arch = Arch::new_const("riscv64");
-    pub const s390x: Arch = Arch::new_const("s390x");
-    pub const sparc: Arch = Arch::new_const("sparc");
-    pub const sparc64: Arch = Arch::new_const("sparc64");
-    pub const wasm32: Arch = Arch::new_const("wasm32");
-    pub const wasm64: Arch = Arch::new_const("wasm64");
-    pub const x86: Arch = Arch::new_const("x86");
-    pub const x86_64: Arch = Arch::new_const("x86_64");
+impl<'a> super::Arch<'a> {
+    pub const aarch64: Arch<'static> = Arch("aarch64");
+    pub const arm: Arch<'static> = Arch("arm");
+    pub const avr: Arch<'static> = Arch("avr");
+    pub const hexagon: Arch<'static> = Arch("hexagon");
+    pub const mips: Arch<'static> = Arch("mips");
+    pub const mips64: Arch<'static> = Arch("mips64");
+    pub const msp430: Arch<'static> = Arch("msp430");
+    pub const nvptx64: Arch<'static> = Arch("nvptx64");
+    pub const powerpc: Arch<'static> = Arch("powerpc");
+    pub const powerpc64: Arch<'static> = Arch("powerpc64");
+    pub const riscv32: Arch<'static> = Arch("riscv32");
+    pub const riscv64: Arch<'static> = Arch("riscv64");
+    pub const s390x: Arch<'static> = Arch("s390x");
+    pub const sparc: Arch<'static> = Arch("sparc");
+    pub const sparc64: Arch<'static> = Arch("sparc64");
+    pub const wasm32: Arch<'static> = Arch("wasm32");
+    pub const wasm64: Arch<'static> = Arch("wasm64");
+    pub const x86: Arch<'static> = Arch("x86");
+    pub const x86_64: Arch<'static> = Arch("x86_64");
 }
 
-impl super::Vendor {
-    pub const apple: Vendor = Vendor::new_const("apple");
-    pub const fortanix: Vendor = Vendor::new_const("fortanix");
-    pub const nvidia: Vendor = Vendor::new_const("nvidia");
-    pub const pc: Vendor = Vendor::new_const("pc");
-    pub const sony: Vendor = Vendor::new_const("sony");
-    pub const sun: Vendor = Vendor::new_const("sun");
-    pub const unknown: Vendor = Vendor::new_const("unknown");
-    pub const uwp: Vendor = Vendor::new_const("uwp");
-    pub const wrs: Vendor = Vendor::new_const("wrs");
+impl<'a> super::Vendor<'a> {
+    pub const apple: Vendor<'static> = Vendor("apple");
+    pub const fortanix: Vendor<'static> = Vendor("fortanix");
+    pub const nvidia: Vendor<'static> = Vendor("nvidia");
+    pub const pc: Vendor<'static> = Vendor("pc");
+    pub const sony: Vendor<'static> = Vendor("sony");
+    pub const sun: Vendor<'static> = Vendor("sun");
+    pub const unknown: Vendor<'static> = Vendor("unknown");
+    pub const uwp: Vendor<'static> = Vendor("uwp");
+    pub const wrs: Vendor<'static> = Vendor("wrs");
 }
 
-impl super::Os {
-    pub const android: Os = Os::new_const("android");
-    pub const cuda: Os = Os::new_const("cuda");
-    pub const dragonfly: Os = Os::new_const("dragonfly");
-    pub const emscripten: Os = Os::new_const("emscripten");
-    pub const freebsd: Os = Os::new_const("freebsd");
-    pub const fuchsia: Os = Os::new_const("fuchsia");
-    pub const haiku: Os = Os::new_const("haiku");
-    pub const hermit: Os = Os::new_const("hermit");
-    pub const illumos: Os = Os::new_const("illumos");
-    pub const ios: Os = Os::new_const("ios");
-    pub const l4re: Os = Os::new_const("l4re");
-    pub const linux: Os = Os::new_const("linux");
-    pub const macos: Os = Os::new_const("macos");
-    pub const netbsd: Os = Os::new_const("netbsd");
-    pub const openbsd: Os = Os::new_const("openbsd");
-    pub const psp: Os = Os::new_const("psp");
-    pub const redox: Os = Os::new_const("redox");
-    pub const solaris: Os = Os::new_const("solaris");
-    pub const tvos: Os = Os::new_const("tvos");
-    pub const uefi: Os = Os::new_const("uefi");
-    pub const unknown: Os = Os::new_const("unknown");
-    pub const vxworks: Os = Os::new_const("vxworks");
-    pub const wasi: Os = Os::new_const("wasi");
-    pub const windows: Os = Os::new_const("windows");
+impl<'a> super::Os<'a> {
+    pub const android: Os<'static> = Os("android");
+    pub const cuda: Os<'static> = Os("cuda");
+    pub const dragonfly: Os<'static> = Os("dragonfly");
+    pub const emscripten: Os<'static> = Os("emscripten");
+    pub const freebsd: Os<'static> = Os("freebsd");
+    pub const fuchsia: Os<'static> = Os("fuchsia");
+    pub const haiku: Os<'static> = Os("haiku");
+    pub const hermit: Os<'static> = Os("hermit");
+    pub const illumos: Os<'static> = Os("illumos");
+    pub const ios: Os<'static> = Os("ios");
+    pub const l4re: Os<'static> = Os("l4re");
+    pub const linux: Os<'static> = Os("linux");
+    pub const macos: Os<'static> = Os("macos");
+    pub const netbsd: Os<'static> = Os("netbsd");
+    pub const openbsd: Os<'static> = Os("openbsd");
+    pub const psp: Os<'static> = Os("psp");
+    pub const redox: Os<'static> = Os("redox");
+    pub const solaris: Os<'static> = Os("solaris");
+    pub const tvos: Os<'static> = Os("tvos");
+    pub const uefi: Os<'static> = Os("uefi");
+    pub const unknown: Os<'static> = Os("unknown");
+    pub const vxworks: Os<'static> = Os("vxworks");
+    pub const wasi: Os<'static> = Os("wasi");
+    pub const windows: Os<'static> = Os("windows");
 }
 
-impl super::Family {
-    pub const unix: Family = Family::new_const("unix");
-    pub const wasm: Family = Family::new_const("wasm");
-    pub const windows: Family = Family::new_const("windows");
-}
-
-impl super::Env {
-    pub const eabihf: Env = Env::new_const("eabihf");
-    pub const gnu: Env = Env::new_const("gnu");
-    pub const gnueabihf: Env = Env::new_const("gnueabihf");
-    pub const msvc: Env = Env::new_const("msvc");
-    pub const musl: Env = Env::new_const("musl");
-    pub const relibc: Env = Env::new_const("relibc");
-    pub const sgx: Env = Env::new_const("sgx");
-    pub const uclibc: Env = Env::new_const("uclibc");
+impl<'a> super::Env<'a> {
+    pub const eabihf: Env<'static> = Env("eabihf");
+    pub const gnu: Env<'static> = Env("gnu");
+    pub const gnueabihf: Env<'static> = Env("gnueabihf");
+    pub const msvc: Env<'static> = Env("msvc");
+    pub const musl: Env<'static> = Env("musl");
+    pub const relibc: Env<'static> = Env("relibc");
+    pub const sgx: Env<'static> = Env("sgx");
+    pub const uclibc: Env<'static> = Env("uclibc");
 }

@@ -20,17 +20,22 @@ window.addEventListener("keypress", (event) => {
         window.rpc.notify('quit');
         event.preventDefault();
     }
+    return true;
 });
 
 window.extLog = (data) => {
     window.rpc.notify('log', data);
 };
 
-window.onerror = function(message, source, lineno, colno, error) {
+window.onerror = (message, source, lineno, colno, error) => {
     extLog(message);
 };
 
-window.copyToClipboard = (str, msg) => {
+document.onerror = (message, source, lineno, colno, error) => {
+    extLog(message);
+};
+
+window.copyToClipboard = (str) => {
     window.rpc.notify('copy_to_clipboard', str||'')
 };
 
@@ -42,8 +47,10 @@ window.pasteFromClipboard = (callback) => {
                 s += String.fromCharCode(data[i]);
             }
             callback(s);
+        } else if (data) {
+            callback(data.toString());
         } else {
-            callback('');
+            callback("");
         }
     });
 };

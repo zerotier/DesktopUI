@@ -3,49 +3,24 @@
 # When uploading crates to the registry Cargo will automatically
 # "normalize" Cargo.toml files for maximal compatibility
 # with all versions of Cargo and also rewrite `path` dependencies
-# to registry (e.g., crates.io) dependencies.
+# to registry (e.g., crates.io) dependencies
 #
-# If you are reading this file be aware that the original Cargo.toml
-# will likely look very different (and much more reasonable).
-# See Cargo.toml.orig for the original contents.
+# If you believe there's an error in this file please file an
+# issue against the rust-lang/cargo repository. If you're
+# editing this file be aware that the upstream Cargo.toml
+# will likely look very different (and much more reasonable)
 
 [package]
-edition = "2018"
 name = "javascriptcore-rs-sys"
-version = "0.3.3"
+version = "0.2.0"
 authors = ["The Gtk-rs Project Developers"]
-build = "build.rs"
 description = "Sys functions for the Rust bindings of the javacriptcore library"
+homepage = "http://gtk-rs.org"
 keywords = ["javascript", "gtk-rs", "gnome"]
 license = "MIT"
-repository = "https://github.com/tauri-apps/javascriptcore-rs"
-[package.metadata.docs.rs]
-features = ["dox"]
-[package.metadata.system-deps.javascriptcoregtk_4_0]
-name = "javascriptcoregtk-4.0"
-version = "2.24"
-
-[package.metadata.system-deps.javascriptcoregtk_4_0.v2_28]
-version = "2.28"
+repository = "https://github.com/gtk-rs/javascriptcore-rs"
 
 [lib]
-name = "javascriptcore_rs_sys"
-[dependencies.glib-sys]
-version = "^0.14"
-
-[dependencies.gobject-sys]
-version = "^0.14"
-
+name = "javascriptcore_sys"
 [dependencies.libc]
-version = "0.2"
-[dev-dependencies.shell-words]
-version = "1.0.0"
-
-[dev-dependencies.tempfile]
-version = "3"
-[build-dependencies.system-deps]
-version = "5"
-
-[features]
-dox = []
-v2_28 = []
+version = "^0.2"

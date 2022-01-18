@@ -1,85 +1,29 @@
 use crate::error::Reason;
-use std::borrow::Cow;
 
 mod builtins;
 
 /// A list of all of the [builtin](https://doc.rust-lang.org/nightly/nightly-rustc/rustc_target/spec/index.html#modules)
-/// targets known to rustc, as of 1.54.0
+/// targets known to rustc, as of 1.49.0
 pub use builtins::ALL_BUILTINS;
 
-/// The unique identifier for a target.
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct Triple(pub Cow<'static, str>);
-
 /// The "architecture" field
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct Arch(pub Cow<'static, str>);
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct Arch<'a>(pub &'a str);
 
 /// The "vendor" field, which in practice is little more than an arbitrary modifier.
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct Vendor(pub Cow<'static, str>);
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct Vendor<'a>(pub &'a str);
 
 /// The "operating system" field, which sometimes implies an environment, and
 /// sometimes isn't an actual operating system.
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct Os(pub Cow<'static, str>);
-
-/// The target family, which describes a set of targets grouped in some logical manner, typically by
-/// operating system. This includes values like `unix` and `windows`.
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct Family(pub Cow<'static, str>);
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct Os<'a>(pub &'a str);
 
 /// The "environment" field, which specifies an ABI environment on top of the
 /// operating system. In many configurations, this field is omitted, and the
 /// environment is implied by the operating system.
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct Env(pub Cow<'static, str>);
-
-macro_rules! field_impls {
-    ($kind:ident) => {
-        impl $kind {
-            /// Constructs a new instance of this field.
-            ///
-            /// This method accepts both owned `String`s and `&'static str`s.
-            #[inline]
-            pub fn new(val: impl Into<Cow<'static, str>>) -> Self {
-                Self(val.into())
-            }
-
-            /// Constructs a new instance of this field from a `&'static str`.
-            #[inline]
-            pub const fn new_const(val: &'static str) -> Self {
-                Self(Cow::Borrowed(val))
-            }
-
-            /// Returns the string for the field.
-            #[inline]
-            pub fn as_str(&self) -> &str {
-                &*self.0
-            }
-        }
-
-        impl AsRef<str> for $kind {
-            #[inline]
-            fn as_ref(&self) -> &str {
-                &*self.0
-            }
-        }
-
-        impl std::fmt::Display for $kind {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.write_str(self.as_str())
-            }
-        }
-    };
-}
-
-field_impls!(Triple);
-field_impls!(Arch);
-field_impls!(Vendor);
-field_impls!(Os);
-field_impls!(Family);
-field_impls!(Env);
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct Env<'a>(pub &'a str);
 
 macro_rules! target_enum {
     (
@@ -141,27 +85,38 @@ target_enum! {
     }
 }
 
+target_enum! {
+    /// All of the target families known to rustc
+    #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+    pub enum Family {
+        /// Everything that isn't windows, and has a family!
+        unix,
+        /// The lone wolf of target families.
+        windows,
+    }
+}
+
 /// Contains information regarding a particular target known to rustc
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct TargetInfo {
+pub struct TargetInfo<'a> {
     /// The target's unique identifier
-    pub triple: Triple,
+    pub triple: &'a str,
     /// The target's operating system, if any. Used by the
     /// [target_os](https://doc.rust-lang.org/reference/conditional-compilation.html#target_os)
     /// predicate.
-    pub os: Option<Os>,
+    pub os: Option<Os<'a>>,
     /// The target's CPU architecture. Used by the
     /// [target_arch](https://doc.rust-lang.org/reference/conditional-compilation.html#target_arch)
     /// predicate.
-    pub arch: Arch,
+    pub arch: Arch<'a>,
     /// The target's ABI/libc used, if any. Used by the
     /// [target_env](https://doc.rust-lang.org/reference/conditional-compilation.html#target_env)
     /// predicate.
-    pub env: Option<Env>,
+    pub env: Option<Env<'a>>,
     /// The target's vendor, if any. Used by the
     /// [target_vendor](https://doc.rust-lang.org/reference/conditional-compilation.html#target_vendor)
     /// predicate.
-    pub vendor: Option<Vendor>,
+    pub vendor: Option<Vendor<'a>>,
     /// The target's family, if any. Used by the
     /// [target_family](https://doc.rust-lang.org/reference/conditional-compilation.html#target_family)
     /// predicate.
@@ -181,9 +136,9 @@ pub struct TargetInfo {
 /// ```
 /// assert!(cfg_expr::targets::get_builtin_target_by_triple("x86_64-unknown-linux-musl").is_some());
 /// ```
-pub fn get_builtin_target_by_triple(triple: &str) -> Option<&'static TargetInfo> {
+pub fn get_builtin_target_by_triple(triple: &str) -> Option<&'static TargetInfo<'static>> {
     ALL_BUILTINS
-        .binary_search_by(|ti| ti.triple.as_ref().cmp(triple))
+        .binary_search_by(|ti| ti.triple.cmp(triple))
         .map(|i| &ALL_BUILTINS[i])
         .ok()
 }
@@ -193,7 +148,7 @@ pub fn get_builtin_target_by_triple(triple: &str) -> Option<&'static TargetInfo>
 /// versions.
 ///
 /// ```
-/// assert_eq!("1.54.0", cfg_expr::targets::rustc_version());
+/// assert_eq!("1.53.0", cfg_expr::targets::rustc_version());
 /// ```
 pub fn rustc_version() -> &'static str {
     builtins::RUSTC_VERSION

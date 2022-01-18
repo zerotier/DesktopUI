@@ -1,6 +1,6 @@
 [package]
 name = "zerotier_desktop_ui"
-version = "1.8.4"
+version = "1.8.5"
 authors = ["Adam Ierymenko <adam.ierymenko@zerotier.com>"]
 edition = "2018"
 
@@ -24,11 +24,9 @@ notify-rust = "^4"
 crc64 = "^1"
 runas = "^0"
 wry = "0.12.2"
-#wry = { git = "https://github.com/tauri-apps/wry", rev = "c4156697850d619948c13ad5260b9d7bb453df46" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 plist = "^1"
-web-view = { path = "web-view", features = [] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "^0"

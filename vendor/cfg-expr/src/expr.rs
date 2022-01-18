@@ -28,48 +28,48 @@ pub enum Func {
 use crate::targets as targ;
 
 /// All predicates that pertains to a target, except for `target_feature`
-#[derive(Clone, PartialEq, Debug)]
-pub enum TargetPredicate {
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum TargetPredicate<'a> {
     /// [target_arch](https://doc.rust-lang.org/reference/conditional-compilation.html#target_arch)
-    Arch(targ::Arch),
+    Arch(targ::Arch<'a>),
     /// [target_endian](https://doc.rust-lang.org/reference/conditional-compilation.html#target_endian)
     Endian(targ::Endian),
     /// [target_env](https://doc.rust-lang.org/reference/conditional-compilation.html#target_env)
-    Env(targ::Env),
+    Env(targ::Env<'a>),
     /// [target_family](https://doc.rust-lang.org/reference/conditional-compilation.html#target_family)
     /// This also applies to the bare [`unix` and `windows`](https://doc.rust-lang.org/reference/conditional-compilation.html#unix-and-windows)
     /// predicates.
     Family(targ::Family),
     /// [target_os](https://doc.rust-lang.org/reference/conditional-compilation.html#target_os)
-    Os(targ::Os),
+    Os(targ::Os<'a>),
     /// [target_pointer_width](https://doc.rust-lang.org/reference/conditional-compilation.html#target_pointer_width)
     PointerWidth(u8),
     /// [target_vendor](https://doc.rust-lang.org/reference/conditional-compilation.html#target_vendor)
-    Vendor(targ::Vendor),
+    Vendor(targ::Vendor<'a>),
 }
 
 pub trait TargetMatcher {
-    fn matches(&self, tp: &TargetPredicate) -> bool;
+    fn matches(&self, tp: TargetPredicate<'_>) -> bool;
 }
 
-impl TargetMatcher for targ::TargetInfo {
-    fn matches(&self, tp: &TargetPredicate) -> bool {
+impl<'a> TargetMatcher for targ::TargetInfo<'a> {
+    fn matches(&self, tp: TargetPredicate<'_>) -> bool {
         use TargetPredicate::{Arch, Endian, Env, Family, Os, PointerWidth, Vendor};
 
         match tp {
-            Arch(a) => a == &self.arch,
-            Endian(end) => *end == self.endian,
+            Arch(a) => a == self.arch,
+            Endian(end) => end == self.endian,
             // The environment is allowed to be an empty string
-            Env(env) => match &self.env {
+            Env(env) => match self.env {
                 Some(e) => env == e,
                 None => env.0.is_empty(),
             },
-            Family(fam) => Some(fam) == self.family.as_ref(),
-            Os(os) => Some(os) == self.os.as_ref(),
-            PointerWidth(w) => *w == self.pointer_width,
-            Vendor(ven) => match &self.vendor {
+            Family(fam) => Some(fam) == self.family,
+            Os(os) => Some(os) == self.os,
+            PointerWidth(w) => w == self.pointer_width,
+            Vendor(ven) => match self.vendor {
                 Some(v) => ven == v,
-                None => ven == &targ::Vendor::unknown,
+                None => ven.0 == "unknown",
             },
         }
     }
@@ -79,22 +79,19 @@ impl TargetMatcher for targ::TargetInfo {
 impl TargetMatcher for target_lexicon::Triple {
     #[allow(clippy::cognitive_complexity)]
     #[allow(clippy::match_same_arms)]
-    fn matches(&self, tp: &TargetPredicate) -> bool {
+    fn matches(&self, tp: TargetPredicate<'_>) -> bool {
         use target_lexicon::*;
         use TargetPredicate::{Arch, Endian, Env, Family, Os, PointerWidth, Vendor};
 
         match tp {
             Arch(arch) => {
-                if arch == &targ::Arch::x86 {
+                if arch.0 == "x86" {
                     matches!(self.architecture, Architecture::X86_32(_))
-                } else if arch == &targ::Arch::wasm32 {
+                } else if arch.0 == "wasm32" {
                     self.architecture == Architecture::Wasm32
                         || self.architecture == Architecture::Asmjs
-                } else if arch == &targ::Arch::arm {
+                } else if arch.0 == "arm" {
                     matches!(self.architecture, Architecture::Arm(_))
-                } else if arch == &targ::Arch::bpf {
-                    self.architecture == Architecture::Bpfeb
-                        || self.architecture == Architecture::Bpfel
                 } else {
                     match arch.0.parse::<Architecture>() {
                         Ok(a) => match (self.architecture, a) {
@@ -123,23 +120,23 @@ impl TargetMatcher for target_lexicon::Triple {
             Env(env) => {
                 // The environment is implied by some operating systems
                 match self.operating_system {
-                    OperatingSystem::Redox => env == &targ::Env::relibc,
-                    OperatingSystem::VxWorks => env == &targ::Env::gnu,
+                    OperatingSystem::Redox => env.0 == "relibc",
+                    OperatingSystem::VxWorks => env.0 == "gnu",
                     OperatingSystem::Freebsd => match self.architecture {
                         Architecture::Arm(ArmArchitecture::Armv6)
-                        | Architecture::Arm(ArmArchitecture::Armv7) => env == &targ::Env::gnueabihf,
+                        | Architecture::Arm(ArmArchitecture::Armv7) => env.0 == "gnueabihf",
                         _ => env.0.is_empty(),
                     },
                     OperatingSystem::Netbsd => match self.architecture {
                         Architecture::Arm(ArmArchitecture::Armv6)
-                        | Architecture::Arm(ArmArchitecture::Armv7) => env == &targ::Env::eabihf,
+                        | Architecture::Arm(ArmArchitecture::Armv7) => env.0 == "eabihf",
                         _ => env.0.is_empty(),
                     },
                     OperatingSystem::None_
                     | OperatingSystem::Cloudabi
                     | OperatingSystem::Hermit
                     | OperatingSystem::Ios => match self.environment {
-                        Environment::LinuxKernel => env == &targ::Env::gnu,
+                        Environment::LinuxKernel => env.0 == "gnu",
                         _ => env.0.is_empty(),
                     },
                     _ => {
@@ -156,7 +153,7 @@ impl TargetMatcher for target_lexicon::Triple {
                             match env.0.parse::<Environment>() {
                                 Ok(e) => {
                                     // Rustc shortens multiple "gnu*" environments to just "gnu"
-                                    if env == &targ::Env::gnu {
+                                    if env.0 == "gnu" {
                                         match self.environment {
                                             Environment::Gnu
                                             | Environment::Gnuabi64
@@ -178,7 +175,7 @@ impl TargetMatcher for target_lexicon::Triple {
                                             }
                                             _ => false,
                                         }
-                                    } else if env == &targ::Env::musl {
+                                    } else if env.0 == "musl" {
                                         matches!(
                                             self.environment,
                                             Environment::Musl
@@ -186,7 +183,7 @@ impl TargetMatcher for target_lexicon::Triple {
                                                 | Environment::Musleabihf
                                                 | Environment::Muslabi64
                                         )
-                                    } else if env == &targ::Env::uclibc {
+                                    } else if env.0 == "uclibc" {
                                         matches!(
                                             self.environment,
                                             Environment::Uclibc | Environment::Uclibceabi
@@ -207,62 +204,52 @@ impl TargetMatcher for target_lexicon::Triple {
                     Fuchsia, Haiku, Hermit, Illumos, Ios, L4re, Linux, MacOSX, Nebulet, Netbsd,
                     None_, Openbsd, Redox, Solaris, Tvos, Uefi, Unknown, VxWorks, Wasi, Windows,
                 };
-                let lexicon_fam = match self.operating_system {
-                    AmdHsa | Bitrig | Cloudabi | Cuda | Hermit | Nebulet | None_ | Uefi => None,
-                    Darwin
-                    | Dragonfly
-                    | Emscripten
-                    | Freebsd
-                    | Fuchsia
-                    | Haiku
-                    | Illumos
-                    | Ios
-                    | L4re
-                    | MacOSX { .. }
-                    | Netbsd
-                    | Openbsd
-                    | Redox
-                    | Solaris
-                    | Tvos
-                    | VxWorks => Some(crate::targets::Family::unix),
-                    Unknown => {
-                        // wasm32 and wasm64 (other than emscripten above) are part of the wasm
-                        // family.
-                        match self.architecture {
-                            Architecture::Wasm32 | Architecture::Wasm64 => {
-                                Some(crate::targets::Family::wasm)
+                Some(fam)
+                    == match self.operating_system {
+                        Unknown | AmdHsa | Bitrig | Cloudabi | Cuda | Hermit | Nebulet | None_
+                        | Uefi | Wasi => None,
+                        Darwin
+                        | Dragonfly
+                        | Emscripten
+                        | Freebsd
+                        | Fuchsia
+                        | Haiku
+                        | Illumos
+                        | Ios
+                        | L4re
+                        | MacOSX { .. }
+                        | Netbsd
+                        | Openbsd
+                        | Redox
+                        | Solaris
+                        | Tvos
+                        | VxWorks => Some(crate::targets::Family::unix),
+                        Linux => {
+                            // The 'kernel' environment is treated specially as not-unix
+                            if self.environment != Environment::Kernel {
+                                Some(crate::targets::Family::unix)
+                            } else {
+                                None
                             }
-                            _ => None,
                         }
+                        Windows => Some(crate::targets::Family::windows),
+                        // I really dislike non-exhaustive :(
+                        _ => None,
                     }
-                    Linux => {
-                        // The 'kernel' environment is treated specially as not-unix
-                        if self.environment != Environment::Kernel {
-                            Some(crate::targets::Family::unix)
-                        } else {
-                            None
-                        }
-                    }
-                    Wasi => Some(crate::targets::Family::wasm),
-                    Windows => Some(crate::targets::Family::windows),
-                    // I really dislike non-exhaustive :(
-                    _ => None,
-                };
-                Some(fam) == lexicon_fam.as_ref()
             }
             Os(os) => match os.0.parse::<OperatingSystem>() {
                 Ok(o) => match self.environment {
-                    Environment::HermitKernel => os == &targ::Os::hermit,
+                    Environment::HermitKernel => os.0 == "hermit",
                     _ => self.operating_system == o,
                 },
                 Err(_) => {
                     // Handle special case for darwin/macos, where the triple is
                     // "darwin", but rustc identifies the OS as "macos"
-                    if os == &targ::Os::macos && self.operating_system == OperatingSystem::Darwin {
+                    if os.0 == "macos" && self.operating_system == OperatingSystem::Darwin {
                         true
                     } else {
                         // For android, the os is still linux, but the environment is android
-                        os == &targ::Os::android
+                        os.0 == "android"
                             && self.operating_system == OperatingSystem::Linux
                             && (self.environment == Environment::Android
                                 || self.environment == Environment::Androideabi)
@@ -280,19 +267,19 @@ impl TargetMatcher for target_lexicon::Triple {
                     self.environment,
                     Environment::Gnux32 | Environment::GnuIlp32
                 ) {
-                    *pw == match self.pointer_width() {
+                    pw == match self.pointer_width() {
                         Ok(pw) => pw.bits(),
                         Err(_) => return false,
                     }
                 } else {
-                    *pw == 32
+                    pw == 32
                 }
             }
         }
     }
 }
 
-impl TargetPredicate {
+impl<'a> TargetPredicate<'a> {
     /// Returns true of the predicate matches the specified target
     ///
     /// ```
@@ -309,7 +296,7 @@ impl TargetPredicate {
     ///     tp::Vendor(Vendor::pc).matches(win)
     /// );
     /// ```
-    pub fn matches<T>(&self, target: &T) -> bool
+    pub fn matches<T>(self, target: &T) -> bool
     where
         T: TargetMatcher,
     {
@@ -322,7 +309,7 @@ pub(crate) enum Which {
     Arch,
     Endian(targ::Endian),
     Env,
-    Family,
+    Family(targ::Family),
     Os,
     PointerWidth(u8),
     Vendor,
@@ -338,7 +325,7 @@ pub(crate) struct InnerTarget {
 #[derive(Debug, PartialEq)]
 pub enum Predicate<'a> {
     /// A target predicate, with the `target_` prefix
-    Target(TargetPredicate),
+    Target(TargetPredicate<'a>),
     /// Whether rustc's test harness is [enabled](https://doc.rust-lang.org/reference/conditional-compilation.html#test)
     Test,
     /// [Enabled](https://doc.rust-lang.org/reference/conditional-compilation.html#debug_assertions)
@@ -380,22 +367,18 @@ impl InnerPredicate {
 
         match self {
             IP::Target(it) => match &it.which {
-                Which::Arch => Target(TargetPredicate::Arch(targ::Arch::new(
-                    s[it.span.clone().unwrap()].to_owned(),
+                Which::Arch => Target(TargetPredicate::Arch(targ::Arch(
+                    &s[it.span.clone().unwrap()],
                 ))),
-                Which::Os => Target(TargetPredicate::Os(targ::Os::new(
-                    s[it.span.clone().unwrap()].to_owned(),
+                Which::Os => Target(TargetPredicate::Os(targ::Os(&s[it.span.clone().unwrap()]))),
+                Which::Vendor => Target(TargetPredicate::Vendor(targ::Vendor(
+                    &s[it.span.clone().unwrap()],
                 ))),
-                Which::Vendor => Target(TargetPredicate::Vendor(targ::Vendor::new(
-                    s[it.span.clone().unwrap()].to_owned(),
-                ))),
-                Which::Env => Target(TargetPredicate::Env(targ::Env::new(
-                    s[it.span.clone().unwrap()].to_owned(),
-                ))),
-                Which::Family => Target(TargetPredicate::Family(targ::Family::new(
-                    s[it.span.clone().unwrap()].to_owned(),
+                Which::Env => Target(TargetPredicate::Env(targ::Env(
+                    &s[it.span.clone().unwrap()],
                 ))),
                 Which::Endian(end) => Target(TargetPredicate::Endian(*end)),
+                Which::Family(fam) => Target(TargetPredicate::Family(*fam)),
                 Which::PointerWidth(pw) => Target(TargetPredicate::PointerWidth(*pw)),
             },
             IP::Test => Test,
@@ -545,7 +528,7 @@ impl Expression {
         result_stack.pop().unwrap()
     }
 
-    /// The original string which has been parsed to produce this [`Expression`].
+    /// The original string which has been parsed to produce this ['Expression`].
     ///
     /// ```
     /// use cfg_expr::Expression;

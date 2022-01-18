@@ -1,2 +1,0 @@
-msrv = "1.52"
-avoid-breaking-exported-api = false
