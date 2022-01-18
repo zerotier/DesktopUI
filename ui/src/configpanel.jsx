@@ -94,7 +94,7 @@ export default class ConfigPanel extends React.Component {
         if (status) {
             inner = (
                 <EuiSplitPanel.Outer responsive={false} grow={true} className="eui-fullHeight" hasShadow={false} hasBorder={false} borderRadius="none">
-                    <EuiSplitPanel.Inner paddingSize="none" color="subdued" responsive={false}>
+                    <EuiSplitPanel.Inner paddingSize="s" color="subdued" responsive={false}>
                         <EuiFlexGrid columns={2} gutterSize="s" alignItems="center" responsive={false}>
                             <EuiFlexItem><EuiText>ZeroTier Address</EuiText></EuiFlexItem>
                             <EuiFlexItem grow={false}>

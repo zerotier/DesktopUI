@@ -40,8 +40,8 @@ mod serviceclient;
 /// It's a bit weird so web app bundlers don't optimize it out.
 const CSS_PLACEHOLDER: &'static str = ".XXXthis_is_replaced_by_css_in_the_rust_codeXXX{border:0}";
 
-const MAIN_WINDOW_WIDTH: i32 = 1350;
-const MAIN_WINDOW_HEIGHT: i32 = 600;
+const MAIN_WINDOW_WIDTH: i32 = 1280;
+const MAIN_WINDOW_HEIGHT: i32 = 700;
 const WEB_UI_BLOB_PATH: &'static str = "zt_desktop_ui.html";
 
 pub(crate) static mut APPLICATION_PATH: String = String::new();
