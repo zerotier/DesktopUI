@@ -66,4 +66,10 @@ clean: FORCE
 	rm -rf ZeroTier.app target
 endif
 
+ubuntudeb_64:	linux
+	fpm -t deb \
+	-p zerotier-ui.0.1.0-1.amd64.deb \
+	--version 0.1.0-1 \
+	--architecture amd64
+
 FORCE:
