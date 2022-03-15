@@ -1212,7 +1212,12 @@ fn main() {
                 }
             },
             "copy_authtoken" => { // invoked with elevated permissions to get the auth token and copy it locally
-                let _ = serviceclient::get_auth_token_and_port(false);
+                if args.len() < 3 {
+                    println!("FATAL: copy_authtoken requires additional argument");
+                    std::process::exit(1);
+                }
+
+                let _ = serviceclient::get_auth_token_and_port(false, &Ok(args[2].clone()));
             }
             _ => println!("FATAL: unrecognized mode: {}", args[1])
         }

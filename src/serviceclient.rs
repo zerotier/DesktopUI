@@ -9,6 +9,7 @@
 use std::cell::Cell;
 use std::cmp;
 use std::collections::{HashMap, LinkedList};
+use std::env::VarError;
 use std::ffi::CString;
 use std::io::Write;
 use std::path::Path;
@@ -42,15 +43,19 @@ pub fn ms_since_epoch() -> i64 {
     SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map_or(0, |t| t.as_millis() as i64)
 }
 
-pub fn get_auth_token_and_port(spawn_elevated: bool) -> Option<(String, u16)> {
-    let mut port = 0_u16;
-    let mut token = String::new();
-
+pub fn get_user_home_dir() -> Result<String, VarError> {
     #[cfg(windows)]
     let home = std::env::var("USERPROFILE");
 
     #[cfg(not(windows))]
     let home = std::env::var("HOME");
+
+    home
+}
+
+pub fn get_auth_token_and_port(spawn_elevated: bool, home: &Result<String, VarError>) -> Option<(String, u16)> {
+    let mut port = 0_u16;
+    let mut token = String::new();  
 
     for p in [crate::GLOBAL_SERVICE_HOME_V2, crate::GLOBAL_SERVICE_HOME_V1] {
         let p = Path::new(p);
@@ -102,7 +107,8 @@ pub fn get_auth_token_and_port(spawn_elevated: bool) -> Option<(String, u16)> {
 
             if token.is_empty() {
                 if spawn_elevated && attempt == 0 {
-                    let _ = runas::Command::new(std::env::current_exe().unwrap()).arg("copy_authtoken").gui(true).status();
+                    let home = home.as_ref().expect("home lookup error");
+                    let _ = runas::Command::new(std::env::current_exe().unwrap()).arg("copy_authtoken").arg(home).gui(true).status();
                 }
             } else {
                 let _ = home.clone().map(|mut p| {
@@ -408,7 +414,8 @@ impl ServiceClient {
 
     /// Check auth token and port for running service and update if changed.
     pub fn sync_client_config(&mut self) {
-        get_auth_token_and_port(true).map(|token_port| {
+        let homedir = get_user_home_dir();
+        get_auth_token_and_port(true, &homedir).map(|token_port| {
             if self.auth_token != token_port.0 || self.port != token_port.1 {
                 self.auth_token = token_port.0.clone();
                 self.port = token_port.1;
