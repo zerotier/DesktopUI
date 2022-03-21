@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Encoding=UTF-8
+Name=ZeroTier UI
+Exec=/usr/bin/zerotier_desktop_ui
+Icon=/usr/share/zerotier/ZeroTierIcon.png
+Categories=System;
