@@ -51,7 +51,7 @@
 	<key>LSMinimumSystemVersion</key>
 	<string>10.10</string>
 	<key>LSUIElement</key>
-	<string>YES</string>
+	<string>NO</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

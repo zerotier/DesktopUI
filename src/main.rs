@@ -464,12 +464,46 @@ fn open_sso_auth_window_subprocess(w: &mut Option<Child>, width: i32, height: i3
     }
 }
 
+/// Common or OS-specific setup of the Wry/Tauri webview window.
+fn set_up_window(window: &wry::application::window::Window) {
+    #[cfg(target_os = "macos")]
+    {
+        window.set_menu(Some({
+            let mut file = wry::application::menu::MenuBar::new();
+            file.add_native_item(wry::application::menu::MenuItem::CloseWindow);
+            let mut edit = wry::application::menu::MenuBar::new();
+            edit.add_native_item(wry::application::menu::MenuItem::Cut);
+            edit.add_native_item(wry::application::menu::MenuItem::Copy);
+            edit.add_native_item(wry::application::menu::MenuItem::Paste);
+            edit.add_native_item(wry::application::menu::MenuItem::SelectAll);
+            let mut menu = wry::application::menu::MenuBar::new();
+            menu.add_submenu("File", true, file);
+            menu.add_submenu("Edit", true, edit);
+            menu
+        }));
+    }
+}
+
+fn get_web_context() -> wry::webview::WebContext {
+    #[allow(unused_mut)]
+    #[allow(unused)]
+    let mut web_context_path: Option<PathBuf> = None;
+    #[cfg(windows)]
+    {
+        web_context_path = Some(std::env::temp_dir().join(format!(
+            "zt_desktop_ui_{}",
+            std::env::var("USERNAME").unwrap_or(String::new())
+        )));
+    }
+    wry::webview::WebContext::new(web_context_path)
+}
+
 /// Main function for SSO authentication webview popup windows.
 #[allow(unused_mut)]
 fn sso_auth_window_main(args: &Vec<String>) {
     let mut event_loop = wry::application::event_loop::EventLoop::new();
     let window = wry::application::window::WindowBuilder::new()
-        .with_visible(false)
+        .with_visible(true)
         .with_title(format!("Remote Network Login: {}", args[4].as_str()))
         .with_inner_size(wry::application::dpi::LogicalSize::new(
             i32::from_str_radix(args[2].as_str(), 10).unwrap_or(1024),
@@ -478,28 +512,9 @@ fn sso_auth_window_main(args: &Vec<String>) {
         .with_resizable(true)
         .build(&event_loop)
         .unwrap();
-    #[allow(unused_mut)]
-    #[allow(unused)]
-    let mut web_context_path: Option<PathBuf> = None;
-    #[cfg(target_os = "macos")]
-    {
-        window.set_menu(Some({
-            let mut menu = wry::application::menu::MenuBar::new();
-            let mut edit = wry::application::menu::MenuBar::new();
-            edit.add_native_item(wry::application::menu::MenuItem::Cut);
-            edit.add_native_item(wry::application::menu::MenuItem::Paste);
-            menu.add_submenu("Edit", true, edit);
-            menu
-        }))
-    }
-    #[cfg(windows)]
-    {
-        web_context_path = Some(std::env::temp_dir().join(format!(
-            "zt_desktop_ui_{}",
-            std::env::var("USERNAME").unwrap_or(String::new())
-        )));
-    }
-    let mut web_context = wry::webview::WebContext::new(web_context_path);
+    set_up_window(&window);
+
+    let mut web_context = get_web_context();
     let webview = wry::webview::WebViewBuilder::new(window)
         .unwrap()
         .with_web_context(&mut web_context)
@@ -507,7 +522,6 @@ fn sso_auth_window_main(args: &Vec<String>) {
         .unwrap()
         .build()
         .unwrap();
-    webview.window().set_visible(true);
     webview.window().set_focus();
     set_thread_to_foreground_priority();
 
@@ -582,11 +596,6 @@ fn control_panel_window_main(args: &Vec<String>) {
     raise_window.store(true, std::sync::atomic::Ordering::Relaxed);
 
     let mut event_loop = wry::application::event_loop::EventLoop::new();
-    #[cfg(target_os = "macos")]
-    {
-        event_loop.set_activation_policy(ActivationPolicy::Accessory);
-    }
-
     let window = wry::application::window::WindowBuilder::new()
         .with_title("ZeroTier Control Panel")
         .with_inner_size(wry::application::dpi::LogicalSize::new(
@@ -594,9 +603,10 @@ fn control_panel_window_main(args: &Vec<String>) {
             i32::from_str_radix(args[4].as_str(), 10).unwrap_or(768),
         ))
         .with_resizable(true)
-        .with_visible(false)
+        .with_visible(true)
         .build(&event_loop)
         .unwrap();
+    set_up_window(&window);
 
     let ui_mode = args[2].clone();
     let ui_client = client.clone();
@@ -604,17 +614,7 @@ fn control_panel_window_main(args: &Vec<String>) {
     let web_ui_blob_path = std::env::temp_dir().join(WEB_UI_BLOB_PATH);
     //println!("{}", web_ui_blob_path.to_str().unwrap());
 
-    #[allow(unused_mut)]
-    #[allow(unused)]
-    let mut web_context_path: Option<PathBuf> = None;
-    #[cfg(windows)]
-    {
-        web_context_path = Some(std::env::temp_dir().join(format!(
-            "zt_desktop_ui_{}",
-            std::env::var("USERNAME").unwrap_or(String::new())
-        )));
-    }
-    let mut web_context = wry::webview::WebContext::new(web_context_path);
+    let mut web_context = get_web_context();
     let webview = wry::webview::WebViewBuilder::new(window)
         .unwrap()
         .with_web_context(&mut web_context)

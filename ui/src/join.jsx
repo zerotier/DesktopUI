@@ -15,7 +15,7 @@ export default class Join extends React.Component {
         this.state = { joinNetworkId: '' };
         this.onJoinNetworkChangedSet = this.onJoinNetworkChangedSet.bind(this);
         this.onJoinNetworkChanged = this.onJoinNetworkChanged.bind(this);
-        this.onJoinNetworkKeyPress = this.onJoinNetworkKeyPress.bind(this);
+        //this.onJoinNetworkKeyPress = this.onJoinNetworkKeyPress.bind(this);
     }
 
     onJoinNetworkChangedSet(newValue) {
@@ -32,6 +32,7 @@ export default class Join extends React.Component {
         this.onJoinNetworkChangedSet(e.target.value||'');
     }
 
+    /*
     onJoinNetworkKeyPress(e) {
         if ((e.metaKey||e.ctrlKey) && e.key === 'v') {
             e.preventDefault();
@@ -48,6 +49,7 @@ export default class Join extends React.Component {
             }
         }
     }
+    */
 
     render() {
         return (
@@ -61,7 +63,7 @@ export default class Join extends React.Component {
                             placeholder="################"
                             style={{width: '12em'}}
                             className="font-monospaced"
-                            onKeyPress={(e) => { this.onJoinNetworkKeyPress(e) }}
+                            /*onKeyPress={(e) => { this.onJoinNetworkKeyPress(e) }}*/
                             onChange={(e) => { this.onJoinNetworkChanged(e) }}
                         /></EuiFormRow>
                     </EuiFlexItem>
