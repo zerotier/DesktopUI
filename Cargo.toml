@@ -1,6 +1,6 @@
 [package]
 name = "zerotier_desktop_ui"
-version = "1.8.7"
+version = "1.8.8"
 authors = ["Adam Ierymenko <adam.ierymenko@zerotier.com>"]
 edition = "2018"
 
