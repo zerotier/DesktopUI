@@ -1279,17 +1279,6 @@ fn tray_main() {
                 let auth_url = &(*network).1;
                 let status = (*network).2.as_str();
 
-                if auth_windows.get(nwid).map_or(false, |w| {
-                    if (*w).0 != *auth_url {
-                        kill_process(&mut *(*w).1.lock());
-                        true
-                    } else {
-                        false
-                    }
-                }) {
-                    auth_windows.remove(nwid);
-                }
-
                 let auth_window = auth_windows.get(nwid);
                 if auth_window.is_some() {
                     if status == "AUTHENTICATION_REQUIRED" {
