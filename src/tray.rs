@@ -6,11 +6,11 @@
  * https://www.zerotier.com/
  */
 
+use std::ffi::CString;
 use std::os::raw::{c_char, c_int, c_void};
 use std::pin::Pin;
-use std::sync::Mutex;
-use std::ffi::CString;
 use std::ptr::{null, null_mut};
+use std::sync::Mutex;
 
 #[repr(C)]
 #[derive(Clone)]
@@ -84,7 +84,6 @@ extern "C" {
     fn tray_exit();
 }
 
-
 #[cfg(target_os = "macos")]
 #[link(name = "Cocoa", kind = "framework")]
 extern "C" {
@@ -111,16 +110,22 @@ unsafe extern "C" fn tray_handler_callback(item: *const CTrayMenu) {
     }
 }
 
-const C_DASH: [c_char; 2] = [ 45, 0 ]; // "-"
-const WC_DASH: [u16; 2] = [ 45, 0 ]; // "-" in wchar_t
+const C_DASH: [c_char; 2] = [45, 0]; // "-"
+const WC_DASH: [u16; 2] = [45, 0]; // "-" in wchar_t
 
 impl Tray {
     fn tray_create_c_structs(menu: Vec<TrayMenuItem>) -> Vec<CTrayMenuContainer> {
         let mut v: Vec<CTrayMenuContainer> = Vec::new();
         menu.into_iter().for_each(|mi: TrayMenuItem| {
             match mi {
-                TrayMenuItem::Text { text, checked, disabled, handler } => {
-                    #[cfg(windows)] {
+                TrayMenuItem::Text {
+                    text,
+                    checked,
+                    disabled,
+                    handler,
+                } => {
+                    #[cfg(windows)]
+                    {
                         let mut c_text16: Vec<u16> = text.encode_utf16().collect();
                         c_text16.push(0);
                         let c_text16 = Pin::new(c_text16.into_boxed_slice());
@@ -136,12 +141,14 @@ impl Tray {
                                 disabled: disabled as c_int,
                                 checked: checked as c_int,
                                 cb: tray_handler_callback,
-                                context: handler.map_or(null_mut(), |h| Box::into_raw(Box::new(h)).cast()), // freed in CTrayMenuContainer drop()
+                                context: handler
+                                    .map_or(null_mut(), |h| Box::into_raw(Box::new(h)).cast()), // freed in CTrayMenuContainer drop()
                                 submenu: null(),
-                            }
+                            },
                         });
                     }
-                    #[cfg(not(windows))] {
+                    #[cfg(not(windows))]
+                    {
                         let c_text = Box::pin(CString::new(text.as_str()).unwrap());
                         let c_text_ptr = c_text.as_ptr();
                         v.push(CTrayMenuContainer {
@@ -155,12 +162,13 @@ impl Tray {
                                 disabled: disabled as c_int,
                                 checked: checked as c_int,
                                 cb: tray_handler_callback,
-                                context: handler.map_or(null_mut(), |h| Box::into_raw(Box::new(h)).cast()), // freed in CTrayMenuContainer drop()
+                                context: handler
+                                    .map_or(null_mut(), |h| Box::into_raw(Box::new(h)).cast()), // freed in CTrayMenuContainer drop()
                                 submenu: null(),
-                            }
+                            },
                         });
                     }
-                },
+                }
                 TrayMenuItem::Separator => {
                     v.push(CTrayMenuContainer {
                         c_text: None,
@@ -175,12 +183,17 @@ impl Tray {
                             cb: tray_handler_callback,
                             context: null_mut(),
                             submenu: null(),
-                        }
+                        },
                     });
-                },
-                TrayMenuItem::Submenu { text, checked, items } => {
+                }
+                TrayMenuItem::Submenu {
+                    text,
+                    checked,
+                    items,
+                } => {
                     if !items.is_empty() {
-                        #[cfg(windows)] {
+                        #[cfg(windows)]
+                        {
                             let mut c_text16: Vec<u16> = text.encode_utf16().collect();
                             c_text16.push(0);
                             let c_text16 = Pin::new(c_text16.into_boxed_slice());
@@ -198,10 +211,11 @@ impl Tray {
                                     cb: tray_handler_callback,
                                     context: null_mut(),
                                     submenu: null(),
-                                }
+                                },
                             });
                         }
-                        #[cfg(not(windows))] {
+                        #[cfg(not(windows))]
+                        {
                             let c_text = Box::pin(CString::new(text.as_str()).unwrap());
                             let c_text_ptr: *const c_char = c_text.as_ptr();
                             v.push(CTrayMenuContainer {
@@ -217,7 +231,7 @@ impl Tray {
                                     cb: tray_handler_callback,
                                     context: null_mut(),
                                     submenu: null(),
-                                }
+                                },
                             });
                         }
 
@@ -238,7 +252,7 @@ impl Tray {
                         c.c_items.replace(Pin::new(c_items.into_boxed_slice()));
                         c.c_tray_menu.submenu = c.c_items.as_ref().unwrap().as_ptr();
                     }
-                },
+                }
             }
         });
         v
@@ -274,7 +288,7 @@ impl Tray {
                 current: Mutex::new(menu),
                 c_current: Mutex::new(c_menu_items),
                 icon_path: Mutex::new(c_icon_path),
-                tray_initialized: true
+                tray_initialized: true,
             }
         } else {
             panic!("tray_init() failed, unable to create system tray!");
@@ -308,16 +322,16 @@ impl Tray {
 
     #[inline(always)]
     pub fn poll(&self) -> bool {
-        unsafe {
-            tray_loop(1) == 0
-        }
+        unsafe { tray_loop(1) == 0 }
     }
 }
 
 impl Drop for Tray {
     fn drop(&mut self) {
         if self.tray_initialized {
-            unsafe { tray_exit(); }
+            unsafe {
+                tray_exit();
+            }
         }
     }
 }
