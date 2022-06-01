@@ -10,8 +10,8 @@ rustflags = ["-C", "target-feature=+crt-static"]
 [target.i686-pc-windows-msvc]
 rustflags = ["-C", "target-feature=+crt-static"]
 
-[source.crates-io]
-replace-with = "vendored-sources"
+#[source.crates-io]
+#replace-with = "vendored-sources"
 
-[source.vendored-sources]
-directory = "vendor"
+#[source.vendored-sources]
+#directory = "vendor"

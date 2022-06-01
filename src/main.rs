@@ -18,31 +18,25 @@ use std::ffi::CString;
 use std::io::{Read, Write};
 #[allow(unused)]
 use std::os::raw::{c_char, c_int, c_uint};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 #[allow(unused)]
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::*;
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
 
 use parking_lot::Mutex;
 use serde_json::Value;
-#[cfg(target_os = "macos")]
-use wry::application::platform::macos::{ActivationPolicy, EventLoopExtMacOS};
 
 use crate::serviceclient::*;
 use crate::tray::*;
 
-mod serviceclient;
-mod tray;
-
-/// The string in the HTML blob to replace with the right CSS for this platform and light/dark mode.
-/// It's a bit weird so web app bundlers don't optimize it out.
-const CSS_PLACEHOLDER: &'static str = ".XXXthis_is_replaced_by_css_in_the_rust_codeXXX{border:0}";
+pub mod libui;
+pub mod serviceclient;
+pub mod tray;
 
 const MAIN_WINDOW_WIDTH: i32 = 1280;
 const MAIN_WINDOW_HEIGHT: i32 = 700;
-const WEB_UI_BLOB_PATH: &'static str = "zt_desktop_ui.html";
 
 pub(crate) static mut APPLICATION_PATH: String = String::new();
 pub(crate) static mut APPLICATION_HOME: String = String::new();
@@ -88,7 +82,6 @@ pub(crate) const GLOBAL_SERVICE_HOME_V1: &'static str = "/var/lib/zerotier-one";
 
 #[cfg(windows)]
 extern "C" {
-    pub fn c_windows_is_dark_theme() -> c_int;
     pub fn c_windows_post_to_clipboard(data: *const c_char);
     pub fn c_windows_get_from_clipboard(buf: *mut c_char) -> c_uint;
 }
@@ -103,6 +96,7 @@ extern "C" {
     pub fn c_lock_down_file(path: *const c_char, is_dir: c_int);
 }
 
+#[allow(unused)]
 #[cfg(target_os = "macos")]
 fn set_thread_to_background_priority() {
     unsafe {
@@ -110,9 +104,11 @@ fn set_thread_to_background_priority() {
     }
 }
 
+#[allow(unused)]
 #[cfg(not(target_os = "macos"))]
 fn set_thread_to_background_priority() {}
 
+#[allow(unused)]
 #[cfg(target_os = "macos")]
 fn set_thread_to_foreground_priority() {
     unsafe {
@@ -120,6 +116,7 @@ fn set_thread_to_foreground_priority() {
     }
 }
 
+#[allow(unused)]
 #[cfg(not(target_os = "macos"))]
 fn set_thread_to_foreground_priority() {}
 
@@ -204,32 +201,6 @@ fn refresh_windows_start_on_login() {
     unsafe {
         START_ON_LOGIN = enabled;
     }
-}
-
-/*******************************************************************************************************************/
-/* Check if we are in dark mode */
-
-#[cfg(target_os = "macos")]
-fn is_dark_mode() -> bool {
-    Command::new("/usr/bin/defaults")
-        .arg("read")
-        .arg("-g")
-        .arg("AppleInterfaceStyle")
-        .output()
-        .map_or(false, |mode| {
-            String::from_utf8(mode.stdout.to_ascii_lowercase())
-                .map_or(false, |mode| mode.contains("dark"))
-        })
-}
-
-#[cfg(all(unix, not(target_os = "macos")))]
-fn is_dark_mode() -> bool {
-    false
-}
-
-#[cfg(windows)]
-fn is_dark_mode() -> bool {
-    unsafe { c_windows_is_dark_theme() != 0 }
 }
 
 /*******************************************************************************************************************/
@@ -326,50 +297,6 @@ fn read_from_clipboard() -> String {
 }
 
 /*******************************************************************************************************************/
-/* Get the web UI HTML/CSS/JS blob for the right color scheme */
-
-#[cfg(target_os = "macos")]
-#[inline(always)]
-fn get_web_ui_blob(dark: bool) -> String {
-    let css = if dark { "dark.css" } else { "light.css" };
-    let resources_path = std::env::current_exe()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("Resources");
-    std::fs::read_to_string(resources_path.join("ui.html")).map_or_else(|_| {
-        "<html><body>Error: unable to load ui.html from application bundle Resources.<script>window.zt_ui_render = function(window_type) {}; setTimeout(function() { external.invoke('{ \"cmd\": \"ready\" }'); }, 1);</script></body></html>".into()
-    }, |ui| {
-        ui.replace(CSS_PLACEHOLDER, std::fs::read_to_string(resources_path.join(css)).unwrap_or(String::new()).as_str())
-    })
-}
-
-#[cfg(not(target_os = "macos"))]
-#[inline(always)]
-fn get_web_ui_blob(dark: bool) -> String {
-    let css = if dark {
-        include_str!("../ui/dist/dark.css")
-    } else {
-        include_str!("../ui/dist/light.css")
-    };
-    include_str!("../ui/dist/index.html").replace(CSS_PLACEHOLDER, css)
-}
-
-fn write_web_ui_blob() {
-    let ui_str = get_web_ui_blob(is_dark_mode());
-    let ui = ui_str.as_bytes();
-    let ui_path = std::env::temp_dir().join(WEB_UI_BLOB_PATH);
-    let ui_md = std::fs::metadata(&ui_path);
-    if ui_md.map_or(true, |ui_md| {
-        !ui_md.is_file() || ui_md.len() != (ui.len() as u64)
-    }) {
-        std::fs::write(ui_path, ui).expect("unable to write web UI HTML");
-    }
-}
-
-/*******************************************************************************************************************/
 
 /// Start the service client background thread, returning the client and a flag set when the data changes.
 fn start_client(
@@ -402,339 +329,6 @@ fn start_client(
     (client, dirty_flag)
 }
 
-/// Returns true if a process has exited, and also replaces the supplied Option with None.
-fn did_process_exit(w: &mut Option<Child>) -> bool {
-    if w.is_some() {
-        let res = w.as_mut().unwrap().try_wait();
-        if res.is_ok() && res.ok().unwrap().is_some() {
-            let _ = w.take();
-            true
-        } else {
-            false
-        }
-    } else {
-        true
-    }
-}
-
-/// Kill a subproces and wait for zombie to be collected (on Unix systems).
-fn kill_process(w: &mut Option<Child>) {
-    did_process_exit(w);
-    w.as_mut().map(|w| {
-        let _ = w.kill();
-        let _ = w.wait();
-    });
-}
-
-/// Create a background thread that listens for 'r' from STDIN and sets a boolean flag if received.
-fn create_raise_window_listener_thread() -> Arc<AtomicBool> {
-    let raise_window = Arc::new(AtomicBool::new(false));
-    let raise_window2 = raise_window.clone();
-    let _ = std::thread::spawn(move || {
-        set_thread_to_background_priority();
-        loop {
-            let mut buf: [u8; 1] = [0_u8];
-            let _ = std::io::stdin().read_exact(&mut buf);
-            if buf[0] == ('r' as u8) {
-                raise_window2.store(true, std::sync::atomic::Ordering::Relaxed);
-            }
-        }
-    });
-    raise_window
-}
-
-/// Opens SSO authentication window, which in turn runs sso_auth_window_main().
-fn open_sso_auth_window_subprocess(w: &mut Option<Child>, width: i32, height: i32, param: &[&str]) {
-    if did_process_exit(w) {
-        println!("did_process_exit: true");
-    } else {
-        println!("did_process_exit: false");
-    }
-    if w.is_none() {
-        let ch = Command::new(std::env::current_exe().unwrap())
-            .arg("auth")
-            .arg(width.to_string())
-            .arg(height.to_string())
-            .args(param)
-            .stdin(Stdio::piped())
-            .spawn();
-        if ch.is_ok() {
-            let _ = w.replace(ch.unwrap());
-        }
-    }
-}
-
-/// Common or OS-specific setup of the Wry/Tauri webview window.
-fn set_up_window(window: &wry::application::window::Window) {
-    #[cfg(target_os = "macos")]
-    {
-        window.set_menu(Some({
-            let mut file = wry::application::menu::MenuBar::new();
-            file.add_native_item(wry::application::menu::MenuItem::CloseWindow);
-            let mut edit = wry::application::menu::MenuBar::new();
-            edit.add_native_item(wry::application::menu::MenuItem::Cut);
-            edit.add_native_item(wry::application::menu::MenuItem::Copy);
-            edit.add_native_item(wry::application::menu::MenuItem::Paste);
-            edit.add_native_item(wry::application::menu::MenuItem::SelectAll);
-            let mut menu = wry::application::menu::MenuBar::new();
-            menu.add_submenu("File", true, file);
-            menu.add_submenu("Edit", true, edit);
-            menu
-        }));
-    }
-}
-
-fn get_web_context() -> wry::webview::WebContext {
-    #[allow(unused_mut)]
-    #[allow(unused)]
-    let mut web_context_path: Option<PathBuf> = None;
-    #[cfg(windows)]
-    {
-        web_context_path = Some(std::env::temp_dir().join(format!(
-            "zt_desktop_ui_{}",
-            std::env::var("USERNAME").unwrap_or(String::new())
-        )));
-    }
-    wry::webview::WebContext::new(web_context_path)
-}
-
-/// Main function for SSO authentication webview popup windows.
-#[allow(unused_mut)]
-fn sso_auth_window_main(args: &Vec<String>) {
-    let mut event_loop = wry::application::event_loop::EventLoop::new();
-    let window = wry::application::window::WindowBuilder::new()
-        .with_visible(true)
-        .with_title(format!("Remote Network Login: {}", args[4].as_str()))
-        .with_inner_size(wry::application::dpi::LogicalSize::new(
-            i32::from_str_radix(args[2].as_str(), 10).unwrap_or(1024),
-            i32::from_str_radix(args[3].as_str(), 10).unwrap_or(768),
-        ))
-        .with_resizable(true)
-        .build(&event_loop)
-        .unwrap();
-    set_up_window(&window);
-
-    let mut web_context = get_web_context();
-    let webview = wry::webview::WebViewBuilder::new(window)
-        .unwrap()
-        .with_web_context(&mut web_context)
-        .with_url(args[5].as_str())
-        .unwrap()
-        .build()
-        .unwrap();
-    webview.window().set_focus();
-    set_thread_to_foreground_priority();
-
-    event_loop.run(move |event, _, control_flow| {
-        *control_flow = wry::application::event_loop::ControlFlow::WaitUntil(
-            Instant::now() + Duration::from_secs(1),
-        );
-        match event {
-            wry::application::event::Event::WindowEvent {
-                event: wry::application::event::WindowEvent::CloseRequested,
-                ..
-            } => *control_flow = wry::application::event_loop::ControlFlow::Exit,
-            _ => {}
-        }
-    });
-}
-
-/// Opens a UI window subprocess, which in turn runs control_panel_window_main().
-fn open_ui_window_subprocess(w: &mut Option<Child>, ui_mode: &str, width: i32, height: i32) {
-    did_process_exit(w);
-    if w.is_none() {
-        let ch = Command::new(std::env::current_exe().unwrap())
-            .arg("window")
-            .arg(ui_mode)
-            .arg(width.to_string())
-            .arg(height.to_string())
-            .stdin(Stdio::piped())
-            .spawn();
-        if ch.is_ok() {
-            let _ = w.replace(ch.unwrap());
-        }
-    } else {
-        // Sending 'r' causes subprocess to raise the window at the first opportunity.
-        let _ = w
-            .as_mut()
-            .unwrap()
-            .stdin
-            .as_mut()
-            .unwrap()
-            .write_all(&[b'r']);
-    }
-}
-
-/// Main function for control panel webview windows.
-#[allow(unused_mut)]
-fn control_panel_window_main(args: &Vec<String>) {
-    /*
-     * Web UI subprocess
-     *
-     * ZT app argument 'window' runs the GUI app in webview window mode.
-     * The argument itself is passed on to the JS code to determine what
-     * UI mode to enter.
-     *
-     * Once the JS has initialized, it sends back a message with command
-     * 'ready'. This shows the window and calls a 'ready' command.
-     *
-     * The service's JSON API is not queried directly in the web UI thread
-     * to prevent UI freezes. Instead it posts from a queue and refreshes
-     * continuously from a background thread.
-     *
-     * Webview data flow to/from Rust must be done via callbacks. For
-     * example the 'get' command returns its results via a callback called
-     * 'zt_get_callback' defined in JS code. The 'post' command enqueues
-     * data to be posted at the next refresh.
-     */
-
-    set_thread_to_foreground_priority();
-    write_web_ui_blob();
-
-    let (client, dirty_flag) = start_client(vec!["status", "network", "peer"], 100, 5);
-    let raise_window = create_raise_window_listener_thread();
-    raise_window.store(true, std::sync::atomic::Ordering::Relaxed);
-
-    let mut event_loop = wry::application::event_loop::EventLoop::new();
-    let window = wry::application::window::WindowBuilder::new()
-        .with_title("ZeroTier Control Panel")
-        .with_inner_size(wry::application::dpi::LogicalSize::new(
-            i32::from_str_radix(args[3].as_str(), 10).unwrap_or(1024),
-            i32::from_str_radix(args[4].as_str(), 10).unwrap_or(768),
-        ))
-        .with_resizable(true)
-        .with_visible(true)
-        .build(&event_loop)
-        .unwrap();
-    set_up_window(&window);
-
-    let ui_mode = args[2].clone();
-    let ui_client = client.clone();
-
-    let web_ui_blob_path = std::env::temp_dir().join(WEB_UI_BLOB_PATH);
-    //println!("{}", web_ui_blob_path.to_str().unwrap());
-
-    let mut web_context = get_web_context();
-    let webview = wry::webview::WebViewBuilder::new(window)
-        .unwrap()
-        .with_web_context(&mut web_context)
-        .with_url(format!("file:{}", web_ui_blob_path.to_str().unwrap()).as_str())
-        .unwrap()
-        .with_rpc_handler(
-            move |window: &wry::application::window::Window,
-                  req: wry::webview::RpcRequest|
-                  -> Option<wry::webview::RpcResponse> {
-                let arg = req.params.map_or(Value::Null, |p| {
-                    p.as_array().map_or(Value::Null, |p| {
-                        if p.is_empty() {
-                            Value::Null
-                        } else {
-                            p.first().unwrap().clone()
-                        }
-                    })
-                });
-                match req.method.as_str() {
-                    "ready" => Some(wry::webview::RpcResponse::new_result(
-                        req.id.clone(),
-                        Some(Value::from(ui_mode.as_str())),
-                    )),
-                    "log" => {
-                        println!("> {}", arg.to_string());
-                        None
-                    }
-                    "post" => {
-                        let _ = arg.as_array().map(|p| {
-                            if p.len() == 2 {
-                                let path = p.get(0).map_or("", |s| s.as_str().unwrap_or(""));
-                                let data = p.get(1).map_or("", |s| s.as_str().unwrap_or(""));
-                                if !path.is_empty() && !data.is_empty() {
-                                    ui_client
-                                        .lock()
-                                        .enqueue_post(path.to_string(), data.to_string());
-                                }
-                            }
-                        });
-                        None
-                    }
-                    "delete" => {
-                        arg.as_str()
-                            .map(|path| ui_client.lock().enqueue_delete(path.to_string()));
-                        None
-                    }
-                    "remember_network" => {
-                        let _ = arg.as_array().map(|p| {
-                            if p.len() == 3 {
-                                let nwid = p.get(0).map_or("", |s| s.as_str().unwrap_or(""));
-                                let name = p.get(1).map_or("", |s| s.as_str().unwrap_or(""));
-                                let settings = p.get(2).map_or("", |s| s.as_str().unwrap_or(""));
-                                ui_client.lock().remember_network(
-                                    nwid.to_string(),
-                                    name.to_string(),
-                                    settings.to_string(),
-                                );
-                            }
-                        });
-                        None
-                    }
-                    "forget_network" => {
-                        arg.as_str()
-                            .map(|path| ui_client.lock().forget_network(&path.to_string()));
-                        None
-                    }
-                    "copy_to_clipboard" => {
-                        arg.as_str().map(|path| copy_to_clipboard(path));
-                        None
-                    }
-                    "paste_from_clipboard" => Some(wry::webview::RpcResponse::new_result(
-                        req.id.clone(),
-                        Some(Value::from(read_from_clipboard())),
-                    )),
-                    "raise" => {
-                        window.set_visible(true);
-                        window.set_focus();
-                        None
-                    }
-                    "poll" => {
-                        if dirty_flag.swap(false, std::sync::atomic::Ordering::Relaxed) {
-                            Some(wry::webview::RpcResponse::new_result(
-                                req.id.clone(),
-                                Some(Value::from(ui_client.lock().get_all_json())),
-                            ))
-                        } else {
-                            Some(wry::webview::RpcResponse::new_result(
-                                req.id.clone(),
-                                Some(Value::Null),
-                            ))
-                        }
-                    }
-                    "quit" => {
-                        std::process::exit(0);
-                    }
-                    _ => None,
-                }
-            },
-        )
-        .build()
-        .unwrap();
-
-    event_loop.run(move |event, _, control_flow| {
-        *control_flow = wry::application::event_loop::ControlFlow::WaitUntil(
-            Instant::now() + Duration::from_secs(1),
-        );
-        match event {
-            wry::application::event::Event::WindowEvent {
-                event: wry::application::event::WindowEvent::CloseRequested,
-                ..
-            } => *control_flow = wry::application::event_loop::ControlFlow::Exit,
-            _ => {}
-        }
-        if raise_window.swap(false, std::sync::atomic::Ordering::Relaxed) {
-            webview.window().set_visible(true);
-            webview.window().set_focus();
-        }
-    });
-}
-
 #[cfg(windows)]
 fn notify(text: &str) {
     let ico: String = tray_icon_name();
@@ -753,7 +347,6 @@ fn notify(text: &str) {
         .show();
 }
 
-/// System tray main function.
 fn tray_main() {
     /*
      * System tray process
@@ -786,11 +379,6 @@ fn tray_main() {
 
     let (client, dirty_flag) = start_client(vec!["status", "network"], 250, 10);
 
-    let main_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
-    let about_window: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
-    let auth_windows: Arc<Mutex<HashMap<String, (String, Mutex<Option<Child>>)>>> =
-        Arc::new(Mutex::new(HashMap::new()));
-
     // This closure builds a new menu for display in the app icon.
     let refresh = || {
         let mut menu: Vec<TrayMenuItem> = Vec::new();
@@ -808,21 +396,6 @@ fn tray_main() {
             });
 
             menu.push(TrayMenuItem::Separator);
-
-            let main_window2 = main_window.clone();
-            menu.push(TrayMenuItem::Text {
-                text: "Open Control Panel... ".into(),
-                checked: false,
-                disabled: false,
-                handler: Some(Box::new(move || {
-                    open_ui_window_subprocess(
-                        &mut *main_window2.lock(),
-                        "Main",
-                        MAIN_WINDOW_WIDTH,
-                        MAIN_WINDOW_HEIGHT,
-                    )
-                })),
-            });
 
             let networks = client.lock().networks();
             if !networks.is_empty() {
@@ -1222,14 +795,11 @@ fn tray_main() {
                 });
             }
 
-            let about_window2 = about_window.clone();
             menu.push(TrayMenuItem::Text {
                 text: "About ".into(),
                 checked: false,
                 disabled: false,
-                handler: Some(Box::new(move || {
-                    open_ui_window_subprocess(&mut *about_window2.lock(), "About", 800, 600)
-                })),
+                handler: Some(Box::new(move || todo!())),
             });
         } else {
             menu.push(TrayMenuItem::Text {
@@ -1255,6 +825,7 @@ fn tray_main() {
 
     // Start a background thread to supervise windows and reap dead processes. This also
     // handles launching SSO login sessions when needed.
+    /*
     let client2 = client.clone();
     let auth_windows2 = auth_windows.clone();
     let main_window2 = main_window.clone();
@@ -1332,6 +903,7 @@ fn tray_main() {
             }
         }
     });
+    */
 
     let tray = Tray::init(icon_name.as_ref(), refresh());
     loop {
@@ -1351,13 +923,6 @@ fn tray_main() {
         if !tray.poll() || exit_flag.load(std::sync::atomic::Ordering::Relaxed) {
             break;
         }
-    }
-
-    for w in [&main_window, &about_window].iter() {
-        kill_process(&mut *w.lock());
-    }
-    for w in auth_windows.lock().iter() {
-        kill_process(&mut *(*w.1).1.lock());
     }
 }
 
@@ -1506,24 +1071,6 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() >= 2 {
         match args[1].as_str() {
-            "window" => {
-                // invoked to open webview GUI windows
-                if args.len() >= 3 {
-                    control_panel_window_main(&args);
-                } else {
-                    println!(
-                        "FATAL: window requires arguments: ui_mode [width hint] [height hint]"
-                    );
-                }
-            }
-            "auth" => {
-                // invoked to open a window to an SSO login endpoint
-                if args.len() >= 5 {
-                    sso_auth_window_main(&args);
-                } else {
-                    println!("FATAL: window requires arguments: ui_mode [width hint] [height hint] [url]");
-                }
-            }
             "copy_authtoken" => {
                 // invoked with elevated permissions to get the auth token and copy it locally
                 if args.len() < 3 {
@@ -1536,7 +1083,7 @@ fn main() {
             _ => println!("FATAL: unrecognized mode: {}", args[1]),
         }
     } else {
-        write_web_ui_blob();
+        drop(args);
         tray_main();
     }
     std::process::exit(0);

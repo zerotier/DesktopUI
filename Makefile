@@ -47,14 +47,8 @@ mac-assemble-app: FORCE
 	cp -av mac-app-template/ZeroTier.app .
 	mkdir -p ZeroTier.app/Contents/MacOS
 	cp -f target/$(CARGO_TARGET_DIR)/zerotier_desktop_ui ZeroTier.app/Contents/MacOS/ZeroTier
-	cp -f ui/dist/index.html ZeroTier.app/Contents/Resources/ui.html
-	cp -f ui/dist/dark.css ZeroTier.app/Contents/Resources/dark.css
-	cp -f ui/dist/light.css ZeroTier.app/Contents/Resources/light.css
 	xattr -cr ZeroTier.app
 	$(CODESIGN) -f --options=runtime -s $(CODESIGN_APP_CERT) ZeroTier.app
-
-ui: FORCE
-	cd ui ; yarn build
 
 ifeq ($(OS),Windows_NT)
 clean: FORCE
