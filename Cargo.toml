@@ -1,8 +1,8 @@
 [package]
 name = "zerotier_desktop_ui"
-version = "1.8.8"
+version = "1.10.0"
 authors = ["Adam Ierymenko <adam.ierymenko@zerotier.com>"]
-edition = "2018"
+edition = "2021"
 
 [profile.release]
 opt-level = 'z'

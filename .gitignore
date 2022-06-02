@@ -1,12 +1,9 @@
 .DS*
 .Icon*
 /target
-/ui/node_modules
-/ui/.cache
-/ui/.yarn
-/ui/.parcel-cache
-/ui/*.log
+/src/libui.rs
 /ZeroTier.app
+/libui-ng/build
 *.o
 *.a
 *.dSym
@@ -14,5 +11,5 @@
 *.so
 *.lib
 *.exe
-.vscode/
 *.deb
+.vscode/

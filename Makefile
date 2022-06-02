@@ -1,10 +1,13 @@
 ifeq ($(OS),Windows_NT)
 	CC=gcc
 	MAINTARGET=windows
+	LIBUI_CFLAGS="-O"
 else ifeq ($(shell uname -s),Linux)
 	MAINTARGET=linux
+	LIBUI_CFLAGS="-O"
 else ifeq ($(shell uname -s),Darwin)
 	MAINTARGET=mac
+	LIBUI_CFLAGS="-O -arch x86_64 -arch arm64"
 endif
 
 CODESIGN=echo
@@ -21,7 +24,15 @@ endif
 
 all:    $(MAINTARGET)
 
-windows: FORCE
+bindgen:	FORCE
+	bindgen libui-ng/ui.h >src/libui.rs
+
+libui:	FORCE
+	rm -rf libui-ng/build
+	cd libui-ng ; CFLAGS=$(LIBUI_CFLAGS) meson setup build --buildtype=release --default-library=static --backend=ninja
+	cd libui-ng ; ninja -C build
+
+windows: bindgen libui
 	make -C tray clean
 	make -C tray zt_lib
 	cargo build $(CARGO_FLAGS) --target=x86_64-pc-windows-msvc
@@ -29,12 +40,12 @@ windows: FORCE
 	make -C tray zt_lib WIN_32BIT=1
 	set "RUSTFLAGS=-C link-args=/SAFESEH:NO" && cargo build $(CARGO_FLAGS) --target=i686-pc-windows-msvc
 
-linux: FORCE
+linux: bindgen libui
 	cd tray ; make clean
 	cd tray ; make zt_lib
 	cargo build $(CARGO_FLAGS)
 
-mac: FORCE
+mac: bindgen libui
 	cd tray ; make clean
 	cd tray ; make -j2 zt_lib
 	MACOSX_DEPLOYMENT_TARGET=10.13 cargo build $(CARGO_FLAGS) --target=aarch64-apple-darwin
@@ -54,10 +65,12 @@ ifeq ($(OS),Windows_NT)
 clean: FORCE
 	-make -C tray clean
 	-rmdir /Q /S target
+	-rmdir /Q /S libui-ng/build
 else
 clean: FORCE
 	rm -f tray/*.o tray/*.a tray/example tray/example.exe
 	rm -rf ZeroTier.app target
+	rm -rf libui-ng/build
 endif
 
 ubuntudeb_64:	linux

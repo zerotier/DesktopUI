@@ -31,12 +31,11 @@ use serde_json::Value;
 use crate::serviceclient::*;
 use crate::tray::*;
 
+pub mod about;
+pub mod join;
 pub mod libui;
 pub mod serviceclient;
 pub mod tray;
-
-const MAIN_WINDOW_WIDTH: i32 = 1280;
-const MAIN_WINDOW_HEIGHT: i32 = 700;
 
 pub(crate) static mut APPLICATION_PATH: String = String::new();
 pub(crate) static mut APPLICATION_HOME: String = String::new();
@@ -1071,13 +1070,14 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() >= 2 {
         match args[1].as_str() {
+            "about" => about::about_main(),
+            "join_prompt" => join::join_main(),
             "copy_authtoken" => {
                 // invoked with elevated permissions to get the auth token and copy it locally
                 if args.len() < 3 {
                     println!("FATAL: copy_authtoken requires additional argument");
                     std::process::exit(1);
                 }
-
                 let _ = serviceclient::get_auth_token_and_port(false, &Ok(args[2].clone()));
             }
             _ => println!("FATAL: unrecognized mode: {}", args[1]),

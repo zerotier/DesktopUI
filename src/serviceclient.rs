@@ -7,7 +7,6 @@
  */
 
 use std::cell::Cell;
-use std::cmp;
 use std::collections::{HashMap, LinkedList};
 use std::env::VarError;
 use std::ffi::CString;

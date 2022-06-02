@@ -8,5 +8,5 @@ fn main() {
         d
     );
     println!("cargo:rustc-link-lib=static=zt_desktop_tray");
-    println!("cargo:rustc-link-lib=dylib=ui");
+    println!("cargo:rustc-link-lib=static=ui");
 }
