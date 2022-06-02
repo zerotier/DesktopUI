@@ -1,7 +1,6 @@
 ifeq ($(OS),Windows_NT)
 	CC=gcc
 	MAINTARGET=windows
-	LIBUI_CFLAGS="-O"
 else ifeq ($(shell uname -s),Linux)
 	MAINTARGET=linux
 	LIBUI_CFLAGS="-O"
@@ -32,10 +31,22 @@ libui:	FORCE
 	cd libui-ng ; CFLAGS=$(LIBUI_CFLAGS) meson setup build --buildtype=release --default-library=static --backend=ninja
 	cd libui-ng ; ninja -C build
 
-windows: bindgen libui
+libui_windows_64:	FORCE
+	-rmdir /Q /S libui-ng\build
+	cd libui-ng && set "CFLAGS=-O -m64" && meson setup build --buildtype=release --default-library=static --backend=ninja
+	cd libui-ng && ninja -C build
+
+libui_windows_32:	FORCE
+	-rmdir /Q /S libui-ng\build
+	cd libui-ng && set "CFLAGS=-O -m32" && meson setup build --buildtype=release --default-library=static --backend=ninja
+	cd libui-ng && ninja -C build
+
+windows: bindgen
+	make libui_windows_64
 	make -C tray clean
 	make -C tray zt_lib
 	cargo build $(CARGO_FLAGS) --target=x86_64-pc-windows-msvc
+	make libui_windows_32
 	make -C tray clean
 	make -C tray zt_lib WIN_32BIT=1
 	set "RUSTFLAGS=-C link-args=/SAFESEH:NO" && cargo build $(CARGO_FLAGS) --target=i686-pc-windows-msvc
@@ -65,7 +76,7 @@ ifeq ($(OS),Windows_NT)
 clean: FORCE
 	-make -C tray clean
 	-rmdir /Q /S target
-	-rmdir /Q /S libui-ng/build
+	-rmdir /Q /S libui-ng\build
 else
 clean: FORCE
 	rm -f tray/*.o tray/*.a tray/example tray/example.exe
