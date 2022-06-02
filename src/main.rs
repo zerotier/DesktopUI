@@ -378,6 +378,7 @@ fn tray_main() {
 
     let (client, dirty_flag) = start_client(vec!["status", "network"], 250, 10);
     let children: Arc<Mutex<Vec<Child>>> = Arc::new(Mutex::new(Vec::new()));
+    let joining: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
 
     // This closure builds a new menu for display in the app icon.
     let refresh = || {
@@ -396,12 +397,14 @@ fn tray_main() {
             });
 
             let client2 = client.clone();
+            let joining2 = joining.clone();
             menu.push(TrayMenuItem::Text {
                 text: "Join New Network...".into(),
                 checked: false,
                 disabled: false,
                 handler: Some(Box::new(move || {
                     let client3 = client2.clone();
+                    let joining3 = joining2.clone();
                     std::thread::spawn(move || {
                         let ch = Command::new(std::env::current_exe().unwrap())
                             .arg("join_prompt")
@@ -417,6 +420,7 @@ fn tray_main() {
                                     client3
                                         .lock()
                                         .enqueue_post(format!("/network/{}", nwid), "{}".into());
+                                    joining3.lock().push(nwid.into());
                                 }
                             }
                         }
@@ -458,6 +462,7 @@ fn tray_main() {
                     let mut network_menu: Vec<TrayMenuItem> = Vec::new();
 
                     let nwid = (*network).0.clone();
+                    joining.lock().retain(|j| !j.eq(nwid.as_str()));
                     network_menu.push(TrayMenuItem::Text {
                         text: format!("Network ID:\t  {}", (*network).0),
                         checked: false,
@@ -709,6 +714,15 @@ fn tray_main() {
                         items: network_menu,
                     });
                 }
+            }
+
+            for j in joining.lock().iter() {
+                menu.push(TrayMenuItem::Text {
+                    text: j.clone(),
+                    checked: false,
+                    disabled: true,
+                    handler: None,
+                });
             }
 
             menu.push(TrayMenuItem::Separator);
