@@ -19,8 +19,8 @@ use std::io::{Read, Write};
 #[allow(unused)]
 use std::os::raw::{c_char, c_int, c_uint};
 use std::path::Path;
-#[allow(unused)]
 use std::process::{Child, Command, Stdio};
+#[allow(unused)]
 use std::sync::atomic::*;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -377,6 +377,7 @@ fn tray_main() {
     let exit_flag = Arc::new(AtomicBool::new(false));
 
     let (client, dirty_flag) = start_client(vec!["status", "network"], 250, 10);
+    let children: Arc<Mutex<Vec<Child>>> = Arc::new(Mutex::new(Vec::new()));
 
     // This closure builds a new menu for display in the app icon.
     let refresh = || {
@@ -794,11 +795,19 @@ fn tray_main() {
                 });
             }
 
+            let children2 = children.clone();
             menu.push(TrayMenuItem::Text {
                 text: "About ".into(),
                 checked: false,
                 disabled: false,
-                handler: Some(Box::new(move || todo!())),
+                handler: Some(Box::new(move || {
+                    let ch = Command::new(std::env::current_exe().unwrap())
+                        .arg("about")
+                        .spawn();
+                    if ch.is_ok() {
+                        children2.lock().push(ch.unwrap());
+                    }
+                })),
             });
         } else {
             menu.push(TrayMenuItem::Text {
@@ -906,6 +915,9 @@ fn tray_main() {
 
     let tray = Tray::init(icon_name.as_ref(), refresh());
     loop {
+        // Reap subprocesses if finished.
+        children.lock().retain_mut(|c| !c.try_wait().is_ok());
+
         // Refresh menu if data has changed.
         if dirty_flag.swap(false, std::sync::atomic::Ordering::Relaxed) {
             let new_icon = tray_icon_name();
@@ -923,7 +935,14 @@ fn tray_main() {
             break;
         }
     }
+
+    for mut c in children.lock().drain(..) {
+        let _ = c.kill();
+        let _ = c.wait();
+    }
 }
+
+/*******************************************************************************************************************/
 
 fn main() {
     #[cfg(target_os = "macos")]
