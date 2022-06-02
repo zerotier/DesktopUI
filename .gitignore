@@ -1,5 +1,7 @@
 .DS*
 .Icon*
+/.idea
+/.fpm
 /target
 /src/libui.rs
 /ZeroTier.app
