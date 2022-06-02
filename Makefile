@@ -23,9 +23,6 @@ endif
 
 all:    $(MAINTARGET)
 
-bindgen:	FORCE
-	bindgen libui-ng/ui.h >src/libui.rs
-
 libui:	FORCE
 	rm -rf libui-ng/build
 	cd libui-ng ; CFLAGS=$(LIBUI_CFLAGS) meson setup build --buildtype=release --default-library=static --backend=ninja
@@ -41,7 +38,7 @@ libui_windows_32:	FORCE
 	cd libui-ng && set "CFLAGS=-O -m32" && meson setup build --buildtype=release --default-library=static --backend=ninja
 	cd libui-ng && ninja -C build
 
-windows: bindgen
+windows:
 	make libui_windows_64
 	make -C tray clean
 	make -C tray zt_lib
@@ -51,12 +48,12 @@ windows: bindgen
 	make -C tray zt_lib WIN_32BIT=1
 	set "RUSTFLAGS=-C link-args=/SAFESEH:NO" && cargo build $(CARGO_FLAGS) --target=i686-pc-windows-msvc
 
-linux: bindgen libui
+linux: libui
 	cd tray ; make clean
 	cd tray ; make zt_lib
 	cargo build $(CARGO_FLAGS)
 
-mac: bindgen libui
+mac: libui
 	cd tray ; make clean
 	cd tray ; make -j2 zt_lib
 	MACOSX_DEPLOYMENT_TARGET=10.13 cargo build $(CARGO_FLAGS) --target=aarch64-apple-darwin
@@ -71,6 +68,11 @@ mac-assemble-app: FORCE
 	cp -f target/$(CARGO_TARGET_DIR)/zerotier_desktop_ui ZeroTier.app/Contents/MacOS/ZeroTier
 	xattr -cr ZeroTier.app
 	$(CODESIGN) -f --options=runtime -s $(CODESIGN_APP_CERT) ZeroTier.app
+
+# This doesn't need to be run every time, was just used to build the initial libui.rs version.
+# The result seems to be portable across the targeted platforms so we just check it in.
+bindgen:	FORCE
+	bindgen --no-layout-tests --size_t-is-usize --allowlist-function 'ui.*' --allowlist-var 'ui.*' --allowlist-type 'ui.*' libui-ng/ui.h >src/libui.rs
 
 ifeq ($(OS),Windows_NT)
 clean: FORCE

@@ -2,7 +2,6 @@
 .Icon*
 /.idea
 /target
-/src/libui.rs
 /ZeroTier.app
 /libui-ng/build
 *.o
