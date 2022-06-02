@@ -6,7 +6,7 @@ use std::ptr::null_mut;
 use crate::libui;
 
 const WINDOW_SIZE_X: c_int = 500;
-const WINDOW_SIZE_Y: c_int = 300;
+const WINDOW_SIZE_Y: c_int = 200;
 
 const ABOUT: &'static str = "ZeroTier Desktop UI
 

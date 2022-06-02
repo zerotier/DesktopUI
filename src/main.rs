@@ -395,6 +395,35 @@ fn tray_main() {
                 })),
             });
 
+            let client2 = client.clone();
+            menu.push(TrayMenuItem::Text {
+                text: "Join New Network...".into(),
+                checked: false,
+                disabled: false,
+                handler: Some(Box::new(move || {
+                    let client3 = client2.clone();
+                    std::thread::spawn(move || {
+                        let ch = Command::new(std::env::current_exe().unwrap())
+                            .arg("join_prompt")
+                            .stdout(Stdio::piped())
+                            .output();
+                        if ch.is_ok() {
+                            let ch = ch.unwrap();
+                            if let Some((_, nwid)) =
+                                String::from_utf8_lossy(ch.stdout.as_slice()).split_once("!!!JOIN")
+                            {
+                                if nwid.len() >= 16 {
+                                    let (nwid, _) = nwid.split_at(crate::join::NETWORK_ID_LEN);
+                                    client3
+                                        .lock()
+                                        .enqueue_post(format!("/network/{}", nwid), "{}".into());
+                                }
+                            }
+                        }
+                    });
+                })),
+            });
+
             menu.push(TrayMenuItem::Separator);
 
             let networks = client.lock().networks();

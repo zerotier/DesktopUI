@@ -7,7 +7,7 @@ use crate::libui;
 
 const WINDOW_SIZE_X: c_int = 350;
 const WINDOW_SIZE_Y: c_int = 100;
-const NETWORK_ID_LEN: usize = 16;
+pub const NETWORK_ID_LEN: usize = 16;
 
 #[allow(non_upper_case_globals)]
 static mut network_id_input: *mut libui::uiEntry = null_mut();
@@ -49,7 +49,7 @@ unsafe extern "C" fn on_ok_button_clicked(_: *mut libui::uiButton, _: *mut c_voi
     if !network_id_input.is_null() {
         let id = get_network_id_entered();
         if id.len() == NETWORK_ID_LEN {
-            println!("JOIN={}", id);
+            println!("!!!JOIN{}", id); // parent scans stdout for this string to pick up ID
             on_should_quit(null_mut());
         }
     }
@@ -83,7 +83,7 @@ pub fn join_main() {
         let vbox = libui::uiNewVerticalBox();
         libui::uiBoxSetPadded(vbox, 1);
 
-        let input_title = CString::new("Enter 16-digit Network ID to Join").unwrap();
+        let input_title = CString::new("Enter 16-digit Network ID to Join:").unwrap();
         let input_title_label = libui::uiNewLabel(input_title.as_ptr());
         libui::uiBoxAppend(vbox, input_title_label.cast(), 0);
         network_id_input = libui::uiNewEntry();
