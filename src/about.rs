@@ -63,6 +63,8 @@ pub fn about_main() {
         libui::uiButtonOnClicked(ok_button, Some(on_ok_button_clicked), null_mut());
         libui::uiBoxAppend(vbox, ok_button.cast(), 0);
 
+        libui::uiBoxAppend(vbox, libui::uiNewHorizontalBox().cast(), 0);
+
         libui::uiWindowSetChild(main_window, vbox.cast());
 
         libui::uiControlShow(main_window.cast());
