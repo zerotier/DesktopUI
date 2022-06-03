@@ -19,9 +19,7 @@ unsafe fn get_network_id_entered() -> (String, String) {
     if !network_id_input.is_null() {
         let c_id = libui::uiEntryText(network_id_input);
         if !c_id.is_null() {
-            let id = CStr::from_ptr(c_id.cast())
-                .to_string_lossy()
-                .to_string();
+            let id = CStr::from_ptr(c_id.cast()).to_string_lossy().to_string();
             let id_entered = id.clone();
             let mut id = id.to_lowercase();
             id.retain(|c| "0123456789abcdef".contains(c));
@@ -76,10 +74,23 @@ pub fn join_main() {
         let mut options: libui::uiInitOptions = zeroed();
         assert!(libui::uiInit(&mut options).is_null());
 
+        #[cfg(target_os = "macos")]
+        {
+            let edit = libui::uiNewMenu("Edit\0".as_bytes().as_ptr().cast());
+            libui::uiMenuAppendItem(edit, "@macCut\0".as_bytes().as_ptr().cast());
+            libui::uiMenuAppendItem(edit, "@macCopy\0".as_bytes().as_ptr().cast());
+            libui::uiMenuAppendItem(edit, "@macPaste\0".as_bytes().as_ptr().cast());
+            libui::uiMenuAppendItem(edit, "@macSelectAll\0".as_bytes().as_ptr().cast());
+        }
+
         libui::uiOnShouldQuit(Some(on_should_quit), null_mut());
 
-        let title = CString::new("Join ZeroTier Network").unwrap();
-        let main_window = libui::uiNewWindow(title.as_ptr(), WINDOW_SIZE_X, WINDOW_SIZE_Y, 1);
+        let main_window = libui::uiNewWindow(
+            "Join ZeroTier Network\0".as_bytes().as_ptr().cast(),
+            WINDOW_SIZE_X,
+            WINDOW_SIZE_Y,
+            1,
+        );
         libui::uiWindowSetMargined(main_window, 1);
         libui::uiWindowOnClosing(main_window, Some(on_window_close), null_mut());
 

@@ -32,7 +32,6 @@ use crate::serviceclient::*;
 use crate::tray::*;
 
 pub mod about;
-pub mod auth_notice;
 pub mod join;
 pub mod libui;
 pub mod serviceclient;
@@ -887,13 +886,7 @@ fn tray_main() {
                     .as_secs()
                     >= MIN_INTERVAL_BETWEEN_SSO_WINDOW_POPUPS_SECONDS
                 {
-                    let ch = Command::new(std::env::current_exe().unwrap())
-                        .arg("auth_notice")
-                        .arg(nwid.as_str())
-                        .spawn();
-                    if ch.is_ok() {
-                        children.lock().push(ch.unwrap());
-                    }
+                    notify(format!("ZeroTier network {} requires SSO authentication. A web browser window (or tab) will open for you to log in.", nwid).as_str());
                     let _ = last_opened_sso_auth_window.insert(nwid.clone(), now);
                     let _ = webbrowser::open(auth_url.as_str());
                 }
@@ -1080,14 +1073,6 @@ fn main() {
                 about::about_main(version)
             }
             "join_prompt" => join::join_main(),
-            "auth_notice" => {
-                let nwid = if args.len() >= 3 {
-                    args[2].as_str()
-                } else {
-                    "???"
-                };
-                auth_notice::auth_notice_main(nwid)
-            }
             "copy_authtoken" => {
                 // invoked with elevated permissions to get the auth token and copy it locally
                 if args.len() < 3 {

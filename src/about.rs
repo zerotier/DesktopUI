@@ -33,12 +33,12 @@ pub fn about_main(version: &str) {
         libui::uiOnShouldQuit(Some(on_should_quit), null_mut());
 
         let title = CString::new("About ZeroTier UI").unwrap();
-        let main_window = libui::uiNewWindow(title.as_ptr(), WINDOW_SIZE_X, WINDOW_SIZE_Y, 1);
-        libui::uiWindowSetMargined(main_window, 1);
+        let main_window = libui::uiNewWindow(title.as_ptr(), WINDOW_SIZE_X, WINDOW_SIZE_Y, 0);
+        libui::uiWindowSetMargined(main_window, 0);
         libui::uiWindowOnClosing(main_window, Some(on_window_close), null_mut());
 
         let vbox = libui::uiNewVerticalBox();
-        libui::uiBoxSetPadded(vbox, 1);
+        libui::uiBoxSetPadded(vbox, 0);
 
         let about_text_content = CString::new(format!(
             "
