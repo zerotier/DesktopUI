@@ -430,10 +430,13 @@ fn tray_main() {
 
             menu.push(TrayMenuItem::Separator);
 
+            let mut networks_empty = true;
+
             let networks = client.lock().networks();
             if !networks.is_empty() {
                 menu.push(TrayMenuItem::Separator);
                 for network in networks.iter() {
+                    networks_empty = false;
                     let nw_obj = &((*network).1);
 
                     let assigned_addrs = nw_obj.get("assignedAddresses").unwrap_or(&Value::Null);
@@ -717,8 +720,18 @@ fn tray_main() {
             }
 
             for j in joining.lock().iter() {
+                networks_empty = false;
                 menu.push(TrayMenuItem::Text {
                     text: j.clone(),
+                    checked: false,
+                    disabled: true,
+                    handler: None,
+                });
+            }
+
+            if networks_empty {
+                menu.push(TrayMenuItem::Text {
+                    text: "(no networks joined)".into(),
                     checked: false,
                     disabled: true,
                     handler: None,

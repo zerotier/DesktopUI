@@ -6,7 +6,7 @@ use std::ptr::null_mut;
 use crate::libui;
 
 const WINDOW_SIZE_X: c_int = 500;
-const WINDOW_SIZE_Y: c_int = 200;
+const WINDOW_SIZE_Y: c_int = 300;
 
 const ABOUT: &'static str = "ZeroTier Desktop UI
 
@@ -45,26 +45,23 @@ pub fn about_main() {
         libui::uiOnShouldQuit(Some(on_should_quit), null_mut());
 
         let title = CString::new("About ZeroTier UI").unwrap();
-        let main_window = libui::uiNewWindow(title.as_ptr(), WINDOW_SIZE_X, WINDOW_SIZE_Y, 0);
+        let main_window = libui::uiNewWindow(title.as_ptr(), WINDOW_SIZE_X, WINDOW_SIZE_Y, 1);
         libui::uiWindowSetMargined(main_window, 1);
         libui::uiWindowOnClosing(main_window, Some(on_window_close), null_mut());
 
         let vbox = libui::uiNewVerticalBox();
-        libui::uiBoxSetPadded(vbox, 0);
+        libui::uiBoxSetPadded(vbox, 1);
 
         let about_text_content = CString::new(ABOUT).unwrap();
-        let about_text = libui::uiNewLabel(about_text_content.as_ptr());
+        let about_text = libui::uiNewMultilineEntry();
+        libui::uiMultilineEntrySetReadOnly(about_text, 1);
+        libui::uiMultilineEntrySetText(about_text, about_text_content.as_ptr().cast());
         libui::uiBoxAppend(vbox, about_text.cast(), 1);
 
-        let button_box = libui::uiNewHorizontalBox();
         let ok = CString::new(" Ok ").unwrap();
         let ok_button = libui::uiNewButton(ok.as_ptr());
         libui::uiButtonOnClicked(ok_button, Some(on_ok_button_clicked), null_mut());
-        libui::uiBoxAppend(button_box, libui::uiNewHorizontalBox().cast(), 1);
-        libui::uiBoxAppend(button_box, ok_button.cast(), 0);
-        libui::uiBoxAppend(button_box, libui::uiNewHorizontalBox().cast(), 1);
-
-        libui::uiBoxAppend(vbox, button_box.cast(), 0);
+        libui::uiBoxAppend(vbox, ok_button.cast(), 0);
 
         libui::uiWindowSetChild(main_window, vbox.cast());
 

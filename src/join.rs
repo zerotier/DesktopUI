@@ -15,22 +15,23 @@ static mut network_id_input: *mut libui::uiEntry = null_mut();
 #[allow(non_upper_case_globals)]
 static mut ok_button: *mut libui::uiButton = null_mut();
 
-unsafe fn get_network_id_entered() -> String {
+unsafe fn get_network_id_entered() -> (String, String) {
     if !network_id_input.is_null() {
         let c_id = libui::uiEntryText(network_id_input);
         if !c_id.is_null() {
-            let mut id = CStr::from_ptr(c_id.cast())
+            let id = CStr::from_ptr(c_id.cast())
                 .to_string_lossy()
-                .to_string()
-                .to_lowercase();
+                .to_string();
+            let id_entered = id.clone();
+            let mut id = id.to_lowercase();
             id.retain(|c| "0123456789abcdef".contains(c));
             while id.len() > NETWORK_ID_LEN {
                 let _ = id.pop();
             }
-            return id;
+            return (id_entered, id);
         }
     }
-    return "".into();
+    return ("".into(), "".into());
 }
 
 unsafe extern "C" fn on_should_quit(_: *mut c_void) -> c_int {
@@ -47,7 +48,7 @@ unsafe extern "C" fn on_cancel_button_clicked(_: *mut libui::uiButton, _: *mut c
 
 unsafe extern "C" fn on_ok_button_clicked(_: *mut libui::uiButton, _: *mut c_void) {
     if !network_id_input.is_null() {
-        let id = get_network_id_entered();
+        let (_, id) = get_network_id_entered();
         if id.len() == NETWORK_ID_LEN {
             println!("!!!JOIN{}", id); // parent scans stdout for this string to pick up ID
             on_should_quit(null_mut());
@@ -57,14 +58,16 @@ unsafe extern "C" fn on_ok_button_clicked(_: *mut libui::uiButton, _: *mut c_voi
 
 unsafe extern "C" fn on_network_id_input_changed(_: *mut libui::uiEntry, _: *mut c_void) {
     if !network_id_input.is_null() {
-        let id = get_network_id_entered();
+        let (id_entered, id) = get_network_id_entered();
         if id.len() == NETWORK_ID_LEN {
             libui::uiControlEnable(ok_button.cast());
         } else {
             libui::uiControlDisable(ok_button.cast());
         }
-        let c_id = CString::new(id).unwrap();
-        libui::uiEntrySetText(network_id_input, c_id.as_ptr());
+        if !id.eq(&id_entered) {
+            let c_id = CString::new(id).unwrap();
+            libui::uiEntrySetText(network_id_input, c_id.as_ptr());
+        }
     }
 }
 
