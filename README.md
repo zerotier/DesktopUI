@@ -30,7 +30,14 @@ To build native applications for Windows, just type `make`. This assumes that GN
 
 ## Linux, FreeBSD, Other Open Source Desktops
 
-*Coming soon.*
+#### Prerequisites
+
+* Rust (and cargo) with 2021 edition support
+* gtk-3
+* gdk-3
+* gobject-2.0
+* glib-2.0
+* libappindicator3
 
 # Directly Incorporated Third Party Code
 
