@@ -360,6 +360,8 @@ fn tray_main() {
         let mut menu: Vec<TrayMenuItem> = Vec::new();
         if client.lock().is_online() {
             let address = client.lock().get_str(&["status", "address"]);
+            let version = client.lock().get_str(&["status", "version"]);
+
             let address2 = address.clone();
             menu.push(TrayMenuItem::Text {
                 text: format!("My Address:  {} ", address),
@@ -834,6 +836,7 @@ fn tray_main() {
                 handler: Some(Box::new(move || {
                     let ch = Command::new(std::env::current_exe().unwrap())
                         .arg("about")
+                        .arg(version.as_str())
                         .spawn();
                     if ch.is_ok() {
                         children2.lock().push(ch.unwrap());
@@ -1068,7 +1071,14 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() >= 2 {
         match args[1].as_str() {
-            "about" => about::about_main(),
+            "about" => {
+                let version = if args.len() >= 3 {
+                    args[2].as_str()
+                } else {
+                    "???"
+                };
+                about::about_main(version)
+            }
             "join_prompt" => join::join_main(),
             "auth_notice" => {
                 let nwid = if args.len() >= 3 {

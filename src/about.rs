@@ -8,18 +8,6 @@ use crate::libui;
 const WINDOW_SIZE_X: c_int = 500;
 const WINDOW_SIZE_Y: c_int = 300;
 
-const ABOUT: &'static str = "ZeroTier Desktop UI
-
-(c)2021-2022 ZeroTier, Inc.
-Released under the terms of the Mozilla Public License V2.0 (MPL)
-Source URL: https://github.com/zerotier/DesktopUI
-
-The following additional open source code was used in this software:
-
- * https://github.com/zserge/tray by Serge Zaitsev (heavily modified)
- * https://github.com/libui-ng/libui-ng by Pietro Gagliardi and others
-";
-
 unsafe extern "C" fn on_should_quit(_: *mut c_void) -> c_int {
     std::process::exit(0);
 }
@@ -32,7 +20,7 @@ unsafe extern "C" fn on_ok_button_clicked(_: *mut libui::uiButton, _: *mut c_voi
     on_should_quit(null_mut());
 }
 
-pub fn about_main() {
+pub fn about_main(version: &str) {
     unsafe {
         let mut options: libui::uiInitOptions = zeroed();
         let init_err = libui::uiInit(&mut options);
@@ -46,13 +34,28 @@ pub fn about_main() {
 
         let title = CString::new("About ZeroTier UI").unwrap();
         let main_window = libui::uiNewWindow(title.as_ptr(), WINDOW_SIZE_X, WINDOW_SIZE_Y, 1);
-        libui::uiWindowSetMargined(main_window, 0);
+        libui::uiWindowSetMargined(main_window, 1);
         libui::uiWindowOnClosing(main_window, Some(on_window_close), null_mut());
 
         let vbox = libui::uiNewVerticalBox();
         libui::uiBoxSetPadded(vbox, 1);
 
-        let about_text_content = CString::new(ABOUT).unwrap();
+        let about_text_content = CString::new(format!(
+            "
+ZeroTier {}
+Desktop System Tray UI
+(c)2021-2022 ZeroTier, Inc.
+
+Released under the terms of the Mozilla Public License V2.0 (MPL)
+Source URL: https://github.com/zerotier/DesktopUI
+
+This UI application contains the following additiona open source software:
+
+ * https://github.com/zserge/tray by Serge Zaitsev (with modifications)
+ * https://github.com/libui-ng/libui-ng by Pietro Gagliardi and others",
+            version
+        ))
+        .unwrap();
         let about_text = libui::uiNewMultilineEntry();
         libui::uiMultilineEntrySetReadOnly(about_text, 1);
         libui::uiMultilineEntrySetText(about_text, about_text_content.as_ptr().cast());
@@ -62,8 +65,6 @@ pub fn about_main() {
         let ok_button = libui::uiNewButton(ok.as_ptr());
         libui::uiButtonOnClicked(ok_button, Some(on_ok_button_clicked), null_mut());
         libui::uiBoxAppend(vbox, ok_button.cast(), 0);
-
-        libui::uiBoxAppend(vbox, libui::uiNewHorizontalBox().cast(), 0);
 
         libui::uiWindowSetChild(main_window, vbox.cast());
 
