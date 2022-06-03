@@ -7,7 +7,7 @@
  */
 
 // Without this Windows will pop up a cmd.exe window when this is launched.
-#![windows_subsystem = "windows"]
+//#![windows_subsystem = "windows"]
 
 use std::cmp::Ordering;
 #[allow(unused)]

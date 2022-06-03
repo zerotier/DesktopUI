@@ -1,4 +1,4 @@
-use std::ffi::{c_void, CString};
+use std::ffi::{c_void, CString, CStr};
 use std::mem::zeroed;
 use std::os::raw::c_int;
 use std::ptr::null_mut;
@@ -35,7 +35,12 @@ unsafe extern "C" fn on_ok_button_clicked(_: *mut libui::uiButton, _: *mut c_voi
 pub fn about_main() {
     unsafe {
         let mut options: libui::uiInitOptions = zeroed();
-        assert!(libui::uiInit(&mut options).is_null());
+        let init_err = libui::uiInit(&mut options);
+        if !init_err.is_null() {
+            let s = CStr::from_ptr(init_err.cast());
+            println!("libui init error: {}", s.to_string_lossy());
+            panic!();
+        }
 
         libui::uiOnShouldQuit(Some(on_should_quit), null_mut());
 
@@ -54,10 +59,11 @@ pub fn about_main() {
         let button_box = libui::uiNewHorizontalBox();
         let ok = CString::new(" Ok ").unwrap();
         let ok_button = libui::uiNewButton(ok.as_ptr());
-        libui::uiBoxAppend(button_box, libui::uiNewHorizontalBox().cast(), 1);
-        libui::uiBoxAppend(button_box, ok_button.cast(), 0);
         libui::uiButtonOnClicked(ok_button, Some(on_ok_button_clicked), null_mut());
         libui::uiBoxAppend(button_box, libui::uiNewHorizontalBox().cast(), 1);
+        libui::uiBoxAppend(button_box, ok_button.cast(), 0);
+        libui::uiBoxAppend(button_box, libui::uiNewHorizontalBox().cast(), 1);
+
         libui::uiBoxAppend(vbox, button_box.cast(), 0);
 
         libui::uiWindowSetChild(main_window, vbox.cast());
