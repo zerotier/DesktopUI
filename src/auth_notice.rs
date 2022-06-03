@@ -5,7 +5,7 @@ use std::ptr::null_mut;
 
 use crate::libui;
 
-const WINDOW_SIZE_X: c_int = 300;
+const WINDOW_SIZE_X: c_int = 500;
 const WINDOW_SIZE_Y: c_int = 150;
 
 unsafe extern "C" fn on_should_quit(_: *mut c_void) -> c_int {
@@ -41,18 +41,14 @@ pub fn auth_notice_main(nwid: &str) {
         libui::uiBoxSetPadded(vbox, 0);
 
         let text_content = CString::new(format!(
-            "ZeroTier network {} requires SSO authentication.",
+            "\nZeroTier network {} requires SSO authentication.\n\nA new web browser (or browser tab) will now open to allow you to proceed.",
             nwid
         ))
         .unwrap();
-        let text = libui::uiNewLabel(text_content.as_ptr().cast());
+        let text = libui::uiNewNonWrappingMultilineEntry();
+        libui::uiMultilineEntrySetReadOnly(text, 1);
+        libui::uiMultilineEntrySetText(text, text_content.as_ptr().cast());
         libui::uiBoxAppend(vbox, text.cast(), 1);
-        let text_content2 = CString::new(
-            "A new web browser (or browser tab) will now open to allow you to proceed.",
-        )
-        .unwrap();
-        let text2 = libui::uiNewLabel(text_content2.as_ptr().cast());
-        libui::uiBoxAppend(vbox, text2.cast(), 1);
 
         let ok = CString::new(" Ok ").unwrap();
         let ok_button = libui::uiNewButton(ok.as_ptr());
