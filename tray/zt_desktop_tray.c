@@ -29,6 +29,7 @@ extern void c_set_this_thread_to_foreground_priority()
 #endif
 
 #if defined (_WIN32) || defined (_WIN64)
+/*
 #define RELEASEKEY(Key) if (Key) RegCloseKey(Key);
 extern int c_windows_is_dark_theme()
 {
@@ -48,6 +49,7 @@ extern int c_windows_is_dark_theme()
 	RELEASEKEY(hKey);
 	return ((Value1 | Value2) == 0) ? 1 : 0;
 }
+*/
 extern void c_windows_post_to_clipboard(const char *const data)
 {
 	if (!data)

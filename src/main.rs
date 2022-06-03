@@ -37,6 +37,9 @@ pub mod libui;
 pub mod serviceclient;
 pub mod tray;
 
+// Don't pop up SSO windows more often than this (seconds).
+const MIN_INTERVAL_BETWEEN_SSO_WINDOW_POPUPS_SECONDS: u64 = 15;
+
 pub(crate) static mut APPLICATION_PATH: String = String::new();
 pub(crate) static mut APPLICATION_HOME: String = String::new();
 pub(crate) static mut NETWORK_CACHE_PATH: String = String::new();
@@ -244,14 +247,6 @@ fn copy_to_clipboard(s: &str) {
         });
 }
 
-#[cfg(target_os = "linux")]
-fn read_from_clipboard() -> String {
-    Command::new("/usr/bin/xclip").output().map_or_else(
-        |_| String::new(),
-        |out| String::from_utf8(out.stdout).map_or_else(|_| String::new(), |s| s),
-    )
-}
-
 #[cfg(target_os = "macos")]
 fn copy_to_clipboard(s: &str) {
     let _ = Command::new("/usr/bin/pbcopy")
@@ -267,32 +262,11 @@ fn copy_to_clipboard(s: &str) {
         });
 }
 
-#[cfg(target_os = "macos")]
-fn read_from_clipboard() -> String {
-    Command::new("/usr/bin/pbpaste").output().map_or_else(
-        |_| String::new(),
-        |out| String::from_utf8(out.stdout).map_or_else(|_| String::new(), |s| s),
-    )
-}
-
 #[cfg(windows)]
 fn copy_to_clipboard(s: &str) {
     let _ = CString::new(s).map(|s| {
         unsafe { c_windows_post_to_clipboard(s.as_ptr()) };
     });
-}
-
-#[cfg(windows)]
-fn read_from_clipboard() -> String {
-    let mut buf = [0_u8; 1024];
-    unsafe {
-        if c_windows_get_from_clipboard(buf.as_mut_ptr().cast()) > 0 {
-            return CString::from_raw(buf.as_mut_ptr().cast())
-                .to_str()
-                .map_or_else(|_| String::new(), |s| String::from(s));
-        }
-    }
-    String::new()
 }
 
 /*******************************************************************************************************************/
@@ -887,92 +861,33 @@ fn tray_main() {
         menu
     };
 
-    // Start a background thread to supervise windows and reap dead processes. This also
-    // handles launching SSO login sessions when needed.
-    /*
-    let client2 = client.clone();
-    let auth_windows2 = auth_windows.clone();
-    let main_window2 = main_window.clone();
-    let about_window2 = about_window.clone();
-    std::thread::spawn(move || {
-        set_thread_to_background_priority();
-
-        let client = client2;
-        let auth_windows = auth_windows2;
-        let main_window = main_window2;
-        let about_window = about_window2;
-
-        loop {
-            std::thread::sleep(Duration::from_secs(5));
-
-            let mut auth_windows = auth_windows.lock();
-            let auth_needed_networks = client.lock().sso_auth_needed_networks();
-
-            for network in auth_needed_networks.iter() {
-                // network is a tuple of (ID, URL, remaining ms)
-                let nwid = &(*network).0;
-                let auth_url = &(*network).1;
-                let status = (*network).2.as_str();
-
-                if auth_windows.get(nwid).map_or(false, |w| {
-                    if (*w).0 != *auth_url {
-                        kill_process(&mut *(*w).1.lock());
-                        true
-                    } else {
-                        false
-                    }
-                }) {
-                    auth_windows.remove(nwid);
-                }
-
-                let auth_window = auth_windows.get(nwid);
-                if auth_window.is_some() {
-                    if status == "AUTHENTICATION_REQUIRED" {
-                        auth_window.map(|w| {
-                            (*w).1.lock().as_mut().map(|c| {
-                                c.stdin.as_mut().map(|c| {
-                                    let _ = c.write_all(&[b'r']);
-                                });
-                            });
-                        });
-                    }
-                } else {
-                    let _ = auth_windows.insert(nwid.clone(), (auth_url.clone(), Mutex::new(None))); // KEY -> (URL, WINDOW)
-                    open_sso_auth_window_subprocess(
-                        &mut *(*auth_windows.get(nwid).unwrap()).1.lock(),
-                        1024,
-                        768,
-                        &[nwid.as_str(), (*network).1.as_str()],
-                    );
-                }
-            }
-
-            auth_windows.retain(|nwid, window| {
-                let w = &mut *(*window).1.lock();
-                if did_process_exit(w) {
-                    false
-                } else if !auth_needed_networks
-                    .iter()
-                    .any(|network| (*network).0.eq(nwid))
-                {
-                    kill_process(w);
-                    false
-                } else {
-                    true
-                }
-            });
-
-            for w in [&main_window, &about_window].iter() {
-                did_process_exit(&mut *w.lock());
-            }
-        }
-    });
-    */
-
     let tray = Tray::init(icon_name.as_ref(), refresh());
+    let mut last_opened_sso_auth_window: HashMap<String, SystemTime> = HashMap::new();
+
     loop {
         // Reap subprocesses if finished.
         children.lock().retain_mut(|c| !c.try_wait().is_ok());
+
+        // Check for authentication required networks.
+        let auth_required_networks = client.lock().sso_auth_needed_networks();
+        let now = SystemTime::now();
+        for (nwid, auth_url, status) in auth_required_networks.iter() {
+            if status == "AUTHENTICATION_REQUIRED" {
+                if now
+                    .duration_since(
+                        *last_opened_sso_auth_window
+                            .get(nwid)
+                            .unwrap_or(&SystemTime::UNIX_EPOCH),
+                    )
+                    .unwrap()
+                    .as_secs()
+                    >= MIN_INTERVAL_BETWEEN_SSO_WINDOW_POPUPS_SECONDS
+                {
+                    let _ = last_opened_sso_auth_window.insert(nwid.clone(), now);
+                    let _ = webbrowser::open(auth_url.as_str());
+                }
+            }
+        }
 
         // Refresh menu if data has changed.
         if dirty_flag.swap(false, std::sync::atomic::Ordering::Relaxed) {
