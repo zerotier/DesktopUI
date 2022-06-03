@@ -1,4 +1,4 @@
-use std::ffi::{c_void, CString, CStr};
+use std::ffi::{c_void, CStr, CString};
 use std::mem::zeroed;
 use std::os::raw::c_int;
 use std::ptr::null_mut;
@@ -46,7 +46,7 @@ pub fn about_main() {
 
         let title = CString::new("About ZeroTier UI").unwrap();
         let main_window = libui::uiNewWindow(title.as_ptr(), WINDOW_SIZE_X, WINDOW_SIZE_Y, 1);
-        libui::uiWindowSetMargined(main_window, 1);
+        libui::uiWindowSetMargined(main_window, 0);
         libui::uiWindowOnClosing(main_window, Some(on_window_close), null_mut());
 
         let vbox = libui::uiNewVerticalBox();
