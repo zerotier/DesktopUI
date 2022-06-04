@@ -10,6 +10,9 @@ const WINDOW_SIZE_Y: c_int = 100;
 pub const NETWORK_ID_LEN: usize = 16;
 
 #[allow(non_upper_case_globals)]
+static mut main_window: *mut libui::uiWindow = null_mut();
+
+#[allow(non_upper_case_globals)]
 static mut network_id_input: *mut libui::uiEntry = null_mut();
 
 #[allow(non_upper_case_globals)]
@@ -69,6 +72,11 @@ unsafe extern "C" fn on_network_id_input_changed(_: *mut libui::uiEntry, _: *mut
     }
 }
 
+unsafe extern "C" fn on_timer(_: *mut c_void) -> c_int {
+    //if !main_window.is_null() {}
+    1
+}
+
 pub fn join_main() {
     unsafe {
         let mut options: libui::uiInitOptions = zeroed();
@@ -85,7 +93,7 @@ pub fn join_main() {
 
         libui::uiOnShouldQuit(Some(on_should_quit), null_mut());
 
-        let main_window = libui::uiNewWindow(
+        main_window = libui::uiNewWindow(
             "Join ZeroTier Network\0".as_bytes().as_ptr().cast(),
             WINDOW_SIZE_X,
             WINDOW_SIZE_Y,
@@ -124,6 +132,8 @@ pub fn join_main() {
         libui::uiBoxAppend(vbox, button_box.cast(), 0);
 
         libui::uiWindowSetChild(main_window, vbox.cast());
+
+        libui::uiTimer(250, Some(on_timer), null_mut());
 
         libui::uiControlShow(main_window.cast());
         libui::uiMain();

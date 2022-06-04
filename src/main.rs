@@ -38,7 +38,7 @@ pub mod serviceclient;
 pub mod tray;
 
 // Don't pop up SSO windows more often than this (seconds).
-const MIN_INTERVAL_BETWEEN_SSO_WINDOW_POPUPS_SECONDS: u64 = 15;
+const MIN_INTERVAL_BETWEEN_SSO_WINDOW_POPUPS_SECONDS: u64 = 60;
 
 pub(crate) static mut APPLICATION_PATH: String = String::new();
 pub(crate) static mut APPLICATION_HOME: String = String::new();
@@ -351,8 +351,9 @@ fn tray_main() {
     let exit_flag = Arc::new(AtomicBool::new(false));
 
     let (client, dirty_flag) = start_client(vec!["status", "network"], 250, 10);
-    let children: Arc<Mutex<Vec<Child>>> = Arc::new(Mutex::new(Vec::new()));
+    let about_child: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
     let joining: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let join_window_open = Arc::new(AtomicBool::new(false));
 
     // This closure builds a new menu for display in the app icon.
     let refresh = || {
@@ -374,33 +375,41 @@ fn tray_main() {
 
             let client2 = client.clone();
             let joining2 = joining.clone();
+            let join_window_open2 = join_window_open.clone();
             menu.push(TrayMenuItem::Text {
                 text: "Join New Network...".into(),
                 checked: false,
                 disabled: false,
                 handler: Some(Box::new(move || {
-                    let client3 = client2.clone();
-                    let joining3 = joining2.clone();
-                    std::thread::spawn(move || {
-                        let ch = Command::new(std::env::current_exe().unwrap())
-                            .arg("join_prompt")
-                            .stdout(Stdio::piped())
-                            .output();
-                        if ch.is_ok() {
-                            let ch = ch.unwrap();
-                            if let Some((_, nwid)) =
-                                String::from_utf8_lossy(ch.stdout.as_slice()).split_once("!!!JOIN")
-                            {
-                                if nwid.len() >= 16 {
-                                    let (nwid, _) = nwid.split_at(crate::join::NETWORK_ID_LEN);
-                                    client3
-                                        .lock()
-                                        .enqueue_post(format!("/network/{}", nwid), "{}".into());
-                                    joining3.lock().push(nwid.into());
+                    if !join_window_open2.load(std::sync::atomic::Ordering::Relaxed) {
+                        join_window_open2.store(true, std::sync::atomic::Ordering::Relaxed);
+                        let client3 = client2.clone();
+                        let joining3 = joining2.clone();
+                        let join_window_open3 = join_window_open2.clone();
+                        std::thread::spawn(move || {
+                            let ch = Command::new(std::env::current_exe().unwrap())
+                                .arg("join_prompt")
+                                .stdout(Stdio::piped())
+                                .output();
+                            join_window_open3.store(false, std::sync::atomic::Ordering::Relaxed);
+                            if ch.is_ok() {
+                                let ch = ch.unwrap();
+                                if let Some((_, nwid)) =
+                                    String::from_utf8_lossy(ch.stdout.as_slice())
+                                        .split_once("!!!JOIN")
+                                {
+                                    if nwid.len() >= 16 {
+                                        let (nwid, _) = nwid.split_at(crate::join::NETWORK_ID_LEN);
+                                        client3.lock().enqueue_post(
+                                            format!("/network/{}", nwid),
+                                            "{}".into(),
+                                        );
+                                        joining3.lock().push(nwid.into());
+                                    }
                                 }
                             }
-                        }
-                    });
+                        });
+                    }
                 })),
             });
 
@@ -827,18 +836,21 @@ fn tray_main() {
                 });
             }
 
-            let children2 = children.clone();
+            let about_child2 = about_child.clone();
             menu.push(TrayMenuItem::Text {
                 text: "About ".into(),
                 checked: false,
                 disabled: false,
                 handler: Some(Box::new(move || {
-                    let ch = Command::new(std::env::current_exe().unwrap())
-                        .arg("about")
-                        .arg(version.as_str())
-                        .spawn();
-                    if ch.is_ok() {
-                        children2.lock().push(ch.unwrap());
+                    let mut child = about_child2.lock();
+                    if child.is_none() {
+                        let ch = Command::new(std::env::current_exe().unwrap())
+                            .arg("about")
+                            .arg(version.as_str())
+                            .spawn();
+                        if ch.is_ok() {
+                            let _ = child.insert(ch.unwrap());
+                        }
                     }
                 })),
             });
@@ -869,7 +881,14 @@ fn tray_main() {
 
     loop {
         // Reap subprocesses if finished.
-        children.lock().retain_mut(|c| !c.try_wait().is_ok());
+        for child in [&about_child].iter() {
+            let mut child = child.lock();
+            if child.is_some() {
+                if child.as_mut().unwrap().try_wait().is_ok() {
+                    let _ = child.take();
+                }
+            }
+        }
 
         // Check for authentication required networks.
         let auth_required_networks = client.lock().sso_auth_needed_networks();
@@ -911,9 +930,9 @@ fn tray_main() {
         }
     }
 
-    for mut c in children.lock().drain(..) {
-        let _ = c.kill();
-        let _ = c.wait();
+    for child in [&about_child].iter() {
+        let mut child = child.lock();
+        child.take().map(|mut c| c.kill());
     }
 }
 
