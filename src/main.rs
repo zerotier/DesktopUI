@@ -454,7 +454,7 @@ fn tray_main() {
                     let nwid = (*network).0.clone();
                     joining.lock().retain(|j| !j.eq(nwid.as_str()));
                     network_menu.push(TrayMenuItem::Text {
-                        text: format!("Network ID:\t  {}", (*network).0),
+                        text: format!("Network ID:\t\t  {}", (*network).0),
                         checked: false,
                         disabled: false,
                         handler: Some(Box::new(move || {
