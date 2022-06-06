@@ -92,6 +92,8 @@ clean: FORCE
 	rm -rf libui-ng/build
 endif
 
+distclean:	clean
+
 ubuntudeb_64:	linux
 	fpm -t deb \
 	-p zerotier-ui.0.1.0-1.amd64.deb \
