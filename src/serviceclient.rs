@@ -345,7 +345,7 @@ impl ServiceClient {
                             .map_or("", |status| status.as_str().unwrap_or(""));
                         if sso_enabled && !auth_url.is_empty() {
                             if status == "AUTHENTICATION_REQUIRED" {
-                                println!("Auth Required for {}", id);
+                                //println!("Auth Required for {}", id);
                                 nw.push((id.into(), auth_url.into(), status.into()));
                             }
                         }

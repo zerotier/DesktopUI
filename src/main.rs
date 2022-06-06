@@ -525,6 +525,7 @@ fn tray_main() {
                             });
                         })
                     });
+
                     if !device_name.is_empty() {
                         network_menu.push(TrayMenuItem::Text {
                             text: format!("Device:\t\t\t  {}", device_name),
@@ -533,6 +534,7 @@ fn tray_main() {
                             handler: None,
                         });
                     }
+
                     nw_obj.get("type").map(|a| {
                         a.as_str().map(|a| {
                             network_menu.push(TrayMenuItem::Text {
@@ -543,6 +545,26 @@ fn tray_main() {
                             });
                         })
                     });
+
+                    if let Some(dns) = nw_obj.get("dns") {
+                        if let Some(dns) = dns.as_object() {
+                            if let Some(domain) = dns.get("domain") {
+                                if let Some(domain) = domain.as_str() {
+                                    if !domain.is_empty() {
+                                        network_menu.push(TrayMenuItem::Text {
+                                            text: format!("DNS Domain:\t\t  {}", domain),
+                                            checked: false,
+                                            disabled: true,
+                                            handler: None,
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    network_menu.push(TrayMenuItem::Separator);
+
                     network_menu.push(TrayMenuItem::Text {
                         text: format!("Status:\t\t\t  {}", status),
                         checked: false,
@@ -585,7 +607,6 @@ fn tray_main() {
                                     checked: false,
                                     disabled: false,
                                     handler: Some(Box::new(move || {
-                                        println!("OPENING {}", auth_url);
                                         let _ = webbrowser::open(&auth_url);
                                     })),
                                 });
