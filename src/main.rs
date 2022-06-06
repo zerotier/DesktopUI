@@ -37,8 +37,7 @@ pub mod libui;
 pub mod serviceclient;
 pub mod tray;
 
-// Don't pop up SSO windows more often than this (seconds).
-const MIN_INTERVAL_BETWEEN_SSO_WINDOW_POPUPS_SECONDS: u64 = 60;
+const MIN_AUTH_NOTIFY_INTERVAL: u64 = 60;
 
 pub(crate) static mut APPLICATION_PATH: String = String::new();
 pub(crate) static mut APPLICATION_HOME: String = String::new();
@@ -354,6 +353,8 @@ fn tray_main() {
     let about_child: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
     let joining: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
     let join_window_open = Arc::new(AtomicBool::new(false));
+    let last_notified_for_sso: Arc<Mutex<HashMap<String, SystemTime>>> =
+        Arc::new(Mutex::new(HashMap::new()));
 
     // This closure builds a new menu for display in the app icon.
     let refresh = || {
@@ -548,7 +549,9 @@ fn tray_main() {
                         disabled: true,
                         handler: None,
                     });
+
                     if status == "OK" {
+                        let _ = last_notified_for_sso.lock().remove(&(*network).0);
                         nw_obj.get("authenticationExpiryTime").map(|auth_exp_time| {
                             auth_exp_time.as_i64().map(|auth_exp_time| {
                                 let auth_exp_time = auth_exp_time;
@@ -571,6 +574,22 @@ fn tray_main() {
                                     });
                                 }
                             })
+                        });
+                    } else if status == "AUTHENTICATION_REQUIRED" {
+                        nw_obj.get("authenticationURL").map(|auth_url| {
+                            let auth_url = auth_url.as_str();
+                            if auth_url.is_some() {
+                                let auth_url = auth_url.unwrap().to_string();
+                                network_menu.push(TrayMenuItem::Text {
+                                    text: "Open SSO Login URL...".into(),
+                                    checked: false,
+                                    disabled: false,
+                                    handler: Some(Box::new(move || {
+                                        println!("OPENING {}", auth_url);
+                                        let _ = webbrowser::open(&auth_url);
+                                    })),
+                                });
+                            }
                         });
                     }
 
@@ -877,7 +896,6 @@ fn tray_main() {
     };
 
     let tray = Tray::init(icon_name.as_ref(), refresh());
-    let mut last_opened_sso_auth_window: HashMap<String, SystemTime> = HashMap::new();
 
     loop {
         // Reap subprocesses if finished.
@@ -890,24 +908,27 @@ fn tray_main() {
             }
         }
 
-        // Check for authentication required networks.
+        // Check for authentication required networks and notify.
         let auth_required_networks = client.lock().sso_auth_needed_networks();
         let now = SystemTime::now();
-        for (nwid, auth_url, status) in auth_required_networks.iter() {
+        for (nwid, _auth_url, status) in auth_required_networks.iter() {
             if status == "AUTHENTICATION_REQUIRED" {
                 if now
                     .duration_since(
-                        *last_opened_sso_auth_window
+                        *last_notified_for_sso
+                            .lock()
                             .get(nwid)
                             .unwrap_or(&SystemTime::UNIX_EPOCH),
                     )
                     .unwrap()
                     .as_secs()
-                    >= MIN_INTERVAL_BETWEEN_SSO_WINDOW_POPUPS_SECONDS
+                    >= MIN_AUTH_NOTIFY_INTERVAL
                 {
-                    notify(format!("ZeroTier network {} requires SSO authentication. A web browser window (or tab) will open for you to log in.", nwid).as_str());
-                    let _ = last_opened_sso_auth_window.insert(nwid.clone(), now);
-                    let _ = webbrowser::open(auth_url.as_str());
+                    notify(
+                        format!("ZeroTier network {} requires SSO authentication. Select 'Open SSL Login URL' to proceed.", nwid).as_str(),
+                    );
+                    let _ = last_notified_for_sso.lock().insert(nwid.clone(), now);
+                    //let _ = webbrowser::open(auth_url.as_str());
                 }
             }
         }
