@@ -417,6 +417,7 @@ fn tray_main() {
             menu.push(TrayMenuItem::Separator);
 
             let mut networks_empty = true;
+            let mut login_needed_networks = Vec::new();
 
             let networks = client.lock().networks();
             if !networks.is_empty() {
@@ -602,6 +603,8 @@ fn tray_main() {
                             let auth_url = auth_url.as_str();
                             if auth_url.is_some() {
                                 let auth_url = auth_url.unwrap().to_string();
+                                login_needed_networks
+                                    .push(((*network).0.clone(), auth_url.clone()));
                                 network_menu.push(TrayMenuItem::Text {
                                     text: "Open SSO Login URL...".into(),
                                     checked: false,
@@ -804,6 +807,21 @@ fn tray_main() {
                 if !saved_networks_empty {
                     menu.push(TrayMenuItem::Separator);
                 }
+            }
+
+            if !login_needed_networks.is_empty() {
+                login_needed_networks.sort_unstable();
+                for (nwid, auth_url) in login_needed_networks.drain(..) {
+                    menu.push(TrayMenuItem::Text {
+                        text: format!("{}\tOpen SSO Login URL... ", nwid),
+                        checked: false,
+                        disabled: false,
+                        handler: Some(Box::new(move || {
+                            let _ = webbrowser::open(&auth_url);
+                        })),
+                    });
+                }
+                menu.push(TrayMenuItem::Separator);
             }
 
             #[cfg(target_os = "macos")]
