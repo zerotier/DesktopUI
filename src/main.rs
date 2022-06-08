@@ -292,8 +292,14 @@ fn notify(text: &str, _: Option<(String, String)>) {
 }
 
 #[cfg(target_os = "macos")]
-fn notify_impl(text: &str, url: Option<(String, String)>) {
+fn notify(text: &str, _: Option<(String, String)>) {
     let _ = mac_notification_sys::set_application(MAC_BUNDLE_ID);
+    let mut n = mac_notification_sys::Notification::new();
+    n.title("ZeroTier");
+    n.message(text);
+    n.asynchronous(true);
+    let _ = n.send();
+    /*
     if let Some(url) = url {
         if let Ok(r) = mac_notification_sys::send_notification(
             "ZeroTier",
@@ -314,26 +320,7 @@ fn notify_impl(text: &str, url: Option<(String, String)>) {
     } else {
         let _ = mac_notification_sys::send_notification("ZeroTier", None, text, None);
     }
-}
-
-#[cfg(target_os = "macos")]
-fn notify(text: &str, url: Option<(String, String)>) {
-    let text = text.to_string();
-    let _ = std::thread::spawn(move || {
-        let exe = std::env::current_exe();
-        let mut ch = Command::new(exe.unwrap());
-        ch.arg("notify");
-        ch.arg(text);
-        if let Some((button_text, url)) = url {
-            ch.arg(button_text);
-            ch.arg(url);
-        }
-        if let Ok(mut ch) = ch.spawn() {
-            std::thread::sleep(Duration::from_secs(5));
-            let _ = ch.kill();
-            let _ = ch.try_wait();
-        }
-    });
+    */
 }
 
 /*******************************************************************************************************************/
@@ -1201,16 +1188,6 @@ fn main() {
                     "???"
                 };
                 about::about_main(version)
-            }
-            "notify" => {
-                #[cfg(target_os = "macos")]
-                {
-                    if args.len() == 3 {
-                        notify_impl(args[2].as_str(), None);
-                    } else if args.len() == 5 {
-                        notify_impl(args[2].as_str(), Some((args[3].clone(), args[4].clone())));
-                    }
-                }
             }
             "join_prompt" => join::join_main(),
             "copy_authtoken" => {
