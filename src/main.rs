@@ -274,7 +274,7 @@ fn copy_to_clipboard(s: &str) {
 /*******************************************************************************************************************/
 
 #[cfg(windows)]
-fn notify(text: &str, _: Option<String>) {
+fn notify(text: &str, _: Option<(String, String)>) {
     let ico: String = tray_icon_name();
     let _ = notify_rust::Notification::new()
         .icon(ico.as_str())
@@ -284,7 +284,7 @@ fn notify(text: &str, _: Option<String>) {
 }
 
 #[cfg(not(any(windows, target_os = "macos")))]
-fn notify(text: &str, _: Option<String>) {
+fn notify(text: &str, _: Option<(String, String)>) {
     let _ = notify_rust::Notification::new()
         .body(text)
         .appname("ZeroTier")
