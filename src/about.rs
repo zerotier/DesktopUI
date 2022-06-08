@@ -49,7 +49,7 @@ Desktop System Tray UI
 Released under the terms of the Mozilla Public License V2.0 (MPL)
 Source URL: https://github.com/zerotier/DesktopUI
 
-This UI application contains the following additiona open source software:
+This UI application contains the following additional open source software:
 
  * https://github.com/zserge/tray by Serge Zaitsev (with modifications)
  * https://github.com/libui-ng/libui-ng by Pietro Gagliardi and others",
