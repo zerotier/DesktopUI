@@ -613,6 +613,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "mac-notification-sys"
+version = "0.5.0"
+source = "git+https://github.com/h4llow3En/mac-notification-sys?rev=65573f44bd5a3e4710b90617eb9056826a04e9c0#65573f44bd5a3e4710b90617eb9056826a04e9c0"
+dependencies = [
+ "cc",
+ "dirs-next",
+ "objc-foundation",
+ "objc_id",
+ "time 0.3.9",
+]
+
+[[package]]
 name = "malloc_buf"
 version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -726,7 +738,7 @@ version = "4.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a995a3d2834cefa389218e7a35156e8ce544bc95f836900da01ee0b26a07e9d4"
 dependencies = [
- "mac-notification-sys",
+ "mac-notification-sys 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde",
  "winrt-notification",
  "zbus",
@@ -1690,6 +1702,7 @@ dependencies = [
  "chrono",
  "crc64",
  "libc",
+ "mac-notification-sys 0.5.0 (git+https://github.com/h4llow3En/mac-notification-sys?rev=65573f44bd5a3e4710b90617eb9056826a04e9c0)",
  "notify-rust",
  "parking_lot",
  "plist",

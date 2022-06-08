@@ -16,13 +16,16 @@ serde_json = "^1"
 ureq = { version = "^2", features = [] }
 chrono = "^0"
 parking_lot = "^0"
-notify-rust = "^4"
 crc64 = "^1"
 runas = "^0"
 webbrowser = "^0"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 plist = "^1"
+mac-notification-sys = { git = "https://github.com/h4llow3En/mac-notification-sys", rev = "65573f44bd5a3e4710b90617eb9056826a04e9c0" }
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+notify-rust = "^4"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "^0"

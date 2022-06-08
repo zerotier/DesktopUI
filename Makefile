@@ -94,6 +94,9 @@ endif
 
 distclean:	clean
 
+official:	FORCE
+	make ZT_OFFICIAL_RELEASE=1
+
 ubuntudeb_64:	linux
 	fpm -t deb \
 	-p zerotier-ui.0.1.0-1.amd64.deb \

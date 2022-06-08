@@ -78,6 +78,9 @@ pub(crate) const GLOBAL_SERVICE_HOME_V1: &'static str = "/var/db/zerotier-one";
 #[cfg(target_os = "linux")]
 pub(crate) const GLOBAL_SERVICE_HOME_V1: &'static str = "/var/lib/zerotier-one";
 
+#[cfg(target_os = "macos")]
+pub(crate) const MAC_BUNDLE_ID: &'static str = "com.zerotier.ZeroTier-UI";
+
 /*******************************************************************************************************************/
 /* OS-specific functions and C externs */
 
@@ -270,6 +273,53 @@ fn copy_to_clipboard(s: &str) {
 
 /*******************************************************************************************************************/
 
+#[cfg(windows)]
+fn notify(text: &str, _: Option<String>) {
+    let ico: String = tray_icon_name();
+    let _ = notify_rust::Notification::new()
+        .icon(ico.as_str())
+        .body(text)
+        .appname("ZeroTier")
+        .show();
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+fn notify(text: &str, _: Option<String>) {
+    let _ = notify_rust::Notification::new()
+        .body(text)
+        .appname("ZeroTier")
+        .show();
+}
+
+#[cfg(target_os = "macos")]
+fn notify(text: &str, url: Option<(String, String)>) {
+    let text = text.to_string();
+    std::thread::spawn(move || {
+        let _ = mac_notification_sys::set_application(MAC_BUNDLE_ID);
+        let mut n = mac_notification_sys::Notification::new();
+        n.title("ZeroTier");
+        n.message(text.as_str());
+        if let Some(url) = url {
+            n.main_button(mac_notification_sys::MainButton::SingleAction(
+                url.0.as_str(),
+            ));
+            if let Ok(r) = n.send() {
+                match r {
+                    mac_notification_sys::NotificationResponse::Click
+                    | mac_notification_sys::NotificationResponse::ActionButton(_) => {
+                        let _ = webbrowser::open(url.1.as_str());
+                    }
+                    _ => {}
+                }
+            }
+        } else {
+            let _ = n.send();
+        }
+    });
+}
+
+/*******************************************************************************************************************/
+
 /// Start the service client background thread, returning the client and a flag set when the data changes.
 fn start_client(
     refresh_base_paths: Vec<&'static str>,
@@ -299,24 +349,6 @@ fn start_client(
     });
 
     (client, dirty_flag)
-}
-
-#[cfg(windows)]
-fn notify(text: &str) {
-    let ico: String = tray_icon_name();
-    let _ = notify_rust::Notification::new()
-        .icon(ico.as_str())
-        .body(text)
-        .appname("ZeroTier")
-        .show();
-}
-
-#[cfg(not(windows))]
-fn notify(text: &str) {
-    let _ = notify_rust::Notification::new()
-        .body(text)
-        .appname("ZeroTier")
-        .show();
 }
 
 fn tray_main() {
@@ -370,7 +402,7 @@ fn tray_main() {
                 disabled: false,
                 handler: Some(Box::new(move || {
                     copy_to_clipboard(address2.as_str());
-                    notify("Copied this node's ZeroTier address to clipboard.");
+                    notify("Copied this node's ZeroTier address to clipboard.", None);
                 })),
             });
 
@@ -459,7 +491,7 @@ fn tray_main() {
                         disabled: false,
                         handler: Some(Box::new(move || {
                             copy_to_clipboard(nwid.as_str());
-                            notify("Copied network ID to clipboard.");
+                            notify("Copied network ID to clipboard.", None);
                         })),
                     });
 
@@ -638,7 +670,7 @@ fn tray_main() {
                                                     .split_once('/')
                                                     .map_or(a_copy.as_str(), |a| a.0),
                                             );
-                                            notify("Copied address to clipboard.");
+                                            notify("Copied address to clipboard.", None);
                                         })),
                                     });
                                 });
@@ -701,7 +733,7 @@ fn tray_main() {
                                 disabled: false,
                                 handler: Some(Box::new(move || {
                                     copy_to_clipboard(s.as_str());
-                                    notify("Copied managed route to clipboard.");
+                                    notify("Copied managed route to clipboard.", None);
                                 })),
                             });
                         }
@@ -950,7 +982,7 @@ fn tray_main() {
         // Check for authentication required networks and notify.
         let auth_required_networks = client.lock().sso_auth_needed_networks();
         let now = SystemTime::now();
-        for (nwid, _auth_url, status) in auth_required_networks.iter() {
+        for (nwid, auth_url, status) in auth_required_networks.iter() {
             if status == "AUTHENTICATION_REQUIRED" {
                 if now
                     .duration_since(
@@ -965,6 +997,7 @@ fn tray_main() {
                 {
                     notify(
                         format!("ZeroTier network {} requires SSO authentication. Select 'Open SSL Login URL' to proceed.", nwid).as_str(),
+                        Some(("Open SSL Login URL...".into(), auth_url.clone()))
                     );
                     let _ = last_notified_for_sso.lock().insert(nwid.clone(), now);
                     //let _ = webbrowser::open(auth_url.as_str());
