@@ -11,7 +11,7 @@
 
 use std::cmp::Ordering;
 #[allow(unused)]
-use std::collections::{HashMap, LinkedList};
+use std::collections::{HashMap, HashSet, LinkedList};
 #[allow(unused)]
 use std::ffi::CString;
 #[allow(unused)]
@@ -36,8 +36,6 @@ pub mod join;
 pub mod libui;
 pub mod serviceclient;
 pub mod tray;
-
-const MIN_AUTH_NOTIFY_INTERVAL: u64 = 60;
 
 pub(crate) static mut APPLICATION_PATH: String = String::new();
 pub(crate) static mut APPLICATION_HOME: String = String::new();
@@ -390,8 +388,7 @@ fn tray_main() {
     let about_child: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
     let joining: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
     let join_window_open = Arc::new(AtomicBool::new(false));
-    let last_notified_for_sso: Arc<Mutex<HashMap<String, SystemTime>>> =
-        Arc::new(Mutex::new(HashMap::new()));
+    let sso_notification_shown: Arc<Mutex<HashSet<String>>> = Arc::new(Mutex::new(HashSet::new()));
 
     // This closure builds a new menu for display in the app icon.
     let refresh = || {
@@ -611,7 +608,8 @@ fn tray_main() {
                     });
 
                     if status == "OK" {
-                        let _ = last_notified_for_sso.lock().remove(&(*network).0);
+                        let _ = sso_notification_shown.lock().remove(&(*network).0);
+
                         nw_obj.get("authenticationExpiryTime").map(|auth_exp_time| {
                             auth_exp_time.as_i64().map(|auth_exp_time| {
                                 let auth_exp_time = auth_exp_time;
@@ -986,27 +984,14 @@ fn tray_main() {
 
         // Check for authentication required networks and notify.
         let auth_required_networks = client.lock().sso_auth_needed_networks();
-        let now = SystemTime::now();
         for (nwid, auth_url, status) in auth_required_networks.iter() {
-            if status == "AUTHENTICATION_REQUIRED" {
-                if now
-                    .duration_since(
-                        *last_notified_for_sso
-                            .lock()
-                            .get(nwid)
-                            .unwrap_or(&SystemTime::UNIX_EPOCH),
-                    )
-                    .unwrap()
-                    .as_secs()
-                    >= MIN_AUTH_NOTIFY_INTERVAL
-                {
-                    notify(
-                        format!("ZeroTier network {} requires SSO authentication. Select 'Open SSL Login URL' to proceed.", nwid).as_str(),
-                        Some(("Open SSL Login URL...".into(), auth_url.clone()))
-                    );
-                    let _ = last_notified_for_sso.lock().insert(nwid.clone(), now);
-                    //let _ = webbrowser::open(auth_url.as_str());
-                }
+            if status == "AUTHENTICATION_REQUIRED"
+                && sso_notification_shown.lock().insert(nwid.clone())
+            {
+                notify(
+                    format!("ZeroTier network {} requires SSO authentication. Select 'Open SSL Login URL' to proceed.", nwid).as_str(),
+                    Some(("Open SSL Login URL...".into(), auth_url.clone()))
+                );
             }
         }
 
