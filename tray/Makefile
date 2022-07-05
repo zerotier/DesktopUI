@@ -9,9 +9,9 @@ ifeq ($(OS),Windows_NT)
 		OPT_FLAGS := -Og
 	endif
 	ifeq ($(WIN_32BIT),1)
-		TRAY_CFLAGS := $(OPT_FLAGS) -DTRAY_WINAPI=1 -std=c99 -m32 -fno-exceptions
+		TRAY_CFLAGS := $(OPT_FLAGS) -DTRAY_WINAPI=1 -std=c99 -m32 -fno-exceptions -static
 	else
-		TRAY_CFLAGS := $(OPT_FLAGS) -DTRAY_WINAPI=1 -std=c99 -m64 -fno-exceptions
+		TRAY_CFLAGS := $(OPT_FLAGS) -DTRAY_WINAPI=1 -std=c99 -m64 -fno-exceptions -static
 	endif
 else ifeq ($(shell uname -s),Linux)
 	RM=rm -f

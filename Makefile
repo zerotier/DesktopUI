@@ -30,27 +30,27 @@ libui:	FORCE
 
 libui_windows_64:	FORCE
 	-rmdir /Q /S libui-ng\build
-	cd libui-ng && "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" && meson setup build --buildtype=release --default-library=static --backend=ninja
-	cd libui-ng && "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" && ninja -C build -j 8
+	cd libui-ng && "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" && meson setup build --buildtype=release -Db_vscrt=mt --default-library=static --backend=ninja
+	cd libui-ng && "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" && ninja -C build -j 12
 	cd libui-ng\build\meson-out && rename libui.a ui.lib
 
 libui_windows_32:	FORCE
 	-rmdir /Q /S libui-ng\build
-	cd libui-ng && "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars32.bat" && meson setup build --buildtype=release --default-library=static --backend=ninja
-	cd libui-ng && "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars32.bat" && ninja -C build -j 8
+	cd libui-ng && "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars32.bat" && meson setup build --buildtype=release -Db_vscrt=mt --default-library=static --backend=ninja
+	cd libui-ng && "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars32.bat" && ninja -C build -j 12
 	cd libui-ng\build\meson-out && rename libui.a ui.lib
 
 windows_64:	FORCE
 	make libui_windows_64
 	make -C tray clean
 	make -C tray zt_lib
-	cargo build $(CARGO_FLAGS) --target=x86_64-pc-windows-msvc
+	set "RUSTFLAGS=-C target-feature=+crt-static" && cargo build $(CARGO_FLAGS) --target=x86_64-pc-windows-msvc
 
 windows_32: FORCE
 	make libui_windows_32
 	make -C tray clean
 	make -C tray zt_lib WIN_32BIT=1
-	set "RUSTFLAGS=-C link-args=/SAFESEH:NO" && cargo build $(CARGO_FLAGS) --target=i686-pc-windows-msvc
+	set "RUSTFLAGS=-C link-args=/SAFESEH:NO -C target-feature=+crt-static" && cargo build $(CARGO_FLAGS) --target=i686-pc-windows-msvc
 
 windows: windows_32 windows_64
 
