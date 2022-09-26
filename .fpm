@@ -1,0 +1,9 @@
+-s dir
+--name zerotier-ui
+--license MPL2.0
+--depends libwebkit2gtk-4.0-37 --depends libappindicator3-1
+--url "https://www.zerotier.com"
+--maintainer "ZeroTier, Inc <contact@zerotier.com>"
+
+target/release/zerotier_desktop_ui=/usr/bin/zerotier_desktop_ui ZeroTierIcon.png=/usr/share/zerotier/ZeroTierIcon.png zerotier-ui.desktop=/usr/share/applications/zerotier-ui.desktop
+
