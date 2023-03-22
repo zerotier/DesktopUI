@@ -35,6 +35,7 @@ pub struct ServiceClient {
     delete_queue: LinkedList<String>,
     dirty: Arc<AtomicBool>,
     online: bool,
+    try_escalate_privs: isize,
 }
 
 pub fn ms_since_epoch() -> i64 {
@@ -235,6 +236,7 @@ impl ServiceClient {
                 delete_queue: LinkedList::new(),
                 dirty: dirty_flag.clone(),
                 online: false,
+                try_escalate_privs: 2, // try this twice at startup, but not forever
             },
             dirty_flag,
         )
@@ -455,13 +457,14 @@ impl ServiceClient {
     /// Check auth token and port for running service and update if changed.
     pub fn sync_client_config(&mut self) {
         let homedir = get_user_home_dir();
-        get_auth_token_and_port(true, &homedir).map(|token_port| {
-            if self.auth_token != token_port.0 || self.port != token_port.1 {
-                self.auth_token = token_port.0.clone();
-                self.port = token_port.1;
+        if let Some((token, port)) = get_auth_token_and_port(self.try_escalate_privs > 0, &homedir) {
+            if self.auth_token != token || self.port != port {
+                self.auth_token = token;
+                self.port = port;
                 self.base_url = format!("http://127.0.0.1:{}/", self.port);
             }
-        });
+        }
+        self.try_escalate_privs = self.try_escalate_privs.saturating_sub(1);
     }
 
     /// Send enqueued posts, if there are any.
