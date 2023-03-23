@@ -15,6 +15,9 @@
 #include "tray.h"
 
 #ifdef __APPLE__
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <pthread.h>
 #include <pthread/qos.h>
 #include <sys/qos.h>
@@ -86,10 +89,7 @@ extern unsigned int c_windows_get_from_clipboard(char *buf, unsigned int len)
 
 extern void c_lock_down_file(const char *path, int is_dir)
 {
-#ifdef __UNIX_LIKE__
-    chmod(path,is_dir ? 0700 : 0600);
-#else
-#ifdef __WINDOWS__
+#if defined (_WIN32) || defined (_WIN64)
     {
 		STARTUPINFOA startupInfo;
 		PROCESS_INFORMATION processInfo;
@@ -112,6 +112,7 @@ extern void c_lock_down_file(const char *path, int is_dir)
 			CloseHandle(processInfo.hThread);
 		}
 	}
-#endif
+#else
+    chmod(path,is_dir ? 0700 : 0600);
 #endif
 }
