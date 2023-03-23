@@ -32,6 +32,8 @@ extern void c_set_this_thread_to_foreground_priority()
 #endif
 
 #if defined (_WIN32) || defined (_WIN64)
+#include <windows.h>
+#include <shlobj.h>
 /*
 #define RELEASEKEY(Key) if (Key) RegCloseKey(Key);
 extern int c_windows_is_dark_theme()
@@ -90,26 +92,48 @@ extern unsigned int c_windows_get_from_clipboard(char *buf, unsigned int len)
 extern void c_lock_down_file(const char *path, int is_dir)
 {
 #if defined (_WIN32) || defined (_WIN64)
-    {
-		STARTUPINFOA startupInfo;
-		PROCESS_INFORMATION processInfo;
+	{
+		// HACK: this is declared on the stack because otherwise you get MinGW/Rust/MSVC linking incompatibilities with
+		// snprintf. Windows. Also added sanity check on size of path argument.
+		if (strlen(path) < 512) {
+			static char tmp[1024];
+			STARTUPINFOA startupInfo;
+			PROCESS_INFORMATION processInfo;
 
-		startupInfo.cb = sizeof(startupInfo);
-		memset(&startupInfo,0,sizeof(STARTUPINFOA));
-		memset(&processInfo,0,sizeof(PROCESS_INFORMATION));
-		if (CreateProcessA(NULL,(LPSTR)(std::string("C:\\Windows\\System32\\icacls.exe \"") + path + "\" /inheritance:d /Q").c_str(),NULL,NULL,FALSE,CREATE_NO_WINDOW,NULL,NULL,&startupInfo,&processInfo)) {
-			WaitForSingleObject(processInfo.hProcess,INFINITE);
-			CloseHandle(processInfo.hProcess);
-			CloseHandle(processInfo.hThread);
-		}
+			memset(tmp,0,sizeof(tmp));
 
-		startupInfo.cb = sizeof(startupInfo);
-		memset(&startupInfo,0,sizeof(STARTUPINFOA));
-		memset(&processInfo,0,sizeof(PROCESS_INFORMATION));
-		if (CreateProcessA(NULL,(LPSTR)(std::string("C:\\Windows\\System32\\icacls.exe \"") + path + "\" /remove *S-1-5-32-545 /Q").c_str(),NULL,NULL,FALSE,CREATE_NO_WINDOW,NULL,NULL,&startupInfo,&processInfo)) {
-			WaitForSingleObject(processInfo.hProcess,INFINITE);
-			CloseHandle(processInfo.hProcess);
-			CloseHandle(processInfo.hThread);
+			startupInfo.cb = sizeof(startupInfo);
+			memset(&startupInfo,0,sizeof(STARTUPINFOA));
+			memset(&processInfo,0,sizeof(PROCESS_INFORMATION));
+			_snprintf(tmp, sizeof(tmp), "C:\\Windows\\System32\\icacls.exe \"%s\" /inheritance:d /Q", path);
+			if (CreateProcessA(NULL,(LPSTR)tmp,NULL,NULL,FALSE,CREATE_NO_WINDOW,NULL,NULL,&startupInfo,&processInfo)) {
+				WaitForSingleObject(processInfo.hProcess,INFINITE);
+				CloseHandle(processInfo.hProcess);
+				CloseHandle(processInfo.hThread);
+			}
+
+			startupInfo.cb = sizeof(startupInfo);
+			memset(&startupInfo,0,sizeof(STARTUPINFOA));
+			memset(&processInfo,0,sizeof(PROCESS_INFORMATION));
+			_snprintf(tmp, sizeof(tmp), "C:\\Windows\\System32\\icacls.exe \"%s\" /remove *S-1-5-32-545 /Q", path);
+			if (CreateProcessA(NULL,(LPSTR)tmp,NULL,NULL,FALSE,CREATE_NO_WINDOW,NULL,NULL,&startupInfo,&processInfo)) {
+				WaitForSingleObject(processInfo.hProcess,INFINITE);
+				CloseHandle(processInfo.hProcess);
+				CloseHandle(processInfo.hThread);
+			}
+
+			// Remove 'Everyone' group from R/RX access
+			startupInfo.cb = sizeof(startupInfo);
+			memset(&startupInfo, 0, sizeof(STARTUPINFOA));
+			memset(&processInfo, 0, sizeof(PROCESS_INFORMATION));
+			_snprintf(tmp, sizeof(tmp), "C:\\Windows\\System32\\icacls.exe \"%s\" /remove:g Everyone /t /c /Q", path);
+			if (CreateProcessA(NULL, (LPSTR)tmp, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &startupInfo, &processInfo)) {
+				WaitForSingleObject(processInfo.hProcess, INFINITE);
+				CloseHandle(processInfo.hProcess);
+				CloseHandle(processInfo.hThread);
+			}
+		} else {
+			abort();
 		}
 	}
 #else
