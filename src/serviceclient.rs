@@ -35,6 +35,7 @@ pub struct ServiceClient {
     delete_queue: LinkedList<String>,
     dirty: Arc<AtomicBool>,
     online: bool,
+    try_escalate_privs: isize,
 }
 
 pub fn ms_since_epoch() -> i64 {
@@ -76,7 +77,15 @@ pub fn get_auth_token_and_port(
     for attempt in 0..2 {
         let _ = home.clone().map(|mut p| {
             #[cfg(target_os = "macos")]
-            p.push_str("/Library/Application Support/ZeroTier/One/authtoken.secret");
+            {
+                p.push_str("/Library/Application Support/ZeroTier/One");
+                let _ = std::fs::create_dir_all(&p);
+                unsafe {
+                    let cstr = CString::new(p.as_str()).unwrap();
+                    crate::c_lock_down_file(cstr.as_ptr(), 1);
+                }
+                p.push_str("/authtoken.secret");
+            }
 
             #[cfg(windows)]
             p.push_str("\\AppData\\Local\\ZeroTier\\One\\authtoken.secret");
@@ -91,7 +100,15 @@ pub fn get_auth_token_and_port(
         if token.is_empty() {
             let _ = home.clone().map(|mut p| {
                 #[cfg(target_os = "macos")]
-                p.push_str("/Library/Application Support/ZeroTier/authtoken.secret");
+                {
+                    p.push_str("/Library/Application Support/ZeroTier");
+                    let _ = std::fs::create_dir_all(&p);
+                    unsafe {
+                        let cstr = CString::new(p.as_str()).unwrap();
+                        crate::c_lock_down_file(cstr.as_ptr(), 1);
+                    }
+                    p.push_str("/authtoken.secret");
+                }
 
                 #[cfg(windows)]
                 p.push_str("\\AppData\\Local\\ZeroTier\\authtoken.secret");
@@ -124,9 +141,8 @@ pub fn get_auth_token_and_port(
                         .status();
                 }
             } else {
+                // Save in both places for now for backward compatibility.
                 let _ = home.clone().map(|mut p| {
-                    // Save in both places for now for backward compatibility.
-
                     #[cfg(target_os = "macos")]
                     p.push_str("/Library/Application Support/ZeroTier/authtoken.secret");
 
@@ -136,15 +152,9 @@ pub fn get_auth_token_and_port(
                     #[cfg(all(unix, not(target_os = "macos")))]
                     p.push_str("/.zerotier-local-auth");
 
-                    if std::fs::write(&p, token.as_bytes()).is_ok() {
-                        unsafe {
-                            let cstr = CString::new(p.as_str()).unwrap();
-                            crate::c_lock_down_file(cstr.as_ptr(), 0);
-                        }
-                    }
-
-                    p.clear();
-
+                    let _ = std::fs::write(&p, token.as_bytes());
+                });
+                let _ = home.clone().map(|mut p| {
                     #[cfg(target_os = "macos")]
                     p.push_str("/Library/Application Support/ZeroTier/One/authtoken.secret");
 
@@ -154,12 +164,7 @@ pub fn get_auth_token_and_port(
                     #[cfg(all(unix, not(target_os = "macos")))]
                     p.push_str("/.zeroTierOneAuthToken");
 
-                    if std::fs::write(&p, token.as_bytes()).is_ok() {
-                        unsafe {
-                            let cstr = CString::new(p.as_str()).unwrap();
-                            crate::c_lock_down_file(cstr.as_ptr(), 0);
-                        }
-                    }
+                    let _ = std::fs::write(&p, token.as_bytes());
                 });
             }
         }
@@ -235,6 +240,7 @@ impl ServiceClient {
                 delete_queue: LinkedList::new(),
                 dirty: dirty_flag.clone(),
                 online: false,
+                try_escalate_privs: 2, // try this twice at startup, but not forever
             },
             dirty_flag,
         )
@@ -412,7 +418,10 @@ impl ServiceClient {
                 .set("X-ZT1-Auth", self.auth_token.as_str())
                 .call()
                 .map_or_else(
-                    |_| (0, String::new()),
+                    |e| match e {
+                        ureq::Error::Status(status, _) => (status, String::new()),
+                        _ => (0, String::new()),
+                    },
                     |res| {
                         let status = res.status();
                         let body = res.into_string();
@@ -432,7 +441,10 @@ impl ServiceClient {
                 .set("X-ZT1-Auth", self.auth_token.as_str())
                 .send_string(payload)
                 .map_or_else(
-                    |_| (0, String::new()),
+                    |e| match e {
+                        ureq::Error::Status(status, _) => (status, String::new()),
+                        _ => (0, String::new()),
+                    },
                     |res| {
                         let status = res.status();
                         let body = res.into_string();
@@ -455,13 +467,21 @@ impl ServiceClient {
     /// Check auth token and port for running service and update if changed.
     pub fn sync_client_config(&mut self) {
         let homedir = get_user_home_dir();
-        get_auth_token_and_port(true, &homedir).map(|token_port| {
-            if self.auth_token != token_port.0 || self.port != token_port.1 {
-                self.auth_token = token_port.0.clone();
-                self.port = token_port.1;
+        if let Some((token, port)) = get_auth_token_and_port(
+            if self.auth_token.is_empty() {
+                self.try_escalate_privs = self.try_escalate_privs.saturating_sub(1);
+                self.try_escalate_privs > 0
+            } else {
+                false
+            },
+            &homedir,
+        ) {
+            if self.auth_token != token || self.port != port {
+                self.auth_token = token;
+                self.port = port;
                 self.base_url = format!("http://127.0.0.1:{}/", self.port);
             }
-        });
+        }
     }
 
     /// Send enqueued posts, if there are any.
@@ -559,8 +579,17 @@ impl ServiceClient {
                         self.dirty.store(true, Ordering::Relaxed);
                         dirty = true;
                     }
+                } else if data.0 == 0 {
+                    self.online = false;
                 } else {
                     self.online = false;
+                    // HACK: exit on failed authentication if we are finished trying to request an auth token.
+                    if self.try_escalate_privs == 0 {
+                        std::process::exit(1);
+                    } else {
+                        self.auth_token.clear();
+                        self.port = 0;
+                    }
                 }
             }
             if dirty {
