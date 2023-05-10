@@ -436,7 +436,7 @@ fn tray_main() {
                                     if nwid.len() >= 16 {
                                         let (nwid, _) = nwid.split_at(crate::join::NETWORK_ID_LEN);
                                         client3.lock().enqueue_post(
-                                            format!("/network/{}", nwid),
+                                            format!("network/{}", nwid),
                                             "{}".into(),
                                         );
                                         joining3.lock().push(nwid.into());
