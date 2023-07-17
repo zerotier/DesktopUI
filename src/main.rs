@@ -92,9 +92,6 @@ extern "C" {
 extern "C" {
     pub fn c_set_this_thread_to_background_priority();
     pub fn c_set_this_thread_to_foreground_priority();
-}
-
-extern "C" {
     pub fn c_lock_down_file(path: *const c_char, is_dir: c_int);
 }
 
