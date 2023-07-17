@@ -134,11 +134,14 @@ pub fn get_auth_token_and_port(
             if token.is_empty() {
                 if spawn_elevated && attempt == 0 {
                     let home = home.as_ref().expect("home lookup error");
-                    let _ = runas::Command::new(std::env::current_exe().unwrap())
+                    let runas_result = runas::Command::new(std::env::current_exe().unwrap())
                         .arg("copy_authtoken")
                         .arg(home)
                         .gui(true)
                         .status();
+                    if runas_result.is_err() {
+                        eprintln!("ERROR: unable to escalate privileges: {}", runas_result.err().unwrap().to_string());
+                    }
                 }
             } else {
                 // Save in both places for now for backward compatibility.
