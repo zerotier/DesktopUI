@@ -522,7 +522,7 @@ fn tray_main() {
                     });
                     let (nwid, client2) = ((*network).0.clone(), client.clone());
                     network_menu.push(TrayMenuItem::Text {
-                        text: format!("Allow Default Router Override"),
+                        text: format!("Allow Default Route Override"),
                         checked: allow_default,
                         disabled: false,
                         handler: Some(Box::new(move || {
