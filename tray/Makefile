@@ -21,8 +21,8 @@ else ifeq ($(shell uname -s),Linux)
 	else
 		OPT_FLAGS := -Og
 	endif
-	TRAY_CFLAGS := $(OPT_FLAGS) -DTRAY_APPINDICATOR=1 $(shell pkg-config --cflags appindicator3-0.1) -std=c99
-	TRAY_LDFLAGS := $(shell pkg-config --libs appindicator3-0.1)
+	TRAY_CFLAGS := $(OPT_FLAGS) -DTRAY_APPINDICATOR=1 $(shell pkg-config --cflags ayatana-appindicator3-0.1) -std=c99
+	TRAY_LDFLAGS := $(shell pkg-config --libs ayatana-appindicator3-0.1)
 else ifeq ($(shell uname -s),Darwin)
 	RM=rm -f
 	LIB_NAME=libzt_desktop_tray.a

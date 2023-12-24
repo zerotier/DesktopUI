@@ -37,7 +37,7 @@ To build native applications for Windows, just type `make`. This assumes that GN
 * gdk-3
 * gobject-2.0
 * glib-2.0
-* libappindicator3
+* libaytana-appindicator3
 
 # Directly Incorporated Third Party Code
 
