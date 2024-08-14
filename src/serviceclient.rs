@@ -9,7 +9,6 @@
 use std::cell::Cell;
 use std::collections::{HashMap, LinkedList};
 use std::env::VarError;
-use std::ffi::CString;
 use std::io::Write;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -17,6 +16,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use serde_json::{Map, Value};
+use ureq::{Agent, AgentBuilder};
 
 const QUERY_TIMEOUT_MS: u64 = 2000;
 
@@ -36,6 +36,7 @@ pub struct ServiceClient {
     dirty: Arc<AtomicBool>,
     online: bool,
     try_escalate_privs: isize,
+    http_agent: Agent,
 }
 
 pub fn ms_since_epoch() -> i64 {
@@ -244,6 +245,9 @@ impl ServiceClient {
                 dirty: dirty_flag.clone(),
                 online: false,
                 try_escalate_privs: 2, // try this twice at startup, but not forever
+                http_agent: AgentBuilder::new()
+                    .timeout(Duration::from_millis(QUERY_TIMEOUT_MS))
+                    .build(),
             },
             dirty_flag,
         )
@@ -416,8 +420,7 @@ impl ServiceClient {
         if self.auth_token.is_empty() || self.base_url.is_empty() {
             (0, String::new())
         } else {
-            ureq::get(format!("{}{}", self.base_url, path).as_str())
-                .timeout(Duration::from_millis(QUERY_TIMEOUT_MS))
+            self.http_agent.get(format!("{}{}", self.base_url, path).as_str())
                 .set("X-ZT1-Auth", self.auth_token.as_str())
                 .call()
                 .map_or_else(
@@ -439,8 +442,7 @@ impl ServiceClient {
         if self.auth_token.is_empty() || self.base_url.is_empty() {
             (0, String::new())
         } else {
-            ureq::post(format!("{}{}", self.base_url, path).as_str())
-                .timeout(Duration::from_millis(QUERY_TIMEOUT_MS))
+            self.http_agent.post(format!("{}{}", self.base_url, path).as_str())
                 .set("X-ZT1-Auth", self.auth_token.as_str())
                 .send_string(payload)
                 .map_or_else(
@@ -509,8 +511,7 @@ impl ServiceClient {
                 if pq.is_some() {
                     let pq = pq.unwrap();
                     posted = true;
-                    let _ = ureq::delete(format!("{}{}", self.base_url, pq).as_str())
-                        .timeout(Duration::from_millis(QUERY_TIMEOUT_MS))
+                    let _ = self.http_agent.delete(format!("{}{}", self.base_url, pq).as_str())
                         .set("X-ZT1-Auth", self.auth_token.as_str())
                         .call()
                         .map_or(0_u16, |res| res.status());
