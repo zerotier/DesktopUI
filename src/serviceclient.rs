@@ -10,6 +10,7 @@ use std::cell::Cell;
 use std::collections::{HashMap, LinkedList};
 use std::env::VarError;
 use std::io::Write;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -27,6 +28,7 @@ pub struct ServiceClient {
     refresh_base_paths: Vec<&'static str>,
     auth_token: String,
     port: u16,
+    address: IpAddr,
     base_url: String,
     saved_networks: Map<String, Value>,
     state_hash: HashMap<String, u64>,
@@ -229,6 +231,7 @@ impl ServiceClient {
                 refresh_base_paths,
                 auth_token: String::new(),
                 port: 0,
+                address: IpAddr::V4(Ipv4Addr::LOCALHOST),
                 base_url: String::new(),
                 saved_networks: std::fs::read(unsafe { crate::NETWORK_CACHE_PATH.as_str() })
                     .map_or_else(
@@ -484,7 +487,7 @@ impl ServiceClient {
             if self.auth_token != token || self.port != port {
                 self.auth_token = token;
                 self.port = port;
-                self.base_url = format!("http://127.0.0.1:{}/", self.port);
+                self.base_url = format!("http://{}/", SocketAddr::new(self.address, self.port));
             }
         }
     }
@@ -567,11 +570,11 @@ impl ServiceClient {
             let mut dirty = false;
             for endpoint in self.refresh_base_paths.iter() {
                 let endpoint = *endpoint;
-                let data = self.http_get(endpoint);
-                if data.0 == 200 {
+                let (status, res) = self.http_get(endpoint);
+                if status == 200 {
                     let endpoint = String::from(endpoint);
                     let data =
-                        serde_json::from_str::<Value>(data.1.as_str()).unwrap_or(Value::Null);
+                        serde_json::from_str::<Value>(res.as_str()).unwrap_or(Value::Null);
 
                     let mut c64 = crc64::Crc64::new();
                     hash_result(&data, &mut c64);
@@ -583,7 +586,7 @@ impl ServiceClient {
                         self.dirty.store(true, Ordering::Relaxed);
                         dirty = true;
                     }
-                } else if data.0 == 0 {
+                } else if status == 0 {
                     self.online = false;
                 } else {
                     self.online = false;
@@ -595,6 +598,16 @@ impl ServiceClient {
                         self.port = 0;
                     }
                 }
+            }
+            // HACK: if IPv4 localhost connection failed, try IPv6 localhost connection on next attempt
+            // this works around an issue where the ZeroTierOne service could fail to bind to an IPv4 socket
+            // https://github.com/zerotier/ZeroTierOne/issues/2342
+            if !self.online {
+                self.address = match self.address {
+                    IpAddr::V4(Ipv4Addr::LOCALHOST) => IpAddr::V6(Ipv6Addr::LOCALHOST),
+                    IpAddr::V6(Ipv6Addr::LOCALHOST) => IpAddr::V4(Ipv4Addr::LOCALHOST),
+                    other => other,
+                };
             }
             if dirty {
                 self.state.insert(
