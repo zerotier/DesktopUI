@@ -7,8 +7,9 @@ IWICImagingFactory *uiprivWICFactory = NULL;
 
 HRESULT uiprivInitImage(void)
 {
-	return CoCreateInstance(CLSID_WICImagingFactory, NULL, CLSCTX_INPROC_SERVER,
-		IID_IWICImagingFactory, (void **) (&uiprivWICFactory));
+	return S_OK;
+	//return CoCreateInstance(CLSID_WICImagingFactory, NULL, CLSCTX_INPROC_SERVER,
+	//	IID_IWICImagingFactory, (void **) (&uiprivWICFactory));
 }
 
 void uiprivUninitImage(void)
