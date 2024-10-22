@@ -73,7 +73,7 @@ mac-assemble-app: FORCE
 	mkdir -p ZeroTier.app/Contents/MacOS
 	cp -f target/$(CARGO_TARGET_DIR)/zerotier_desktop_ui ZeroTier.app/Contents/MacOS/ZeroTier
 	xattr -cr ZeroTier.app
-	$(CODESIGN) -f --options=runtime -s $(CODESIGN_APP_CERT) ZeroTier.app
+	$(CODESIGN) -f --options=runtime --entitlements mac-app-template/ZeroTier.app/Contents/Resources/ZeroTier.entitlements -s $(CODESIGN_APP_CERT) ZeroTier.app
 
 # This doesn't need to be run every time, was just used to build the initial libui.rs version.
 # The result seems to be portable across the targeted platforms so we just check it in.
