@@ -1,5 +1,6 @@
 // 9 april 2015
 #include "uipriv_unix.h"
+#include <strings.h> // for strcasecmp
 
 char *uiUnixStrdupText(const char *t)
 {
