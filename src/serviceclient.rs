@@ -16,6 +16,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
+#[cfg(target_os = "macos")]
+use std::ffi::CString;
+
 use serde_json::{Map, Value};
 use ureq::{Agent, AgentBuilder};
 
