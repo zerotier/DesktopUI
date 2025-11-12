@@ -10,6 +10,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <inttypes.h>
+#include <strings.h>
 #include "../ui.h"
 #include "../ui_unix.h"
 #include "../common/uipriv.h"
