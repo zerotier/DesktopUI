@@ -14,6 +14,6 @@ fn main() {
         println!("cargo:rustc-link-lib=dylib=gdk-3");
         println!("cargo:rustc-link-lib=dylib=gobject-2.0");
         println!("cargo:rustc-link-lib=dylib=glib-2.0");
-        println!("cargo:rustc-link-lib=dylib=appindicator3");
+        println!("cargo:rustc-link-lib=dylib=ayatana-appindicator3");
     }
 }
