@@ -44,7 +44,7 @@ pub fn about_main(version: &str) {
             "
 ZeroTier {}
 Desktop System Tray UI
-(c)2021-2022 ZeroTier, Inc.
+(c)2021-2024 ZeroTier, Inc.
 
 Released under the terms of the Mozilla Public License V2.0 (MPL)
 Source URL: https://github.com/zerotier/DesktopUI
