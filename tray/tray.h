@@ -31,7 +31,7 @@ void tray_update(struct tray *tray);
 #if defined(TRAY_APPINDICATOR)
 
 #include <gtk/gtk.h>
-#include <libappindicator/app-indicator.h>
+#include <libayatana-appindicator/app-indicator.h>
 
 #define TRAY_APPINDICATOR_ID "tray-id"
 
