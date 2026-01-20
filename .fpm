@@ -5,5 +5,5 @@
 --url "https://www.zerotier.com"
 --maintainer "ZeroTier, Inc <contact@zerotier.com>"
 
-target/release/zerotier_desktop_ui=/usr/bin/zerotier_desktop_ui ZeroTierIcon.png=/usr/share/zerotier/ZeroTierIcon.png zerotier-ui.desktop=/usr/share/applications/zerotier-ui.desktop
+target/release/zerotier_desktop_ui=/usr/bin/zerotier_desktop_ui zerotier.png=/usr/share/icons/hicolor/512x512/apps/zerotier.png zerotier-ui.desktop=/usr/share/applications/zerotier-ui.desktop
 

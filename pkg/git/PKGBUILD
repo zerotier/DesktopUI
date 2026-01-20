@@ -1,0 +1,37 @@
+# Maintainer: twig <fatihbakal7@protonmail.com>
+
+: ${CARGO_HOME:=$SRCDEST/cargo-home}
+: ${CARGO_TARGET_DIR:=target}
+: ${RUSTUP_TOOLCHAIN:=stable}
+export CARGO_HOME CARGO_TARGET_DIR RUSTUP_TOOLCHAIN
+
+pkgname=zerotier-desktop-ui-git
+pkgver=1.8.4.r103.gb2a7a30
+pkgrel=1
+pkgdesc='Official ZeroTier Desktop Tray Application and UI'
+url='https://github.com/zerotier/DesktopUI'
+source=('git+https://github.com/zerotier/DesktopUI.git')
+arch=('any')
+license=('MPL2')
+makedepends=('rust' 'meson' 'git' 'perl' 'nasm')
+depends=('zerotier-one' 'webkit2gtk' 'libappindicator-gtk3' 'libayatana-appindicator' 'gtk3' 'glib2')
+conflicts=('zerotier-desktop-ui')
+options=('!lto')
+sha256sums=(SKIP)
+
+build () {
+  cd DesktopUI
+  make official
+}
+
+package() {
+  cd DesktopUI
+  install -Dm755 release/release/zerotier_desktop_ui "${pkgdir}/usr/bin/zerotier_desktop_ui"
+  install -Dm644 zerotier-ui.desktop "${pkgdir}/usr/share/applications/zerotier-ui.desktop"
+  install -Dm644 zerotier.png "${pkgdir}/usr/share/icons/hicolor/512x512/apps/zerotier.png"
+}
+
+pkgver() {
+    cd DesktopUI
+    git describe --long --tags | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
