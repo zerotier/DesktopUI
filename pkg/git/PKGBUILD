@@ -1,5 +1,3 @@
-# Maintainer: twig <fatihbakal7@protonmail.com>
-
 : ${CARGO_HOME:=$SRCDEST/cargo-home}
 : ${CARGO_TARGET_DIR:=target}
 : ${RUSTUP_TOOLCHAIN:=stable}
