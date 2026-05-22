@@ -1,0 +1,148 @@
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build_ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+    - name: gitconfig
+      run: |
+        git config --global core.autocrlf input
+      #        git config --global core.eol lf
+    - name: checkout
+      uses: actions/checkout@v4
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: stable
+        targets: x86_64-unknown-linux-gnu
+        components: rustfmt, clippy
+
+    - name: Set up cargo cache
+      uses: Swatinem/rust-cache@v2
+      continue-on-error: false
+      with:
+        key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+        shared-key: ${{ runner.os }}-cargo-
+
+    - name: Install build dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          meson \
+          ninja-build \
+          pkg-config \
+          libgtk-3-dev \
+          libayatana-appindicator3-dev
+
+    - name: make
+      run: make
+    - name: 'Tar files' # keeps permissions (execute)
+      run: tar -cvf zerotier-desktop-ui.tar target/debug/zerotier_desktop_ui
+    - name: Archive production artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: zerotier-desktop-ui-ubuntu-x64
+        path: zerotier-desktop-ui.tar
+        retention-days: 7
+
+  build_macos:
+    runs-on: macos-latest
+    steps:
+    - name: gitconfig
+      run: |
+        git config --global core.autocrlf input
+      #        git config --global core.eol lf
+    - name: checkout
+      uses: actions/checkout@v4
+    - name: Install Rust aarch64
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: stable
+        target: aarch64-apple-darwin
+        components: rustfmt, clippy
+    - name: Install Rust x86_64
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: stable
+        target: x86_64-apple-darwin
+        components: rustfmt, clippy
+    - name: Set up cargo cache
+      uses: Swatinem/rust-cache@v2
+      continue-on-error: false
+      with:
+        key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+        shared-key: ${{ runner.os }}-cargo-
+
+    - name: Install build dependencies
+      run: |
+        brew install meson ninja
+
+    - name: make
+      run: make
+    - name: 'Tar files' # keeps permissions (execute)
+      run: tar -cvf zerotier-desktop-ui.tar ZeroTier.app
+    - name: Archive production artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: zerotier-desktop-ui-mac
+        path: zerotier-desktop-ui.tar
+        retention-days: 7
+
+
+  build_windows:
+    runs-on: windows-2022
+    steps:
+    - name: gitconfig
+      run: |
+        git config --global core.autocrlf true
+      #        git config --global core.eol lf
+    - name: checkout
+      uses: actions/checkout@v4
+    - name: Install Rust x86_64
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: stable
+        target: x86_64-pc-windows-msvc
+        components: rustfmt, clippy
+    - name: Install Rust i686
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: stable
+        target: i686-pc-windows-msvc
+        components: rustfmt, clippy
+    - name: Set up cargo cache
+      uses: Swatinem/rust-cache@v2
+      continue-on-error: false
+      with:
+        key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+        shared-key: ${{ runner.os }}-cargo-
+
+    - name: Install build dependencies
+      run: |
+        pip install meson
+        choco install -y ninja make
+
+    - name: setup msbuild
+      uses: microsoft/setup-msbuild@v2
+
+    - name: make windows
+      shell: cmd
+      run: |
+        make windows
+
+    - name: Archive production artifacts (x64)
+      uses: actions/upload-artifact@v4
+      with:
+        name: zerotier-desktop-ui-windows-x64
+        path: target/x86_64-pc-windows-msvc/debug/zerotier_desktop_ui.exe
+        retention-days: 7
+
+    - name: Archive production artifacts (x86)
+      uses: actions/upload-artifact@v4
+      with:
+        name: zerotier-desktop-ui-windows-x86
+        path: target/i686-pc-windows-msvc/debug/zerotier_desktop_ui.exe
+        retention-days: 7
