@@ -20,6 +20,8 @@ crc64 = "^1"
 runas = "^1"
 url = "^2.5.4"
 webbrowser = "^0"
+single-instance = "0.3.3"
+dirs = "6.0.0"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 plist = "^1"

@@ -24,6 +24,13 @@ use ureq::{Agent, AgentBuilder};
 
 const QUERY_TIMEOUT_MS: u64 = 2000;
 
+/// Number of consecutive non-200, non-0 responses we'll tolerate before giving
+/// up and exiting. With the default 2.5s sync cadence (10 ticks * 250ms) this
+/// is roughly 30 seconds of sustained failure -- enough to ride out a daemon
+/// restart, authtoken regeneration, or a network leave, but not so long that
+/// a genuinely broken auth situation leaves the user staring at a dead tray.
+const MAX_CONSECUTIVE_AUTH_FAILURES: u32 = 12;
+
 /// Client that queries and caches JSON state from the service.
 /// Currently it doesn't do much parsing since the JSON is just shoved
 /// through to the JavaScript UI for most of what's done with it.
@@ -41,6 +48,7 @@ pub struct ServiceClient {
     dirty: Arc<AtomicBool>,
     online: bool,
     try_escalate_privs: isize,
+    consecutive_auth_failures: u32,
     http_agent: Agent,
 }
 
@@ -226,6 +234,12 @@ fn hash_result(v: &Value, h: &mut crc64::Crc64) {
 }
 
 impl ServiceClient {
+    fn build_agent() -> Agent {
+        AgentBuilder::new()
+            .timeout(Duration::from_millis(QUERY_TIMEOUT_MS))
+            .build()
+    }
+
     /// Create a new service client and return the client and a flag that can be atomically checked to indicate changes.
     pub fn new(refresh_base_paths: Vec<&'static str>) -> (ServiceClient, Arc<AtomicBool>) {
         let dirty_flag = Arc::new(AtomicBool::new(true));
@@ -236,7 +250,7 @@ impl ServiceClient {
                 port: 0,
                 address: IpAddr::V4(Ipv4Addr::LOCALHOST),
                 base_url: String::new(),
-                saved_networks: std::fs::read(unsafe { crate::NETWORK_CACHE_PATH.as_str() })
+                saved_networks: std::fs::read(crate::NETWORK_CACHE_PATH.as_str())
                     .map_or_else(
                         |_| serde_json::Map::new(),
                         |j| {
@@ -251,9 +265,8 @@ impl ServiceClient {
                 dirty: dirty_flag.clone(),
                 online: false,
                 try_escalate_privs: 2, // try this twice at startup, but not forever
-                http_agent: AgentBuilder::new()
-                    .timeout(Duration::from_millis(QUERY_TIMEOUT_MS))
-                    .build(),
+                consecutive_auth_failures: 0,
+                http_agent: Self::build_agent(),
             },
             dirty_flag,
         )
@@ -545,7 +558,7 @@ impl ServiceClient {
             serde_json::Value::from(self.saved_networks.clone()),
         );
         let _ = serde_json::to_vec(&self.saved_networks)
-            .map(|json| std::fs::write(unsafe { crate::NETWORK_CACHE_PATH.as_str() }, &json));
+            .map(|json| std::fs::write(crate::NETWORK_CACHE_PATH.as_str(), &json));
         self.dirty.store(true, Ordering::Relaxed);
     }
 
@@ -556,7 +569,7 @@ impl ServiceClient {
             serde_json::Value::from(self.saved_networks.clone()),
         );
         let _ = serde_json::to_vec(&self.saved_networks)
-            .map(|json| std::fs::write(unsafe { crate::NETWORK_CACHE_PATH.as_str() }, &json));
+            .map(|json| std::fs::write(crate::NETWORK_CACHE_PATH.as_str(), &json));
         self.dirty.store(true, Ordering::Relaxed);
     }
 
@@ -570,6 +583,7 @@ impl ServiceClient {
             );
         }
         if self.is_initialized() {
+            let was_online = self.online;
             let mut dirty = false;
             for endpoint in self.refresh_base_paths.iter() {
                 let endpoint = *endpoint;
@@ -584,6 +598,7 @@ impl ServiceClient {
                     let c64 = c64.get();
 
                     self.online = true;
+                    self.consecutive_auth_failures = 0;
                     if self.state_hash.insert(endpoint.clone(), c64).unwrap_or(0) != c64 {
                         self.state.insert(endpoint, data);
                         self.dirty.store(true, Ordering::Relaxed);
@@ -591,26 +606,67 @@ impl ServiceClient {
                     }
                 } else if status == 0 {
                     self.online = false;
+                    // Network-level failure (timeout, refused, etc.) is not an
+                    // auth problem; don't count it toward the auth-failure
+                    // budget.
+                    self.consecutive_auth_failures = 0;
                 } else {
                     self.online = false;
-                    // HACK: exit on failed authentication if we are finished trying to request an auth token.
-                    if self.try_escalate_privs == 0 {
+                    self.consecutive_auth_failures =
+                        self.consecutive_auth_failures.saturating_add(1);
+
+                    // Drop credentials so sync_client_config re-reads them on
+                    // the next tick. The daemon may have rotated
+                    // authtoken.secret (e.g. after a service restart), or it
+                    // may be temporarily serving 5xx while leaving a network.
+                    self.auth_token.clear();
+                    self.port = 0;
+
+                    // Exit only after sustained failure.
+                    if self.try_escalate_privs == 0
+                        && self.consecutive_auth_failures >= MAX_CONSECUTIVE_AUTH_FAILURES
+                    {
+                        eprintln!(
+                            "ERROR: {} consecutive auth/error responses from ZeroTier service, exiting.",
+                            self.consecutive_auth_failures
+                        );
                         std::process::exit(1);
-                    } else {
-                        self.auth_token.clear();
-                        self.port = 0;
                     }
                 }
             }
+            // Force a menu redraw on any online<->offline transition. Without
+            // this, the tray's "Waiting for ZeroTier system service..." item
+            // can persist after the service is responding again, because the
+            // dirty flag is otherwise only set when the cached payload hash
+            // changes -- and a transient blip may leave the hash identical.
+            if self.online != was_online {
+                self.dirty.store(true, Ordering::Relaxed);
+            }
+
             // HACK: if IPv4 localhost connection failed, try IPv6 localhost connection on next attempt
             // this works around an issue where the ZeroTierOne service could fail to bind to an IPv4 socket
             // https://github.com/zerotier/ZeroTierOne/issues/2342
             if !self.online {
+                // Drop the connection pool. A pooled keep-alive socket can be
+                // half-open across a local network adapter transition (common
+                // on Windows when ZT tears down its tap during a network
+                // leave); the next request would then hang until the 2s
+                // timeout and could keep hanging cycle after cycle as the pool
+                // serves the dead socket back to us.
+                self.http_agent = Self::build_agent();
+
                 self.address = match self.address {
                     IpAddr::V4(Ipv4Addr::LOCALHOST) => IpAddr::V6(Ipv6Addr::LOCALHOST),
                     IpAddr::V6(Ipv6Addr::LOCALHOST) => IpAddr::V4(Ipv4Addr::LOCALHOST),
                     other => other,
                 };
+                // base_url is derived from address; refresh it so the next
+                // http_get actually targets the family we just flipped to.
+                // Without this the flip was a silent no-op because base_url
+                // was cached in sync_client_config and only rebuilt when
+                // auth_token or port changed.
+                self.base_url =
+                    format!("http://{}/", SocketAddr::new(self.address, self.port));
             }
             if dirty {
                 self.state.insert(
