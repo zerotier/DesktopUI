@@ -100,13 +100,13 @@ jobs:
         include:
           - arch: x64
             msvc_arch: amd64
-            mingw_platform: x64
+            winlibs_arch: x86_64
             rust_target: x86_64-pc-windows-msvc
             rustflags: '-C target-feature=+crt-static'
             tray_make_args: ''
           - arch: x86
             msvc_arch: x86
-            mingw_platform: x86
+            winlibs_arch: i686
             rust_target: i686-pc-windows-msvc
             rustflags: '-C link-args=/SAFESEH:NO -C target-feature=+crt-static'
             tray_make_args: 'WIN_32BIT=1'
@@ -136,9 +136,9 @@ jobs:
         arch: ${{ matrix.msvc_arch }}
 
     - name: Setup MinGW (for tray)
-      uses: egor-tensin/setup-mingw@v2
+      uses: bwoodsend/setup-winlibs-action@v1
       with:
-        platform: ${{ matrix.mingw_platform }}
+        architecture: ${{ matrix.winlibs_arch }}
 
     - name: Install build dependencies
       run: |
