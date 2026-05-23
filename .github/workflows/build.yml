@@ -94,6 +94,22 @@ jobs:
 
   build_windows:
     runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            msvc_arch: amd64
+            mingw_platform: x64
+            rust_target: x86_64-pc-windows-msvc
+            rustflags: '-C target-feature=+crt-static'
+            tray_make_args: ''
+          - arch: x86
+            msvc_arch: x86
+            mingw_platform: x86
+            rust_target: i686-pc-windows-msvc
+            rustflags: '-C link-args=/SAFESEH:NO -C target-feature=+crt-static'
+            tray_make_args: 'WIN_32BIT=1'
     steps:
     - name: gitconfig
       run: |
@@ -101,48 +117,60 @@ jobs:
       #        git config --global core.eol lf
     - name: checkout
       uses: actions/checkout@v4
-    - name: Install Rust x86_64
+    - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
       with:
         toolchain: stable
-        target: x86_64-pc-windows-msvc
-        components: rustfmt, clippy
-    - name: Install Rust i686
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        toolchain: stable
-        target: i686-pc-windows-msvc
+        targets: ${{ matrix.rust_target }}
         components: rustfmt, clippy
     - name: Set up cargo cache
       uses: Swatinem/rust-cache@v2
       continue-on-error: false
       with:
-        key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
-        shared-key: ${{ runner.os }}-cargo-
+        key: ${{ runner.os }}-${{ matrix.arch }}-cargo-${{ hashFiles('Cargo.lock') }}
+        shared-key: ${{ runner.os }}-${{ matrix.arch }}-cargo-
+
+    - name: Setup MSVC environment
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: ${{ matrix.msvc_arch }}
+
+    - name: Setup MinGW (for tray)
+      uses: egor-tensin/setup-mingw@v2
+      with:
+        platform: ${{ matrix.mingw_platform }}
 
     - name: Install build dependencies
       run: |
         pip install meson
-        choco install -y ninja make
 
-    - name: setup msbuild
-      uses: microsoft/setup-msbuild@v2
-
-    - name: make windows
+    - name: Build libui-ng
       shell: cmd
+      working-directory: libui-ng
       run: |
-        make windows
+        if exist build rmdir /Q /S build
+        meson setup build --buildtype=release -Db_vscrt=mt --default-library=static --backend=ninja
+        ninja -C build
+        cd build\meson-out
+        ren libui.a ui.lib
 
-    - name: Archive production artifacts (x64)
+    - name: Build tray library
+      shell: cmd
+      working-directory: tray
+      run: |
+        mingw32-make clean
+        mingw32-make zt_lib ${{ matrix.tray_make_args }}
+
+    - name: Build zerotier_desktop_ui
+      shell: cmd
+      env:
+        RUSTFLAGS: ${{ matrix.rustflags }}
+      run: |
+        cargo build --target=${{ matrix.rust_target }}
+
+    - name: Archive production artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: zerotier-desktop-ui-windows-x64
-        path: target/x86_64-pc-windows-msvc/debug/zerotier_desktop_ui.exe
-        retention-days: 7
-
-    - name: Archive production artifacts (x86)
-      uses: actions/upload-artifact@v4
-      with:
-        name: zerotier-desktop-ui-windows-x86
-        path: target/i686-pc-windows-msvc/debug/zerotier_desktop_ui.exe
+        name: zerotier-desktop-ui-windows-${{ matrix.arch }}
+        path: target/${{ matrix.rust_target }}/debug/zerotier_desktop_ui.exe
         retention-days: 7
