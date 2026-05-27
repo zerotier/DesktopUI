@@ -22,7 +22,7 @@ use std::path::Path;
 use std::process::{Child, Command, Stdio};
 #[allow(unused)]
 use std::sync::atomic::*;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use std::time::{Duration, SystemTime};
 
 use parking_lot::Mutex;
@@ -37,10 +37,65 @@ pub mod libui;
 pub mod serviceclient;
 pub mod tray;
 
-pub(crate) static mut APPLICATION_PATH: String = String::new();
-pub(crate) static mut APPLICATION_HOME: String = String::new();
-pub(crate) static mut NETWORK_CACHE_PATH: String = String::new();
-pub(crate) static mut START_ON_LOGIN: bool = false;
+#[cfg(target_os = "macos")]
+pub(crate) static APPLICATION_PATH: LazyLock<String> = LazyLock::new(|| {
+    let p = std::env::current_exe().unwrap();
+    for pp in p.ancestors() {
+        let pps = pp.to_str().unwrap();
+        if pps.ends_with(".app") {
+            return String::from(pps);
+        }
+    }
+
+    String::from(p.to_str().unwrap())
+});
+
+pub(crate) static APPLICATION_HOME: LazyLock<String> = LazyLock::new(|| {
+    #[cfg(target_os = "macos")]
+    {
+        format!(
+            "{}/Library/Application Support/ZeroTier",
+            std::env::var("HOME").unwrap_or(String::from("/tmp"))
+        )
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        #[cfg(windows)]
+        {
+            format!(
+                "{}\\AppData\\Local\\ZeroTier",
+                std::env::var("USERPROFILE")
+                    .unwrap_or(std::env::var("HOMEPATH").unwrap_or(String::from("C:\\")))
+            )
+        }
+        #[cfg(not(windows))]
+        {
+            std::env::var("HOME").map_or_else(
+                |_| {
+                    String::from("/tmp/zerotier_ui")
+                },
+                |home_dir| {
+                    format!("{}/.zerotier_ui", home_dir)
+                },
+            )
+        }
+    }
+});
+
+pub(crate) static NETWORK_CACHE_PATH: LazyLock<String> = LazyLock::new(|| {
+    let home = APPLICATION_HOME.as_str();
+    let _ = std::fs::create_dir_all(home);
+    String::from(
+        Path::new(home)
+            .join("saved_networks.json")
+            .to_str()
+            .unwrap(),
+    )
+});
+
+#[cfg(any(windows, target_os = "macos"))]
+pub(crate) static START_ON_LOGIN: AtomicBool = AtomicBool::new(false);
 
 #[cfg(target_os = "macos")]
 pub(crate) const GLOBAL_SERVICE_HOME_V2: &'static str = "/Library/Application Support/ZeroTier";
@@ -182,23 +237,41 @@ fn refresh_mac_start_on_login() {
         .arg("-e")
         .arg("tell application \"System Events\" to get the name of every login item")
         .output();
-    unsafe {
-        START_ON_LOGIN = out.map_or(false, |app_list| {
-            String::from_utf8(app_list.stdout.to_ascii_lowercase())
-                .map_or(false, |app_list| app_list.contains("zerotier"))
-        });
-    }
+    let enabled = out.map_or(false, |app_list| {
+        String::from_utf8(app_list.stdout.to_ascii_lowercase())
+            .map_or(false, |app_list| app_list.contains("zerotier"))
+    });
+    START_ON_LOGIN.store(enabled, std::sync::atomic::Ordering::Relaxed);
 }
 
 #[cfg(target_os = "windows")]
 fn refresh_windows_start_on_login() {
     let hkcu = winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER);
     let startup = hkcu.open_subkey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run");
-    let enabled = startup.map_or(false, |startup| {
-        startup.get_value::<String, &str>("ZeroTierUI").is_ok()
+    let stored: Option<String> = startup.ok().and_then(|s| {
+        s.get_value::<String, &str>("ZeroTierUI").ok()
     });
-    unsafe {
-        START_ON_LOGIN = enabled;
+    let enabled = stored.is_some();
+    START_ON_LOGIN.store(enabled, std::sync::atomic::Ordering::Relaxed);
+
+    if enabled {
+        let stored_path = stored.unwrap_or_default();
+        if !stored_path.is_empty() && !std::path::Path::new(&stored_path).is_file() {
+            const KNOWN_LOCATIONS: &[&str] = &[
+                "C:\\Program Files (x86)\\ZeroTier\\One\\zerotier_desktop_ui.exe",
+                "C:\\Program Files\\ZeroTier\\One\\zerotier_desktop_ui.exe",
+            ];
+            for candidate in KNOWN_LOCATIONS {
+                if std::path::Path::new(candidate).is_file() {
+                    if let Ok((startup, _)) = hkcu.create_subkey(
+                        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+                    ) {
+                        let _ = startup.set_value("ZeroTierUI", &String::from(*candidate));
+                    }
+                    break;
+                }
+            }
+        }
     }
 }
 
@@ -337,18 +410,35 @@ fn start_client(
         let mut k = 0_u64;
         loop {
             if thread_client.lock().do_posts() {
-                k = refresh_period_ticks - 1;
-            }
-            k += 1;
-            if k >= refresh_period_ticks {
-                k = 0;
+                // Force a sync right here so the next menu rebuild sees
+                // accurate state. Reset k so the periodic sync stays on
+                // its normal cadence afterwards.
                 thread_client.lock().sync();
+                k = 0;
+            } else {
+                k += 1;
+                if k >= refresh_period_ticks {
+                    k = 0;
+                    thread_client.lock().sync();
+                }
             }
             std::thread::sleep(Duration::from_millis(tick_period_ms));
         }
     });
 
     (client, dirty_flag)
+}
+
+#[cfg(target_os = "macos")]
+fn create_single_instance() -> Option<single_instance::SingleInstance> {
+    let lockfile = dirs::data_local_dir()?.join("ZeroTier/ZeroTierUI_InstanceLock");
+    std::fs::create_dir_all(lockfile.parent()?).ok()?;
+    single_instance::SingleInstance::new(&lockfile.to_string_lossy()).ok()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn create_single_instance() -> Option<single_instance::SingleInstance> {
+    single_instance::SingleInstance::new("ZeroTierUI_InstanceLock").ok()
 }
 
 fn tray_main() {
@@ -361,13 +451,13 @@ fn tray_main() {
      * this binary in webview mode.
      */
 
-    /*
-    let single = single_instance::SingleInstance::new(std::env::temp_dir().join("ZeroTierUI_InstanceLock").to_str().unwrap());
-    if single.is_err() || !single.unwrap().is_single() {
+    // If a SingleInstance fails to be created, that's OK: it's better to allow multiple instances
+    // than allow zero instances.
+    let single = create_single_instance();
+    if single.as_ref().is_some_and(|single| !single.is_single()) {
         println!("FATAL: another instance of the ZeroTier UI is already running.");
         std::process::exit(1);
     }
-    */
 
     // On Apple Silicon Macs this tells the OS to use efficiency cores for the tray app. Perceptible performance is still great.
     // Don't do it on Intel Macs because it seems to make stuff really slow with little power use benefit. For the genuine background
@@ -861,12 +951,12 @@ fn tray_main() {
                 let dirty_flag2 = dirty_flag.clone();
                 menu.push(TrayMenuItem::Text {
                     text: "Start UI at Login ".into(),
-                    checked: unsafe { START_ON_LOGIN },
+                    checked: START_ON_LOGIN.load(std::sync::atomic::Ordering::Relaxed),
                     disabled: false,
                     handler: Some(Box::new(move || {
                         for _ in 0..2 {
                             refresh_mac_start_on_login();
-                            let previous_start_on_login = unsafe { START_ON_LOGIN };
+                            let previous_start_on_login = START_ON_LOGIN.load(std::sync::atomic::Ordering::Relaxed);
                             if previous_start_on_login {
                                 // osascript -e 'tell application "System Events" to get the name of every login item'
                                 let out = Command::new("/usr/bin/osascript").arg("-e").arg("tell application \"System Events\" to get the name of every login item").output();
@@ -882,10 +972,10 @@ fn tray_main() {
                                 });
                             } else {
                                 // osascript -e 'tell application "System Events" to make login item at end with properties {path:"PATH_TO_APP", hidden:false}'
-                                let _ = Command::new("/usr/bin/osascript").arg("-e").arg(format!("tell application \"System Events\" to make login item at end with properties {{path:\"{}\", hidden:false}}", unsafe { &APPLICATION_PATH })).output();
+                                let _ = Command::new("/usr/bin/osascript").arg("-e").arg(format!("tell application \"System Events\" to make login item at end with properties {{path:\"{}\", hidden:false}}", APPLICATION_PATH.as_str())).output();
                             }
                             refresh_mac_start_on_login();
-                            if previous_start_on_login != unsafe { START_ON_LOGIN } {
+                            if previous_start_on_login != START_ON_LOGIN.load(std::sync::atomic::Ordering::Relaxed) {
                                 break;
                             } else {
                                 // If toggling failed, re-request permission to send apple events as this is required to toggle.
@@ -902,7 +992,7 @@ fn tray_main() {
                 let dirty_flag2 = dirty_flag.clone();
                 menu.push(TrayMenuItem::Text {
                     text: "Start UI at Login ".into(),
-                    checked: unsafe { START_ON_LOGIN },
+                    checked: START_ON_LOGIN.load(std::sync::atomic::Ordering::Relaxed),
                     disabled: false,
                     handler: Some(Box::new(move || {
                         refresh_windows_start_on_login();
@@ -911,7 +1001,7 @@ fn tray_main() {
                             hkcu.create_subkey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"); // opens read/write if exists
                         if startup.is_ok() {
                             let startup = startup.unwrap().0;
-                            if unsafe { START_ON_LOGIN } {
+                            if START_ON_LOGIN.load(std::sync::atomic::Ordering::Relaxed) {
                                 let _ = startup.delete_value("ZeroTierUI");
                             } else {
                                 let exe = String::from(
@@ -1020,80 +1110,19 @@ fn tray_main() {
 
 fn main() {
     #[cfg(target_os = "macos")]
-    {
-        let p = std::env::current_exe().unwrap();
-        for pp in p.ancestors() {
-            let pps = pp.to_str().unwrap();
-            if pps.ends_with(".app") {
-                unsafe {
-                    APPLICATION_PATH = String::from(pps);
-                }
-                break;
-            }
-        }
-        unsafe {
-            if APPLICATION_PATH.is_empty() {
-                APPLICATION_PATH = String::from(p.to_str().unwrap());
-            }
-            APPLICATION_HOME = format!(
-                "{}/Library/Application Support/ZeroTier",
-                std::env::var("HOME").unwrap_or(String::from("/tmp"))
-            );
-        }
-        refresh_mac_start_on_login();
-    }
+    refresh_mac_start_on_login();
 
-    #[cfg(not(target_os = "macos"))]
-    {
-        unsafe {
-            APPLICATION_PATH = String::from(std::env::current_exe().unwrap().to_str().unwrap());
-        }
-        #[cfg(windows)]
-        {
-            refresh_windows_start_on_login();
-            unsafe {
-                APPLICATION_HOME = format!(
-                    "{}\\AppData\\Local\\ZeroTier",
-                    std::env::var("USERPROFILE")
-                        .unwrap_or(std::env::var("HOMEPATH").unwrap_or(String::from("C:\\")))
-                );
-            }
-        }
-        #[cfg(not(windows))]
-        {
-            unsafe {
-                let _ = std::env::var("HOME").map_or_else(
-                    |_| {
-                        APPLICATION_HOME = String::from("/tmp/zerotier_ui");
-                    },
-                    |home_dir| {
-                        APPLICATION_HOME = format!("{}/.zerotier_ui", home_dir);
-                    },
-                );
-            }
-        }
-    }
-
-    unsafe {
-        let _ = std::fs::create_dir_all(APPLICATION_HOME.as_str());
-        NETWORK_CACHE_PATH = String::from(
-            Path::new(&APPLICATION_HOME)
-                .join("saved_networks.json")
-                .to_str()
-                .unwrap(),
-        );
-    }
+    #[cfg(windows)]
+    refresh_windows_start_on_login();
 
     // Import old network list info from old Mac UI.
     #[cfg(target_os = "macos")]
     {
-        if !Path::new(unsafe { NETWORK_CACHE_PATH.as_str() }).is_file() {
+        if !Path::new(NETWORK_CACHE_PATH.as_str()).is_file() {
             let mut nwid: Option<u64> = None;
             let mut name: Option<String> = None;
             let mut networks: HashMap<String, String> = HashMap::new();
-            let _ = plist::Value::from_file(format!("{}/One/networkinfo.dat", unsafe {
-                &APPLICATION_HOME
-            }))
+            let _ = plist::Value::from_file(format!("{}/One/networkinfo.dat", APPLICATION_HOME.as_str()))
             .map(|old_plist| {
                 old_plist.as_dictionary().map(|old_plist| {
                     old_plist.get("$objects").map(|old_plist| {
@@ -1119,7 +1148,7 @@ fn main() {
                 networks_json.insert(kv.0.clone(), nw);
             }
             let _ = std::fs::write(
-                unsafe { NETWORK_CACHE_PATH.as_str() },
+                NETWORK_CACHE_PATH.as_str(),
                 serde_json::to_vec(&networks_json).unwrap(),
             );
         }
@@ -1128,7 +1157,7 @@ fn main() {
     // Import old network list info from old Windows UI
     #[cfg(windows)]
     {
-        if !Path::new(unsafe { NETWORK_CACHE_PATH.as_str() }).is_file() {
+        if !Path::new(NETWORK_CACHE_PATH.as_str()).is_file() {
             let _ = std::env::var("USERPROFILE").map(|uprof| {
                 std::fs::read(format!(
                     "{}\\AppData\\Local\\ZeroTier\\One\\networks.dat",
@@ -1152,7 +1181,7 @@ fn main() {
                         }
                     }
                     let _ = std::fs::write(
-                        unsafe { NETWORK_CACHE_PATH.as_str() },
+                        NETWORK_CACHE_PATH.as_str(),
                         serde_json::to_vec(&networks_json).unwrap(),
                     );
                 })
