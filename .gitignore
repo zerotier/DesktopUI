@@ -13,3 +13,23 @@
 *.exe
 *.deb
 .vscode/
+*.kate-swp
+
+# git dir
+pkg/git/*.tar.zst
+pkg/git/pkg
+pkg/git/src
+pkg/git/cargo-home
+pkg/git/DesktopUI
+
+# AppImage dir
+pkg/AppImage/*.tar.zst
+pkg/AppImage/.MTREE
+pkg/AppImage/.PKGINFO
+pkg/AppImage/.BUILDINFO
+pkg/AppImage/usr/
+pkg/AppImage/AppDir/
+pkg/AppImage/quick-sharun
+
+# dist dir
+pkg/AppImage/dist
